@@ -3,22 +3,25 @@ CARMA Analytics is a secure, scalable and cloud agnostic data architecture to en
 
 Data ingest and transfer:
 
-Data ingested using a direct connection from a on-prem sandbox (ex. Isilon at TFHRC).
+- Data ingested using a direct connection from a on-prem sandbox (ex. Isilon at TFHRC).
 
-Data ingested from a remote test environment (ex. using AWS snowball when a direct connection is not available).
+- Data ingested from a remote test environment (ex. using AWS snowball when a direct connection is not available).
 
-Moving or accessing data from other static and real-time sources to support basic test/dev activities.
+- Moving or accessing data from other static and real-time sources to support basic test/dev activities.
 
 Data storage and fusion:
 
-Storing and fusing of data. 
+- Storing and fusing of data. 
 
-Quality assurance.
+- Quality assurance.
 
-Transforming and processing data from disparate static and real-time sources into a format that supports research analysis.
+- Transforming and processing data from disparate static and real-time sources into a format that supports research analysis.
 
 Developer tools and data analytics:
 
-Provide tools for basic quality assurance and analysis.
+- Provide tools for basic quality assurance and analysis.
 
-Transferring data to a research analysis environment (the DOT Secure Data Commons)
+- Transferring data to a research analysis environment (the DOT Secure Data Commons)
+
+
+
