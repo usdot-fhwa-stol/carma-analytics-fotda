@@ -1,4 +1,4 @@
-# carma-analytics-fotda
+# CARMA Analytics
 CARMA Analytics is a secure, scalable and cloud agnostic data architecture to enable research analysis on big data sets by defining repeatable and scalable processes for ingesting data, creation of a data repository to fuse, process and perform quality assurance.  The architecture should also identify the tools required for data analysis for the research teams.  This architecture will address:
 
 Data ingest and transfer:
