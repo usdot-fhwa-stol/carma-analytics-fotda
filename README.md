@@ -45,6 +45,9 @@ Terminal Services are installed in the Windows EC2 VMs to allow regular DOT user
 ## Architecture Diagram
 ![Architecture diagram](https://github.com/usdot-fhwa-stol/carma-analytics-fotda/blob/main/reference_docs/Architecture_Diagram.PNG)
 
+## Documentation
+
+Documentation of the setup, operation, and design of the CARMA Analytics can be found on the project [Confluence](https://usdot-carma.atlassian.net/wiki/spaces/CRMALN/pages) pages. 
 
 ## Contribution
 Welcome to the CARMA contributing guide. Please read this guide to learn about our development process, how to propose pull requests and improvements, and how to build and test your changes to this project. [CARMA Contributing Guide](Contributing.md) 
