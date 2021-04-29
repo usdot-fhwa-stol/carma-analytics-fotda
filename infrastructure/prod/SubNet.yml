@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  Creates Subnet and Routetable association.
+Parameters:
+  CIDR:
+    Description: CIDR block for subnet
+    Type: String
+  VPC:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC for subnet
+  Name:
+    Description: Subnet Name
+    Type: String
+  availabilityZone:
+    Description: AZ of the subnet
+    Type: String
+  RouteTable:
+    Description: RouteTable
+    Type: String
+  NetworkTag:
+    Description: indiates Private or public network
+    Type: String
+  PublicTier:
+    Description: if true sets PublicTier to true
+    Type: String
+    AllowedValues: [true, false]
+    Default: false
+
+
+Resources:
+  SubNet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref CIDR
+      AvailabilityZone: !Ref availabilityZone
+      MapPublicIpOnLaunch: !Ref PublicTier
+      Tags:
+        - Key: Name
+          Value: !Ref Name
+        - Key: Network
+          Value: !Ref NetworkTag
+
+  SubNetRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubNet
+      RouteTableId: !Ref RouteTable  
+
+Outputs:
+  SubNetID:
+    Description: 'SubNetID'
+    Value: !Ref SubNet
+  SubNetName:
+    Description: SubNet Name
+    Value: !Ref Name
+  SubNetDetails:
+    Description: Subnet Details. Id; Name; CIDR; NetworkAcl; vpc; AZ
+    Value: !Sub 'ID: ${SubNet} - Name: ${Name} - CIDR: ${CIDR} - Acl: ${SubNet.NetworkAclAssociationId} - VPC: ${SubNet.VpcId} - AZ: ${SubNet.AvailabilityZone}'

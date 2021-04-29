@@ -1,0 +1,395 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  AWS CloudFormation Template: Creates a VPC with Subnets and configure DHCPOptions; Creates DOT Remote access security group;
+  
+Parameters:
+  VPCCIDR:
+    Description: CIDR block for VPC
+    Type: String
+    MinLength: 3
+  SubNet1CIDR:
+    Description: CIDR block for Web Subnet 1
+    Type: String
+    MinLength: 3
+  SubNet2CIDR:
+    Description: CIDR block for Web Subnet 2
+    Type: String
+    MinLength: 3
+  SubNet3CIDR:
+    Description: CIDR block for App Subnet 3
+    Type: String
+    MinLength: 3
+  SubNet4CIDR:
+    Description: CIDR block for App Subnet 4
+    Type: String
+    MinLength: 3
+  SubNet5CIDR:
+    Description: CIDR block for App Subnet 5
+    Type: String
+    MinLength: 3
+  AZ1:
+    Description: Availability Zone 1
+    Type: AWS::EC2::AvailabilityZone::Name
+    MinLength: 3
+  AZ2:
+    Description: Availability Zone 2
+    Type: AWS::EC2::AvailabilityZone::Name
+    MinLength: 3
+  AZ3:
+    Description: Availability Zone 3
+    Type: AWS::EC2::AvailabilityZone::Name
+    MinLength: 3
+  AZ4:
+    Description: Availability Zone 4
+    Type: AWS::EC2::AvailabilityZone::Name
+    MinLength: 3
+  AZ5:
+    Description: Availability Zone 5
+    Type: AWS::EC2::AvailabilityZone::Name
+    MinLength: 3
+  HasPublicTier:
+    Description: if true, creates IGW and sets the first two subnets to public
+    Type: String
+    AllowedValues: [true, false]
+    Default: false
+  ExportNamePrefix:
+    Description: String to be prefixed to the export parameter name (Name of the parent stack )
+    Type: String
+    Default: DOT-ECS-MSP
+  CfnBucketName:
+    AllowedPattern: ^[0-9a-zA-Z]+([0-9a-zA-Z-.]*[0-9a-zA-Z])*$
+    Description: The name of the S3 Bucket containing the nested CloudFormation templates. The bucket name can include numbers, lowercase
+      letters, uppercase letters, periods (.), and hyphens (-). It cannot start or end with a hyphen (-).
+    Type: String
+    Default: <s3_bucket_name>
+  Prefix: 
+    Description: prefix for parameter store names, include the slash /
+    Type: String
+    Default: "/dot/"
+    
+Conditions:
+  IsPublicTier: !Equals [ !Ref HasPublicTier, true ]
+  IsPrivateTier: !Not [Condition: IsPublicTier]
+  UseStackName: !Equals [!Ref ExportNamePrefix, '']
+
+Resources:
+  VPC:
+    Type: 'AWS::EC2::VPC' 
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-PrimaryVPC'
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Network
+          Value: Public
+
+  VPCDHCPOptionsAssociation:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties:
+      VpcId: !Ref VPC
+      DhcpOptionsId:
+        Fn::ImportValue:
+          !Sub '${ExportNamePrefix}DHCPOptionsID'
+
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}'
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Network
+          Value: Public
+
+  PrivateRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}'
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Network
+          Value: Private
+
+  AppTier:
+    Type: AWS::CloudFormation::Stack
+    Properties: 
+      TemplateURL: !Sub 'https://${CfnBucketName}.s3.amazonaws.com/infrastructure/prod/SubnetTier.yml'
+      Parameters:
+        VPC: !Ref VPC
+        SubNet1CIDR: !Ref SubNet1CIDR
+        SubNet2CIDR: !Ref SubNet2CIDR
+        SubNet3CIDR: !Ref SubNet3CIDR
+        SubNet4CIDR: !Ref SubNet4CIDR
+        SubNet5CIDR: !Ref SubNet5CIDR
+        AZ1: !Ref AZ1
+        AZ2: !Ref AZ2
+        AZ3: !Ref AZ3
+        AZ4: !Ref AZ4
+        AZ5: !Ref AZ5
+        NetworkTag: 'Private'
+        RouteTable: !Ref PrivateRouteTable
+        Name: 'App'
+        CfnBucketName: '<s3_bucket_name>'
+
+  DOTRemoteAccessSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Access for DOT to SSH and RDP and ICMP
+      GroupName: 'DOTRemoteAccessSG'
+      VpcId: !Ref 'VPC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map Network Share
+        - IpProtocol: icmp
+          FromPort: 8
+          ToPort: -1
+          CidrIp: xx.xx.xx.xx/16  
+          Description: DOT Wireless IP range to map SMB Share
+        - IpProtocol: tcp
+          FromPort: 137
+          ToPort: 137
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map Network Share
+        - IpProtocol: tcp
+          FromPort: 138
+          ToPort: 138
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map Network Share
+        - IpProtocol: tcp
+          FromPort: 445
+          ToPort: 445
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map SMB Share
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map SMB Share
+
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map Network Share
+        - IpProtocol: icmp
+          FromPort: 8
+          ToPort: -1
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map SMB Share
+        - IpProtocol: tcp
+          FromPort: 137
+          ToPort: 137
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map Network Share
+        - IpProtocol: tcp
+          FromPort: 138
+          ToPort: 138
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map Network Share
+        - IpProtocol: tcp
+          FromPort: 445
+          ToPort: 445
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map SMB Share
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map SMB Share
+
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map Network Share
+        - IpProtocol: icmp
+          FromPort: 8
+          ToPort: -1
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map SMB Share
+        - IpProtocol: tcp
+          FromPort: 137
+          ToPort: 137
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map Network Share
+        - IpProtocol: tcp
+          FromPort: 138
+          ToPort: 138
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map Network Share
+        - IpProtocol: tcp
+          FromPort: 445
+          ToPort: 445
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map SMB Share
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: xx.xx.xx.xx/16  
+          Description: DOT Wireless IP range to map SMB Share
+
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map Network Share
+        - IpProtocol: tcp
+          FromPort: 137
+          ToPort: 137
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map Network Share
+        - IpProtocol: tcp
+          FromPort: 138
+          ToPort: 138
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map Network Share
+        - IpProtocol: tcp
+          FromPort: 445
+          ToPort: 445
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map SMB Share
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map SMB Share
+        - IpProtocol: icmp
+          FromPort: 8
+          ToPort: -1
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map SMB Share
+
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map Network Share
+        - IpProtocol: icmp
+          FromPort: 8
+          ToPort: -1
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map SMB Share
+        - IpProtocol: tcp
+          FromPort: 137
+          ToPort: 137
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map Network Share
+        - IpProtocol: tcp
+          FromPort: 138
+          ToPort: 138
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map Network Share
+        - IpProtocol: tcp
+          FromPort: 445
+          ToPort: 445
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map SMB Share
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map SMB Share
+
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map SMB Share
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: xx.xx.xx.xx/16
+          Description: DOT Wireless IP range to map Network Share
+
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: xx.xx.xx.xx/24
+          Description: DOT Wireless IP range to map SMB Share
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: xx.xx.xx.xx/24
+          Description: DOT Wireless IP range to map Network Share
+
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: xx.xx.xx.xx/22
+          Description: DOT Wireless IP range to map SMB Share
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: xx.xx.xx.xx/22
+          Description: DOT Wireless IP range to map Network Share
+
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: xx.xx.xx.xx/24
+          Description: DOT Wireless IP range to map SMB Share
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: xx.xx.xx.xx/24
+          Description: DOT Wireless IP range to map Network Share              
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: "Name"
+          Value: "DOT SSH RDP ICMP Access Security Group"        
+
+Outputs:
+  VPC:
+    Description: VPC
+    Value: !Ref VPC
+  VPCDetails:
+    Description: VPC Details
+    Value: !Sub 'Name: ${VPC} - CIDR: ${VPC.CidrBlock}'
+  VPCCidr:
+    Description: VPC Cidr range
+    Value: !GetAtt [ VPC, CidrBlock ]
+  AppSubNets:
+    Description: Comma delimited list of App Subnets
+    Value: !Sub '${AppTier.Outputs.SubNet1ID},${AppTier.Outputs.SubNet2ID},${AppTier.Outputs.SubNet3ID},${AppTier.Outputs.SubNet4ID},${AppTier.Outputs.SubNet5ID}'
+    Export:  
+      Name: !If [UseStackName,  !Sub '${AWS::StackName}-AppSubNets', !Sub '${ExportNamePrefix}AppSubNets'] 
+  AppSubNet1:
+    Description: App Subnet 1 details
+    Value: !GetAtt [ AppTier, Outputs.SubNet1ID ]
+    Export:
+      Name: !If [UseStackName,  !Sub '${AWS::StackName}-AppSubNet1ID', !Sub '${ExportNamePrefix}AppSubNet1ID']
+  AppSubNet2:
+    Description: App Subnet 2 details
+    Value: !GetAtt [ AppTier, Outputs.SubNet2ID ]
+    Export:
+      Name: !If [UseStackName,  !Sub '${AWS::StackName}-AppSubNet2ID', !Sub '${ExportNamePrefix}AppSubNet2ID']
+  AppSubNet3:
+    Description: App Subnet 3 details
+    Value: !GetAtt [ AppTier, Outputs.SubNet3ID ]
+    Export:
+      Name: !If [UseStackName,  !Sub '${AWS::StackName}-AppSubNet3ID', !Sub '${ExportNamePrefix}AppSubNet3ID']
+  AppSubNet4:
+    Description: App Subnet 4 details
+    Value: !GetAtt [ AppTier, Outputs.SubNet4ID ]
+    Export:
+      Name: !If [UseStackName,  !Sub '${AWS::StackName}-AppSubNet4ID', !Sub '${ExportNamePrefix}AppSubNet4ID']
+  AppSubNet5:
+    Description: App Subnet 5 details
+    Value: !GetAtt [ AppTier, Outputs.SubNet5ID ]
+    Export:
+      Name: !If [UseStackName,  !Sub '${AWS::StackName}-AppSubNet5ID', !Sub '${ExportNamePrefix}AppSubNet5ID']
+  DHCPOptionsID:
+    Description: dhcp options 
+    Value: !Ref VPCDHCPOptionsAssociation

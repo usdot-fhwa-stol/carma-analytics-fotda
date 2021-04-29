@@ -1,0 +1,161 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >- 
+  Tier with 5 subnets in 3 in AZ1 and 2 in AZ2
+Parameters:
+  VPC:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC for WebTier
+  SubNet1CIDR:
+    Description: CIDR block for Subnet 1
+    Type: String
+  SubNet2CIDR:
+    Description: CIDR block for Subnet 2
+    Type: String
+  SubNet3CIDR:
+    Description: CIDR block for Subnet 3
+    Type: String
+  SubNet4CIDR:
+    Description: CIDR block for App Subnet 4
+    Type: String
+    MinLength: 3
+  SubNet5CIDR:
+    Description: CIDR block for App Subnet 5
+    Type: String
+    MinLength: 3
+  AZ1:
+    Description: Availability Zone 1
+    Type: AWS::EC2::AvailabilityZone::Name
+  AZ2:
+    Description: Availability Zone 2
+    Type: AWS::EC2::AvailabilityZone::Name
+  AZ3:
+    Description: Availability Zone 3
+    Type: AWS::EC2::AvailabilityZone::Name
+  AZ4:
+    Description: Availability Zone 4
+    Type: AWS::EC2::AvailabilityZone::Name
+    MinLength: 3
+  AZ5:
+    Description: Availability Zone 5
+    Type: AWS::EC2::AvailabilityZone::Name
+    MinLength: 3
+  NetworkTag:
+    Description: indiates Private or public network
+    Type: String
+    Default: 'Private'
+  RouteTable:
+    Description: RouteTable
+    Type: String
+  Name:
+    Description: Name
+    Type: String
+  PublicTier:
+    Description: if true, creates IGW and sets the first two subnets to public
+    Type: String
+    AllowedValues: [true, false]
+    Default: false
+  CfnBucketName:
+    AllowedPattern: ^[0-9a-zA-Z]+([0-9a-zA-Z-.]*[0-9a-zA-Z])*$
+    Description: The name of the S3 Bucket containing the nested CloudFormation templates. The bucket name can include numbers, lowercase
+      letters, uppercase letters, periods (.), and hyphens (-). It cannot start or end with a hyphen (-).
+    Type: String
+
+Resources:
+  SubNet1:
+    Type: AWS::CloudFormation::Stack
+    Properties: 
+      TemplateURL: !Sub 'https://${CfnBucketName}.s3.amazonaws.com/infrastructure/prod/SubNet.yml'
+      Parameters: 
+        CIDR: !Ref SubNet1CIDR
+        VPC: !Ref VPC
+        Name: !Sub '${Name} SubNet - 1' #!Sub '${StackName} - ${Name}' 
+        availabilityZone: !Ref AZ1
+        NetworkTag: !Ref NetworkTag
+        RouteTable: !Ref RouteTable
+        PublicTier: !Ref PublicTier
+  
+  SubNet2:
+    Type: AWS::CloudFormation::Stack
+    Properties: 
+      TemplateURL: !Sub 'https://${CfnBucketName}.s3.amazonaws.com/infrastructure/prod/SubNet.yml'
+      Parameters: 
+        CIDR: !Ref SubNet2CIDR
+        VPC: !Ref VPC
+        Name: !Sub '${Name} SubNet - 2'
+        availabilityZone: !Ref AZ2
+        NetworkTag: !Ref NetworkTag
+        RouteTable: !Ref RouteTable
+        PublicTier: !Ref PublicTier
+
+  SubNet3:
+    Type: AWS::CloudFormation::Stack
+    Properties: 
+      TemplateURL: !Sub 'https://${CfnBucketName}.s3.amazonaws.com/infrastructure/prod/SubNet.yml'
+      Parameters: 
+        CIDR: !Ref SubNet3CIDR
+        VPC: !Ref VPC
+        Name: !Sub '${Name} SubNet - 3'
+        availabilityZone: !Ref AZ3
+        NetworkTag: !Ref NetworkTag
+        RouteTable: !Ref RouteTable
+        PublicTier: !Ref PublicTier
+
+  SubNet4:
+    Type: AWS::CloudFormation::Stack
+    Properties: 
+      TemplateURL: !Sub 'https://${CfnBucketName}.s3.amazonaws.com/infrastructure/prod/SubNet.yml'
+      Parameters: 
+        CIDR: !Ref SubNet4CIDR
+        VPC: !Ref VPC
+        Name: !Sub '${Name} SubNet - 4'
+        availabilityZone: !Ref AZ4
+        NetworkTag: !Ref NetworkTag
+        RouteTable: !Ref RouteTable
+        PublicTier: !Ref PublicTier
+
+
+  SubNet5:
+    Type: AWS::CloudFormation::Stack
+    Properties: 
+      TemplateURL: !Sub 'https://${CfnBucketName}.s3.amazonaws.com/infrastructure/prod/SubNet.yml'
+      Parameters: 
+        CIDR: !Ref SubNet5CIDR
+        VPC: !Ref VPC
+        Name: !Sub '${Name} SubNet - 5'
+        availabilityZone: !Ref AZ5
+        NetworkTag: !Ref NetworkTag
+        RouteTable: !Ref RouteTable
+        PublicTier: !Ref PublicTier
+
+
+Outputs:
+  SubNet1:
+    Description: Private Subnet 1 details
+    Value: !GetAtt [SubNet1, Outputs.SubNetDetails]
+  SubNet2:
+    Description: Private Subnet 2 details
+    Value: !GetAtt [SubNet2, Outputs.SubNetDetails]
+  SubNet3:
+    Description: Private Subnet 3 details
+    Value: !GetAtt [SubNet3, Outputs.SubNetDetails]
+  SubNet4:
+    Description: Private Subnet 4 details
+    Value: !GetAtt [SubNet3, Outputs.SubNetDetails]
+  SubNet5:
+    Description: Private Subnet 5 details
+    Value: !GetAtt [SubNet3, Outputs.SubNetDetails]
+  SubNet1ID:
+    Description: ID for SubNet 1
+    Value: !Sub '${SubNet1.Outputs.SubNetID}'
+  SubNet2ID:
+    Description: ID for SubNet 2
+    Value: !Sub '${SubNet2.Outputs.SubNetID}'
+  SubNet3ID:
+    Description: ID for SubNet 3
+    Value: !Sub '${SubNet3.Outputs.SubNetID}'
+  SubNet4ID:
+    Description: ID for SubNet 4
+    Value: !Sub '${SubNet4.Outputs.SubNetID}'
+  SubNet5ID:
+    Description: ID for SubNet 5
+    Value: !Sub '${SubNet5.Outputs.SubNetID}'

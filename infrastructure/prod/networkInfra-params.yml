@@ -1,0 +1,69 @@
+##Root template
+ #Invoke env specific VPC and application infrastructure from here
+ #Store all environment specific paramters here
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  AWS CloudFormation Template vpc_multiple_subnets: Creates a VPC with multiple subnets.
+
+Parameters:
+  tagMode:
+    Type: String
+    MinLength: '3'
+    Default: <project_name>
+  
+  tagEnv:
+    Type: String
+    MinLength: '2'
+    Default: <env>
+
+  HasPublicTier:
+    Description: if true, creates IGW and sets the first two subnets to public
+    Type: String
+    AllowedValues: [true, false]
+    Default: false
+
+  tagStack:
+    Type: String
+    MinLength: '2'
+    Default: <env>
+  
+  CfnBucketName:
+    AllowedPattern: ^[0-9a-zA-Z]+([0-9a-zA-Z-.]*[0-9a-zA-Z])*$
+    Description: The name of the S3 Bucket containing the nested CloudFormation templates. The bucket name can include numbers, lowercase
+      letters, uppercase letters, periods (.), and hyphens (-). It cannot start or end with a hyphen (-).
+    Type: String
+    Default: <s3_bucket_name>
+
+  ExportNamePrefix:
+    Description: String to be prefixed to the export parameter name (Name of the parent stack )
+    Type: String
+    Default: <parent_stack_name>
+
+Resources:
+  VPC:
+    Type: AWS::CloudFormation::Stack
+    Properties: 
+      TemplateURL: !Sub 'https://${CfnBucketName}.s3.amazonaws.com/infrastructure/vpc.yml'
+      Tags:
+        - Key: mode
+          Value: !Ref tagMode
+        - Key: env
+          Value: !Ref tagEnv
+        - Key: stack
+          Value: !Ref tagStack
+      Parameters: 
+        VPCCIDR: 'xx.xx.xxx.x/24' # CIDR block for VPC
+        SubNet1CIDR: 'xx.xx.xxx.xxx/26' # CIDR block for Subnet AZ1
+        SubNet2CIDR: 'xx.xx.xxx.xxx/26' # CIDR block for Subnet AZ2
+        SubNet3CIDR: 'xx.xx.xxx.xxx/26' # CIDR block for Subnet AZ3
+        SubNet4CIDR: 'xx.xx.xxx.xxx/27' # CIDR block for Subnet AZ4
+        SubNet5CIDR: 'xx.xx.xxx.xxx/27' # CIDR block for Subnet AZ5
+        AZ1: 'us-east-1a' # Availability Zone 1
+        AZ2: 'us-east-1b' # Availability Zone 2
+        AZ3: 'us-east-1c' # Availability Zone 3
+        AZ4: 'us-east-1d' # Availability Zone 4
+        AZ5: 'us-east-1e' # Availability Zone 5
+        HasPublicTier: false # if true, creates IGW and sets the first two subnets to public
+        ExportNamePrefix: <parent_stack_name>
+        CfnBucketName: <'s3_bucket_name'>
