@@ -43,4 +43,6 @@ Terminal Services are installed in the Windows EC2 VMs to allow regular DOT user
 
 
 ## Architecture Diagram
-![architecture diagram](https://github.com/usdot-fhwa-stol/carma-analytics-fotda/blob/44462accfe8fcff426d9d827ccf14685d5e475dc/reference_docs/Architecture_Diagram.pdf)
+<p>
+  <img src="reference_docs/Architecture_Diagram.pdf" width="220" height="240" />
+</p>
