@@ -38,3 +38,6 @@ Terminal Services are installed in the Windows EC2 VMs to allow regular DOT user
 - Data Scientist: This role is primarily for technical users - researchers/analysts who can RDP into the EC2 VMs and access data stored in S3 buckets or on Redshift databases. However, non-technical users can use this role to access AWS Quicksight service which allows them to access Redshift databases and create visualization dashboards.
 
 
+
+[Architecture Demo](https://usdot-carma.atlassian.net/wiki/spaces/CRMALN/pages/1380024341/CARMA+Analytics+-+Demo+Video)
+
