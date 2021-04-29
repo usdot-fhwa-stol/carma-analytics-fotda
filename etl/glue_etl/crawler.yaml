@@ -1,0 +1,14 @@
+Type: AWS::Glue::Crawler
+Properties:
+  Role: AWSGlueServiceRole-s3ToGlue #this role must provide permissions similar to the AWS managed policy, AWSGlueServiceRole, plus access to your data stores.
+  Classifiers:
+    - 'csvSchema' #defined for identifying and reading only csv files
+  Description: example classifier
+  SchemaChangePolicy: ''
+  Schedule: Schedule #can be scheduled as daily, weekly, monthly or on-demand job
+  DatabaseName: test
+  Targets:
+    - ''
+  TablePrefix: test-
+  Name: my-crawler
+  Configuration: "{\"Version\":1.0,\"CrawlerOutput\":{\"Partitions\":{\"AddOrUpdateBehavior\":\"InheritFromTable\"},\"Tables\":{\"AddOrUpdateBehavior\":\"MergeNewColumns\"}}}"
