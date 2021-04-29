@@ -10,5 +10,6 @@ Step 3 : Deploy code
   aws cloudformation deploy --template-file networkpackaged.yml --stack-name FHWA-FOTDA-Prod-Infrastructure --parameter-overrides CfnBucketName=<s3_bucket_name>
   
 ```
-Replace the variables enclosed in <..> in all the yml files and instructions for insfrastructure setup. These variables are environment and project specific.
+Replace the variables enclosed in <..> in all the yml files and instructions for insfrastructure setup. 
+These variables are environment and project specific.
 ```
