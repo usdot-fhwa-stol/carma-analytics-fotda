@@ -16,22 +16,25 @@ CARMA Analytics is a secure, scalable and cloud agnostic data architecture to en
 3. Developer tools and data analytics:
 - Provide tools for basic quality assurance and analysis
 List of currently available tools:
-| Tool/Application |
-| ----------- |
-| Python 3.8 |
-| aws cli |
-| Visual Studio Code |
-| Libre Office |
-| RStudio |
-| R |
-| ROS noetic (Robot Operating System) - Only on Windows EC2 VMs |
-| Jupyter Notebook |
-| Sublime Text |
-| Google Chrome |
+
+
+| S.No. | Tool/Application |
+| ----------- | ----------- |
+| 1 | Python 3.8 |
+| 2 | aws cli |
+| 3 | Visual Studio Code |
+| 4 | Libre Office |
+| 5 | RStudio |
+| 6 | R |
+| 7 | ROS noetic (Robot Operating System) - Only on Windows EC2 VMs |
+| 8 | Jupyter Notebook |
+| 9 | Sublime Text |
+| 10 | Google Chrome |
 
 
 Terminal Services are installed in the Windows EC2 VMs to allow regular DOT users to RDP to the desktop. Currently, the following AWS roles are supported:
 - Application Admins: This is restricted to devlopers and administrators on the AWS environment. This role has root access to EC2 VMs.
+
 - Data Scientist: This role is primarily for technical users - researchers/analysts who can RDP into the EC2 VMs and access data stored in S3 buckets or on Redshift databases. However, non-technical users can use this role to access AWS Quicksight service which allows them to access Redshift databases and create visualization dashboards.
 
 
