@@ -33,9 +33,8 @@ def process_bags(src_file):
     with fs.open(f'{SRC_BUCKET}/{src_file}') as f:
         bag = rosbag.Bag(f, mode='r')
         
-        bag_contents = bag.read_messages()
-        list_of_topics = [topic for topic, _, _ in bag_contents]
-        list_of_topics = list(set(list_of_topics))
+        bag_types_topics = bag.get_type_and_topic_info()
+        list_of_topics = list(bag_types_topics[1].keys())
         print(f'Total topics = {len(list_of_topics)}')
         counter = 0
         
@@ -80,6 +79,7 @@ def process_bags(src_file):
             counter += 1
             print(f'{counter}/{len(list_of_topics)} topics complete: {topic_name}')
         print('all topics are complete.')
+        bag.close()
 
 
 if __name__ == '__main__':
