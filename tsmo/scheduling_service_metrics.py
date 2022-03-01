@@ -33,51 +33,35 @@ def averageCalc(df, window, messageType):
 
 #trim the initial dataset and create common time scale
 def initializeData(consumer_df, producer_df, vehicle_1, vehicle_2):
-    #get index when both vehicles data occurs in consumer/producer dataset and create new df
-    #this will be considered the "start of the test"
-    consumer_first_veh_id = consumer_df['v_id'].iloc[0]
-    consumer_change_id_index = consumer_df[consumer_df['v_id'] != consumer_first_veh_id].first_valid_index()
-    consumer_df_trimmed = consumer_df.loc[consumer_change_id_index:]
-
-    producer_first_veh_id = producer_df['v_id'].iloc[0]
-    producer_change_id_index = producer_df[producer_df['v_id'] != producer_first_veh_id].first_valid_index()
-    producer_df_trimmed = producer_df.loc[producer_change_id_index:]
-
     #create individual df specific to vehicle
-    consumer_df_vehicle_1 = consumer_df_trimmed[consumer_df_trimmed['v_id'] == vehicle_1]
-    producer_df_vehicle_1 = producer_df_trimmed[producer_df_trimmed['v_id'] == vehicle_1]
-    consumer_df_vehicle_2 = consumer_df_trimmed[consumer_df_trimmed['v_id'] == vehicle_2]
-    producer_df_vehicle_2 = producer_df_trimmed[producer_df_trimmed['v_id'] == vehicle_2]
+    consumer_df_vehicle_1 = consumer_df[consumer_df['v_id'] == vehicle_1]
+    producer_df_vehicle_1 = producer_df[producer_df['v_id'] == vehicle_1]
+    consumer_df_vehicle_2 = consumer_df[consumer_df['v_id'] == vehicle_2]
+    producer_df_vehicle_2 = producer_df[producer_df['v_id'] == vehicle_2]
+
+    consumer_diff_1 = 0
+    consumer_diff_2 = 0
+    producer_diff_1 = 0
+    producer_diff_2 = 0
 
     #now compare first timestamps for both dataframes and create final offset timestamp column for same reference timeframe
     consumer_df_vehicle_1_first_time = consumer_df_vehicle_1['Message_Timestamp'].iloc[0]
     consumer_df_vehicle_2_first_time = consumer_df_vehicle_2['Message_Timestamp'].iloc[0]
     if consumer_df_vehicle_1_first_time > consumer_df_vehicle_2_first_time:
-        diff = consumer_df_vehicle_1_first_time - consumer_df_vehicle_2_first_time
-        consumer_df_vehicle_1['Final_Offset_Timestamp'] = consumer_df_vehicle_1['Message_Timestamp']
-        consumer_df_vehicle_2['Final_Offset_Timestamp'] = consumer_df_vehicle_2['Message_Timestamp'] + diff
-    elif consumer_df_vehicle_2_first_time > consumer_df_vehicle_1_first_time:
-        diff = consumer_df_vehicle_2_first_time - consumer_df_vehicle_1_first_time
-        consumer_df_vehicle_2['Final_Offset_Timestamp'] = consumer_df_vehicle_2['Message_Timestamp']
-        consumer_df_vehicle_1['Final_Offset_Timestamp'] = consumer_df_vehicle_1['Message_Timestamp'] + diff
+        consumer_diff_1 = consumer_df_vehicle_1_first_time - consumer_df_vehicle_2_first_time
+    elif consumer_df_vehicle_2_first_time >= consumer_df_vehicle_1_first_time:
+        consumer_diff_2 = consumer_df_vehicle_2_first_time - consumer_df_vehicle_1_first_time
 
     producer_df_vehicle_1_first_time = producer_df_vehicle_1['Message_Timestamp'].iloc[0]
     producer_df_vehicle_2_first_time = producer_df_vehicle_2['Message_Timestamp'].iloc[0]
     if producer_df_vehicle_1_first_time > producer_df_vehicle_2_first_time:
-        diff = producer_df_vehicle_1_first_time - producer_df_vehicle_2_first_time
-        producer_df_vehicle_1['Final_Offset_Timestamp'] = producer_df_vehicle_1['Message_Timestamp']
-        producer_df_vehicle_2['Final_Offset_Timestamp'] = producer_df_vehicle_2['Message_Timestamp'] + diff
-    elif producer_df_vehicle_2_first_time > producer_df_vehicle_1_first_time:
-        diff = producer_df_vehicle_2_first_time - producer_df_vehicle_1_first_time
-        producer_df_vehicle_2['Final_Offset_Timestamp'] = producer_df_vehicle_2['Message_Timestamp']
-        producer_df_vehicle_1['Final_Offset_Timestamp'] = producer_df_vehicle_1['Message_Timestamp'] + diff
-    elif producer_df_vehicle_2_first_time == producer_df_vehicle_1_first_time:
-        producer_df_vehicle_2['Final_Offset_Timestamp'] = producer_df_vehicle_2['Message_Timestamp']
-        producer_df_vehicle_1['Final_Offset_Timestamp'] = producer_df_vehicle_1['Message_Timestamp']
+        producer_diff_1 = producer_df_vehicle_1_first_time - producer_df_vehicle_2_first_time
+    elif producer_df_vehicle_2_first_time >= producer_df_vehicle_1_first_time:
+        producer_diff_2 = producer_df_vehicle_2_first_time - producer_df_vehicle_1_first_time
 
-    return consumer_df_vehicle_1, consumer_df_vehicle_2, producer_df_vehicle_1, producer_df_vehicle_2
+    return consumer_df_vehicle_1, consumer_df_vehicle_2, producer_df_vehicle_1, producer_df_vehicle_2, consumer_diff_1, consumer_diff_2, producer_diff_1, producer_diff_2
 
-def extractData(consumer_data, producer_data):
+def extractData(consumer_data, producer_data, consumer_diff, producer_diff):
     #get the first consumer and producer message timestamps as reference points for calculations
     first_consumer_time = consumer_data['Message_Timestamp'].iloc[0]
     first_producer_time = producer_data['Message_Timestamp'].iloc[0]
@@ -88,15 +72,15 @@ def extractData(consumer_data, producer_data):
     #adjusted producer timestamp values take into account the first consumed message time
     #divide by 1000 to get values in seconds
     producer_data['Stopping_Time_Adjusted_To_Consumer(s)'] = (producer_data['Stopping_Time(ms)'] - first_consumer_time) / 1000
-    producer_data['Message_Timestamp_Adjusted_To_Consumer(s)'] = (producer_data['Final_Offset_Timestamp'] - first_consumer_time) / 1000
+    producer_data['Message_Timestamp_Adjusted_To_Consumer(s)'] = (producer_data['Message_Timestamp'] + producer_diff - first_producer_time) / 1000
 
     #get message timestamp relative to first producer time
-    producer_data['Message_Timestamp_Adjusted_To_Producer(s)'] = (producer_data['Final_Offset_Timestamp'] - first_producer_time) / 1000
+    producer_data['Message_Timestamp_Adjusted_To_Producer(s)'] = (producer_data['Message_Timestamp'] - first_producer_time) / 1000
     #compare stopping time to message timestamp
-    producer_data['Stopping_Time_Diff(s)'] = (producer_data['Stopping_Time(ms)'] - producer_data['Final_Offset_Timestamp']) / 1000
+    producer_data['Stopping_Time_Diff(s)'] = (producer_data['Stopping_Time(ms)'] - producer_data['Message_Timestamp']) / 1000
 
     #adjust consumer timestamp values
-    consumer_data['Message_Timestamp_Adjusted_To_Consumer(s)'] = (consumer_data['Final_Offset_Timestamp'] - first_consumer_time) / 1000
+    consumer_data['Message_Timestamp_Adjusted_To_Consumer(s)'] = (consumer_data['Message_Timestamp'] + consumer_diff - first_consumer_time) / 1000
 
     #convert speed and calculate acceleration based on speed and time differences
     consumer_data['Speed_Converted(m/s)'] = consumer_data['cur_speed']*0.02
@@ -109,6 +93,7 @@ def extractData(consumer_data, producer_data):
     #categorical for is_allowed field
     consumer_data['Access'] = consumer_data['is_allowed'].astype(int)
 
+
 #returns when the two vehicles were granted access and when they exited the intersection(Adjusted for consumer timestamp)
 def getVehicleAccessTimesConsumer(producer_veh_1, producer_veh_2):
 
@@ -118,7 +103,7 @@ def getVehicleAccessTimesConsumer(producer_veh_1, producer_veh_2):
         veh1_first_access_time = producer_veh_1['Message_Timestamp_Adjusted_To_Consumer(s)'].loc[veh1_first_access_index]
         veh1_last_access_index = producer_veh_1[producer_veh_1['access'] == 1].last_valid_index()
         veh1_last_access_time = producer_veh_1['Message_Timestamp_Adjusted_To_Consumer(s)'].loc[veh1_last_access_index]
-        print("Vehicle 1 first access " + str(veh1_first_access_time))
+        print("Vehicle 1 first access " + str(veh1_first_access_time) + " (consumer)")
     except:
         print("Vehicle 1 never received access")
         veh1_first_access_time = 0
@@ -131,7 +116,7 @@ def getVehicleAccessTimesConsumer(producer_veh_1, producer_veh_2):
         veh2_first_access_time = producer_veh_2['Message_Timestamp_Adjusted_To_Consumer(s)'].loc[veh2_first_access_index]
         veh2_last_access_index = producer_veh_2[producer_veh_2['access'] == 1].last_valid_index()
         veh2_last_access_time = producer_veh_2['Message_Timestamp_Adjusted_To_Consumer(s)'].loc[veh2_last_access_index]
-        print("Vehicle 2 first access " + str(veh2_first_access_time))
+        print("Vehicle 2 first access " + str(veh2_first_access_time) + " (consumer)")
     except:
         print("Vehicle 2 never received access")
         veh2_first_access_time = 0
@@ -148,7 +133,7 @@ def getVehicleAccessTimesProducer(producer_veh_1, producer_veh_2):
         veh1_first_access_time = producer_veh_1['Message_Timestamp_Adjusted_To_Producer(s)'].loc[veh1_first_access_index]
         veh1_last_access_index = producer_veh_1[producer_veh_1['access'] == 1].last_valid_index()
         veh1_last_access_time = producer_veh_1['Message_Timestamp_Adjusted_To_Producer(s)'].loc[veh1_last_access_index]
-        print("Vehicle 1 first access " + str(veh1_first_access_time))
+        print("Vehicle 1 first access " + str(veh1_first_access_time) + " (producer)")
     except:
         print("Vehicle 1 never received access")
         veh1_first_access_time = 0
@@ -161,7 +146,7 @@ def getVehicleAccessTimesProducer(producer_veh_1, producer_veh_2):
         veh2_first_access_time = producer_veh_2['Message_Timestamp_Adjusted_To_Producer(s)'].loc[veh2_first_access_index]
         veh2_last_access_index = producer_veh_2[producer_veh_2['access'] == 1].last_valid_index()
         veh2_last_access_time = producer_veh_2['Message_Timestamp_Adjusted_To_Producer(s)'].loc[veh2_last_access_index]
-        print("Vehicle 2 first access " + str(veh2_first_access_time))
+        print("Vehicle 2 first access " + str(veh2_first_access_time) + " (producer)")
     except:
         print("Vehicle 2 never received access")
         veh2_first_access_time = 0
@@ -176,37 +161,19 @@ def runner(filename, vehicle_id_1, vehicle_id_2):
     producer_data = pd.read_csv(f'{input_directory_path}/{filename}_SS_producer_parsed.csv')
 
     #individual dataframes for the specific vehicles
-    consumer_data_vehicle_1, consumer_data_vehicle_2, producer_data_vehicle_1, producer_data_vehicle_2 = initializeData(consumer_data, producer_data, vehicle_id_1, vehicle_id_2)
+    consumer_data_vehicle_1, consumer_data_vehicle_2, producer_data_vehicle_1, producer_data_vehicle_2, consumer_diff_1, consumer_diff_2, producer_diff_1, producer_diff_2 = initializeData(consumer_data, producer_data, vehicle_id_1, vehicle_id_2)
 
     #calculate values of interest
-    extractData(consumer_data_vehicle_1, producer_data_vehicle_1)
+    extractData(consumer_data_vehicle_1, producer_data_vehicle_1, consumer_diff_1, producer_diff_1)
+    # consumer_data_vehicle_1.to_csv(f'{output_directory_path}/test1.csv')
+
     veh_1_status_intent_frequency_averages = averageCalc(consumer_data_vehicle_1, 10, "S_And_I")
-    extractData(consumer_data_vehicle_2, producer_data_vehicle_2)
+    extractData(consumer_data_vehicle_2, producer_data_vehicle_2, consumer_diff_2, producer_diff_2)
+    # consumer_data_vehicle_2.to_csv(f'{output_directory_path}/test2.csv')
+
     veh_2_status_intent_frequency_averages = averageCalc(consumer_data_vehicle_2, 10, "S_And_I")
 
     veh1_first_access, veh2_first_access, veh1_last_access, veh2_last_access = getVehicleAccessTimesConsumer(producer_data_vehicle_1, producer_data_vehicle_2)
-
-    #plot vehicle stopping time difference versus time
-    # figure(figsize=(10,10))
-    # plt.plot(producer_data_vehicle_1['Message_Timestamp_Adjusted_To_Producer(s)'], producer_data_vehicle_1['Stopping_Time_Diff(s)'], label=vehicle_id_1)
-    # plt.plot(producer_data_vehicle_2['Message_Timestamp_Adjusted_To_Producer(s)'], producer_data_vehicle_2['Stopping_Time_Diff(s)'], label=vehicle_id_2)
-    # plt.xlabel('Producer Adjusted Time (s)')
-    # plt.ylabel('Stopping Time Difference')
-    # plt.title(vehicle_id_1 + " and " + vehicle_id_2 + " Stopping Time Difference Versus Adjusted Producer Time")
-    # plt.grid(True)
-    # plt.legend()
-    # plt.savefig(f'{output_directory_path}/{filename}_Stopping_Time_Difference_Vs_Time.png')
-    #
-    # #plot vehicle adjusted stopping time versus time
-    # figure(figsize=(10,10))
-    # plt.plot(producer_data_vehicle_1['Message_Timestamp_Adjusted_To_Consumer(s)'], producer_data_vehicle_1['Stopping_Time_Adjusted_To_Consumer(s)'])
-    # plt.plot(producer_data_vehicle_2['Message_Timestamp_Adjusted_To_Consumer(s)'], producer_data_vehicle_2['Stopping_Time_Adjusted_To_Consumer(s)'])
-    # plt.xlabel('Time (s)')
-    # plt.ylabel('Stopping Time')
-    # plt.title("Adjusted Stopping Time Versus Time")
-    # plt.grid(True)
-    # plt.legend()
-    # plt.savefig(f'{output_directory_path}/{filename}_Stopping_Time_Adjusted_Vs_Time.png')
 
     #plot vehicle stopping distance and access versus time
     fig, ax1 = plt.subplots()
@@ -321,10 +288,10 @@ def runner(filename, vehicle_id_1, vehicle_id_2):
     plt.ylabel('State')
 
     if producer_data_vehicle_2['Message_Timestamp_Adjusted_To_Producer(s)'].max() >= producer_data_vehicle_1['Message_Timestamp_Adjusted_To_Producer(s)'].max():
-        plt.xticks(np.arange(0, veh2_last_access+2, 2))
+        plt.xticks(np.arange(0, veh2_last_access_pr+2, 2))
         plt.xlim(0,veh2_last_access+2)
     else:
-        plt.xticks(np.arange(0, veh1_last_access+2, 2))
+        plt.xticks(np.arange(0, veh1_last_access_pr+2, 2))
         plt.xlim(0,veh1_last_access+2)
 
     ax1.xaxis.set_minor_locator(MultipleLocator(0.5))
@@ -352,11 +319,11 @@ def runner(filename, vehicle_id_1, vehicle_id_2):
 
     if producer_data_vehicle_2['Message_Timestamp_Adjusted_To_Producer(s)'].max() >= producer_data_vehicle_1['Message_Timestamp_Adjusted_To_Producer(s)'].max():
         plt.xticks(np.arange(0, veh2_last_access+2, 2))
-        plt.xlim(0,veh2_last_access+2)
+        plt.xlim(0,veh2_last_access_pr+2)
     else:
         plt.xticks(np.arange(0, veh1_last_access+2, 2))
-        plt.xlim(0,veh1_last_access+2)
+        plt.xlim(0,veh1_last_access_pr+2)
     ax1.xaxis.set_minor_locator(MultipleLocator(0.5))
-    plt.title(vehicle_id_1 + " and " + vehicle_id_2 + " State")
+    plt.title(vehicle_id_1 + " and " + vehicle_id_2 + " Departure Position")
     ax1.legend(loc="upper right")
     plt.savefig(f'{output_directory_path}/{filename}_Departure_Position_Vs_Time.png')
