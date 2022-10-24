@@ -32,7 +32,7 @@ def kafkaParser():
             #write data of interest to csv which will be used to produce plots
             with open(f'{output_directory_path}/{fileName}_parsed.csv', 'w', newline='') as write_obj:
                 csv_writer = writer(write_obj)
-                csv_writer.writerow(["Timestamp(ms)", "Vehicle_ID", "Cur_ds(m)", "Cur_lane_id", "Entry_lane_id", "Link_lane_id", "Dest_lane_id", "EV", "DV", "LV"])
+                csv_writer.writerow(["Timestamp(ms)", "Vehicle_ID", "Cur_ds(m)", "Cur_Speed", "Cur_Accel", "Cur_lane_id", "Entry_lane_id", "Link_lane_id", "Dest_lane_id", "Vehicle_state"])
 
                 #extract relevant elements from the json
                 for i in range(0, len(textList)):
@@ -44,22 +44,20 @@ def kafkaParser():
                         timestamp = status_intent_message_json['metadata']['timestamp']
                         veh_id = status_intent_message_json['payload']['v_id']
                         cur_ds = status_intent_message_json['payload']['cur_ds']
+                        cur_speed = status_intent_message_json['payload']['cur_speed'] * 0.02 #convert to m/s
+                        cur_accel = status_intent_message_json['payload']['cur_accel'] * 0.01 #convert to m/s^2
                         cur_lane_id = status_intent_message_json['payload']['cur_lane_id']
                         entry_lane_id = status_intent_message_json['payload']['entry_lane_id']
                         link_lane_id = status_intent_message_json['payload']['link_lane_id']
                         dest_lane_id = status_intent_message_json['payload']['dest_lane_id']
 
                         #check state of vehicle using cur_lane_id
-                        EV = 0
-                        DV = 0
-                        LV = 0
-                        if cur_lane_id == entry_lane_id:
-                            EV = 1
+                        state = "EV"                        
                         if cur_lane_id == link_lane_id:
-                            DV = 1 
+                            state = "DV" 
                         if cur_lane_id == dest_lane_id:
-                            LV = 1
-                        csv_writer.writerow([timestamp, veh_id, cur_ds, cur_lane_id, entry_lane_id, link_lane_id, dest_lane_id, EV, DV, LV])
+                            state = "LV"
+                        csv_writer.writerow([timestamp, veh_id, cur_ds, cur_speed, cur_accel, cur_lane_id, entry_lane_id, link_lane_id, dest_lane_id, state])
                     except:
                         print("Error extracting json info for line: " + str(textList[i]))
 

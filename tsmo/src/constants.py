@@ -1,4 +1,5 @@
 DATA_DIR = '../data'
 RAW_LOG_DIR = 'Raw_Log_Files'
+INTERSECTION_MODEL_DIR = 'Intersection_Model'
 PARSED_OUTPUT_DIR = 'Parsed_Log_Output'
 PLOT_DIR = 'Plots'
