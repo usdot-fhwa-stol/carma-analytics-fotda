@@ -55,8 +55,7 @@ def status_intent_plotter():
             #Only want to plot when a vehicle is in the 'EV' state
             veh_subset = lane_subset[(lane_subset['Vehicle_ID'] == veh)&(lane_subset['Vehicle_state'] == "EV")]
             dates=[dt.datetime.fromtimestamp(ts) for ts in veh_subset["Timestamp(s)"]]
-
-            axs[i].plot(dates,veh_subset['Cur_ds(m)'] - lanelet_length, label=veh)
+            axs[i].plot(dates,lanelet_length - veh_subset['Cur_ds(m)'], label=veh)
             i += 1        
 
         plt.xticks(rotation=75)
