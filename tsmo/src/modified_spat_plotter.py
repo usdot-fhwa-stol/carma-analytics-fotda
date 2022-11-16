@@ -41,35 +41,42 @@ def modified_spat_plotter():
                 group_subset = df[df['Signal_Group'] == group]
                 dates=[dt.datetime.fromtimestamp(ts) for ts in group_subset["Epoch_Time(s)"]]               
 
+                seg_count = 0
                 #iterate through group data and plot based on current and next state
-                for i in range(0, len(group_subset)-1, 2):
+                for i in range(0, len(group_subset)-1):
                     if (group_subset['Event_State'].iloc[i] == 3)&(group_subset['Event_State'].iloc[i+1] == 3):
                         time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
                         time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
                         ax1.hlines(group, time1, time2, color='red', linewidth=10)
+                        seg_count += 1
                     elif (group_subset['Event_State'].iloc[i] == 6)&(group_subset['Event_State'].iloc[i+1] == 6):
                         time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
                         time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
                         ax1.hlines(group, time1, time2, color='green', linewidth=10)
+                        seg_count += 1
                     elif (group_subset['Event_State'].iloc[i] == 8)&(group_subset['Event_State'].iloc[i+1] == 8):
                         time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
                         time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
                         ax1.hlines(group, time1, time2, color='yellow', linewidth=10)
+                        seg_count += 1
                     #change in state from red to green, draw green
                     elif (group_subset['Event_State'].iloc[i] == 3)&(group_subset['Event_State'].iloc[i+1] == 6):
                         time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
                         time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
                         ax1.hlines(group, time1, time2, color='green', linewidth=10)
+                        seg_count += 1
                     #change in state from green to yellow, draw yellow
                     elif (group_subset['Event_State'].iloc[i] == 6)&(group_subset['Event_State'].iloc[i+1] == 8):
                         time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
                         time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
                         ax1.hlines(group, time1, time2, color='yellow', linewidth=10)
+                        seg_count += 1
                      #change in state from yellow to red, draw red
                     elif (group_subset['Event_State'].iloc[i] == 8)&(group_subset['Event_State'].iloc[i+1] == 3):
                         time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
                         time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
                         ax1.hlines(group, time1, time2, color='red', linewidth=10)
+                        seg_count += 1
                     else:
                         print("Time 1: " + str(group_subset['Event_State'].iloc[i]))
                         print("Time 2: " + str(group_subset['Event_State'].iloc[i+1]))
