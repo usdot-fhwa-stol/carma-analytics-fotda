@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import seaborn as sns
 import math
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import figure
@@ -11,6 +12,7 @@ from matplotlib.ticker import (MultipleLocator, FormatStrFormatter, AutoMinorLoc
 # from datetime import datetime
 import datetime as dt
 import matplotlib.dates as md
+from matplotlib.collections import LineCollection
 
 pd.options.mode.chained_assignment = None
 
@@ -37,8 +39,40 @@ def modified_spat_plotter():
             for group in signal_groups:
                 df = modified_spat_data.copy()
                 group_subset = df[df['Signal_Group'] == group]
-                dates=[dt.datetime.fromtimestamp(ts) for ts in group_subset["Epoch_Time(s)"]]
-                ax1.plot(dates,group_subset['Event_State'], label="Signal Group " + str(group))
+                dates=[dt.datetime.fromtimestamp(ts) for ts in group_subset["Epoch_Time(s)"]]               
+
+                #iterate through group data and plot based on current and next state
+                for i in range(0, len(group_subset)-1, 2):
+                    if (group_subset['Event_State'].iloc[i] == 3)&(group_subset['Event_State'].iloc[i+1] == 3):
+                        time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
+                        time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
+                        ax1.hlines(group, time1, time2, color='red', linewidth=10)
+                    elif (group_subset['Event_State'].iloc[i] == 6)&(group_subset['Event_State'].iloc[i+1] == 6):
+                        time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
+                        time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
+                        ax1.hlines(group, time1, time2, color='green', linewidth=10)
+                    elif (group_subset['Event_State'].iloc[i] == 8)&(group_subset['Event_State'].iloc[i+1] == 8):
+                        time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
+                        time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
+                        ax1.hlines(group, time1, time2, color='yellow', linewidth=10)
+                    #change in state from red to green, draw green
+                    elif (group_subset['Event_State'].iloc[i] == 3)&(group_subset['Event_State'].iloc[i+1] == 6):
+                        time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
+                        time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
+                        ax1.hlines(group, time1, time2, color='green', linewidth=10)
+                    #change in state from green to yellow, draw yellow
+                    elif (group_subset['Event_State'].iloc[i] == 6)&(group_subset['Event_State'].iloc[i+1] == 8):
+                        time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
+                        time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
+                        ax1.hlines(group, time1, time2, color='yellow', linewidth=10)
+                     #change in state from yellow to red, draw red
+                    elif (group_subset['Event_State'].iloc[i] == 8)&(group_subset['Event_State'].iloc[i+1] == 3):
+                        time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
+                        time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
+                        ax1.hlines(group, time1, time2, color='red', linewidth=10)
+                    else:
+                        print("Time 1: " + str(group_subset['Event_State'].iloc[i]))
+                        print("Time 2: " + str(group_subset['Event_State'].iloc[i+1]))
 
             plt.xticks(rotation=75)
             axs=plt.gca()
@@ -46,12 +80,11 @@ def modified_spat_plotter():
             axs.xaxis.set_major_formatter(xfmt)
             fig.autofmt_xdate()
             plt.xlim(min_time, max_time)
-            plt.ylim(0, 12)
+            plt.ylim(0, 9)
             #TODO update plot title/name once log naming convention has been established
             plt.xlabel('Date-Time')
-            plt.ylabel('Event State')
+            plt.ylabel('Signal Group')
             fig.suptitle("Signal Group Event State vs Time")
-            plt.legend()
             plotName = "Signal_Groups_Event_State_Vs_Time.png"
             plt.savefig(f'{output_directory_path}/{plotName}')
 
