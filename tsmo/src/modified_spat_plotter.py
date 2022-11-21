@@ -25,7 +25,7 @@ def modified_spat_plotter():
             signal_groups = modified_spat_data['Signal_Group'].unique()
 
             #Use moy and timestamp fields to get epoch time for each record
-            first_day_epoch = dt.datetime(2022, 1, 1, 0, 0, 0).timestamp() * 1000 #get time since epoch for beggining of year in ms
+            first_day_epoch = dt.datetime(dt.datetime.now().year, 1, 1, 0, 0, 0).timestamp() * 1000 #get time since epoch for beggining of year in ms
             modified_spat_data['Epoch_Time(ms)'] = (modified_spat_data['Moy'] * 60000) + modified_spat_data['Timestamp'] + first_day_epoch #convert moy to milliseconds              
             modified_spat_data['Epoch_Time(s)'] = modified_spat_data['Epoch_Time(ms)'] / 1000
             min_time = dt.datetime.fromtimestamp(modified_spat_data['Epoch_Time(s)'].min())
