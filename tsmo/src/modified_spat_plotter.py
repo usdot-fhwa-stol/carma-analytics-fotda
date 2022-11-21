@@ -77,8 +77,8 @@ def modified_spat_plotter():
                         ax1.hlines(group, time1, time2, color='red', linewidth=10)
 
             plt.xticks(rotation=75)
-            axs=plt.gca()
-            xfmt = md.DateFormatter('%H:%M:%S.%f') 
+            axs=plt.gca()            
+            xfmt = md.DateFormatter('%H:%M:%S')
             axs.xaxis.set_major_formatter(xfmt)
             fig.autofmt_xdate()
             plt.xlim(min_time, max_time)

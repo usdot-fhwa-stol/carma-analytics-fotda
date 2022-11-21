@@ -60,7 +60,7 @@ def status_intent_plotter():
 
         plt.xticks(rotation=75)
         axs=plt.gca()
-        xfmt = md.DateFormatter('%H:%M:%S.%f') 
+        xfmt = md.DateFormatter('%H:%M:%S') 
         axs.xaxis.set_major_formatter(xfmt)
         fig.autofmt_xdate()
         plt.xlim(min_time, max_time)
