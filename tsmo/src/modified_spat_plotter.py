@@ -62,9 +62,6 @@ def modified_spat_plotter():
                         time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
                         time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
                         ax1.hlines(group, time1, time2, color='green', linewidth=10)
-
-                        #add vertical line for green state change
-                        ax1.vlines(time2, 0, 9, linestyles='dashed', color='green', linewidth=1)
                     #change in state from green to yellow, draw yellow
                     elif (group_subset['Event_State'].iloc[i] == 6)&(group_subset['Event_State'].iloc[i+1] == 8):
                         time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
