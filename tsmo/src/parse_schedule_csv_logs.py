@@ -22,6 +22,7 @@ import pandas as pd
 import math
 import matplotlib.patches as mpatches
 import numpy as np
+import matplotlib.dates as mdates
 
 class Logparser():
 
@@ -41,12 +42,11 @@ class Logparser():
         # Method to handle processing of single run stored in pandas dataframe df
 
         # Separate out values based on states
-        df_ev = df[df["state"] == "EV"]
-        df_dv  = df[df["state"] == "DV"]
+        df_ev = df[df["state"] == "EV"].copy()
+        df_dv  = df[df["state"] == "DV"].copy()
 
 
         # Convert timestamps and entering timestamps to datetime values
-        pd.options.mode.chained_assignment = None  # default='warn'
         df_ev['timestamps'] = df_ev['timestamps'].apply(self.convert_to_datetime)
         df_ev['et'] = df_ev['et'].apply(self.convert_to_datetime)
 
@@ -54,7 +54,6 @@ class Logparser():
         df_dv['et'] = df_dv['et'].apply(self.convert_to_datetime)
 
 
-        import matplotlib.dates as mdates
         myFmt_timestamp = mdates.DateFormatter('%H:%M:%S') # here you can format your datetick labels as desired
         myFmt_ets = mdates.DateFormatter('%H:%M:%S%d')
 
