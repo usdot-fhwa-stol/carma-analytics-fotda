@@ -8,6 +8,7 @@ import math
 import constants
 import sys
 import os
+import latency_parser
 from matplotlib.ticker import (MultipleLocator, FormatStrFormatter,
                                AutoMinorLocator)
 pd.options.mode.chained_assignment = None
@@ -180,50 +181,53 @@ def runner(filename, vehicle_id_1, vehicle_id_2):
     figure(figsize=(10,10))
     plt.scatter([i[0] for i in veh1_bsm_frequency_averages], [i[1] for i in veh1_bsm_frequency_averages], c="blue", marker="^", label=vehicle_id_1)
     plt.scatter([i[0] for i in veh2_bsm_frequency_averages], [i[1] for i in veh2_bsm_frequency_averages], c="green", label=vehicle_id_2)
-    plt.axhline(y=5, color='r', linestyle='-', label="frequency lower bound")
+    plt.axhline(y=5, color='r', linestyle='--', label="frequency lower bound")
     plt.axhline(y=15, color='r', linestyle='-', label="frequency upper bound")
-    plt.xlabel('Test Time (s)')
-    plt.ylabel('Frequency (Hz)')
+    plt.xlabel('Test Time (s)', fontsize=18)
+    plt.ylabel('Frequency (Hz)', fontsize=18)
     plt.xlim(0,consumer_bsm_data_1['BSM_Message_Timestamp_adjusted(s)'].max())
     plt.ylim(0,20)
-    plt.title(vehicle_id_1 + " and " + vehicle_id_2 + " BSM Frequency")
+    plt.title(vehicle_id_1 + " and " + vehicle_id_2 + " BSM Frequency", fontsize=18)
     plt.grid(True)
-    plt.legend()
+    plt.legend(fontsize=18)
+    plt.tick_params(axis='both', which='major', labelsize=15)
     plt.savefig(f'{output_directory_path}/{filename}_BSM_Frequency.png')
 
     #plot MOM frequency
     figure(figsize=(10,10))
     plt.scatter([i[0] for i in veh1_mom_frequency_averages], [i[1] for i in veh1_mom_frequency_averages], c="blue", marker="^", label=vehicle_id_1)
     plt.scatter([i[0] for i in veh2_mom_frequency_averages], [i[1] for i in veh2_mom_frequency_averages], c="green", label=vehicle_id_2)
-    plt.axhline(y=5, color='r', linestyle='-', label="frequency lower bound")
+    plt.axhline(y=5, color='r', linestyle='--', label="frequency lower bound")
     plt.axhline(y=15, color='r', linestyle='-', label="frequency upper bound")
-    plt.xlabel('Test Time (s)')
-    plt.ylabel('Frequency (Hz)')
+    plt.xlabel('Test Time (s)', fontsize=18)
+    plt.ylabel('Frequency (Hz)', fontsize=18)
     plt.xlim(0,consumer_mom_data_1['MOM_Message_Timestamp_adjusted(s)'].max())
     plt.ylim(0,20)
-    plt.title(vehicle_id_1 + " and " + vehicle_id_2 + " MOM Frequency")
+    plt.title(vehicle_id_1 + " and " + vehicle_id_2 + " MOM Frequency", fontsize=18)
     plt.grid(True)
-    plt.legend()
-    plt.savefig(f'{output_directory_path}/{filename}_MOM_Frequency.png')
+    plt.legend(fontsize=18)
+    plt.tick_params(axis='both', which='major', labelsize=15)
+    plt.savefig(f'{output_directory_path}/{filename}_MOM_Frequency.png', fontsize=18)
 
     #plot MPM frequency
     figure(figsize=(10,10))
     plt.scatter([i[0] for i in veh1_mpm_frequency_averages], [i[1] for i in veh1_mpm_frequency_averages], c="blue", marker="^", label=vehicle_id_1)
     plt.scatter([i[0] for i in veh2_mpm_frequency_averages], [i[1] for i in veh2_mpm_frequency_averages], c="green", label=vehicle_id_2)
-    plt.axhline(y=5, color='r', linestyle='-', label="frequency lower bound")
+    plt.axhline(y=5, color='r', linestyle='--', label="frequency lower bound")
     plt.axhline(y=15, color='r', linestyle='-', label="frequency upper bound")
-    plt.xlabel('Test Time (s)')
-    plt.ylabel('Frequency (Hz)')
+    plt.xlabel('Test Time (s)', fontsize=18)
+    plt.ylabel('Frequency (Hz)', fontsize=18)
     if consumer_mpm_data_1['MPM_Message_Timestamp_adjusted(s)'].max() <= consumer_mpm_data_2['MPM_Message_Timestamp_adjusted(s)'].max():
         plt.xlim(0,consumer_mpm_data_1['MPM_Message_Timestamp_adjusted(s)'].max())
     else:
         plt.xlim(0,consumer_mpm_data_2['MPM_Message_Timestamp_adjusted(s)'].max())
 
     plt.ylim(0,20)
-    plt.title(vehicle_id_1 + " and " + vehicle_id_2 + " MPM Frequency")
+    plt.title(vehicle_id_1 + " and " + vehicle_id_2 + " MPM Frequency", fontsize=18)
     plt.grid(True)
-    plt.legend()
-    plt.savefig(f'{output_directory_path}/{filename}_MPM_Frequency.png')
+    plt.legend(fontsize=18)
+    plt.tick_params(axis='both', which='major', labelsize=15)
+    plt.savefig(f'{output_directory_path}/{filename}_MPM_Frequency.png', fontsize=18)
 
 
     # if useOne == True:
