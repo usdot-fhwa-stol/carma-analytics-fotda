@@ -8,7 +8,6 @@ import math
 import constants
 import sys
 import os
-import latency_parser
 from matplotlib.ticker import (MultipleLocator, FormatStrFormatter,
                                AutoMinorLocator)
 pd.options.mode.chained_assignment = None
@@ -99,84 +98,7 @@ def MPMPlotter(consumer_mpm_data, test_start, test_end):
     #calulate mpm frequency every n seconds
     return averageCalc(consumer_mpm_data, 10, "MPM")
 
-def runner(filename, vehicle_id_1, vehicle_id_2):
-    consumer_data = pd.read_csv(f'{input_directory_path}/{filename}_MS_consumer_parsed.csv')
-
-    #create individual df with specific message types
-    consumer_bsm = consumer_data[(consumer_data['Message_Type'] == "BSM")]
-    #get the vehicle ids used during testing
-    veh_ids = consumer_bsm['Vehicle_ID'].unique()
-
-    #call the MPM frequency function first to retrieve the first and last timestamps
-    #need to do this bc MPM generation starts after BSM and MOM
-    consumer_mpm_data_1 = consumer_data[(consumer_data['Message_Type'] == "MPM")&(consumer_data['Vehicle_ID'] == vehicle_id_1)]
-    consumer_mpm_data_2 = consumer_data[(consumer_data['Message_Type'] == "MPM")&(consumer_data['Vehicle_ID'] == vehicle_id_2)]
-    veh1_mpm_start, veh1_mpm_end = calculateMPMFrequency(consumer_mpm_data_1)
-    veh2_mpm_start, veh2_mpm_end = calculateMPMFrequency(consumer_mpm_data_2)
-
-    #figure out the time window to use based on smallest time window
-    start_time = veh1_mpm_start
-    if veh2_mpm_start >= veh1_mpm_start:
-        start_time = veh2_mpm_start
-
-    end_time = veh1_mpm_end
-    if veh2_mpm_end <= veh1_mpm_end:
-        end_time = veh2_mpm_end
-
-
-    consumer_bsm_data_1 = consumer_data[(consumer_data['Message_Type'] == "BSM")&(consumer_data['Vehicle_ID'] == veh_ids[0])]
-    consumer_mom_data_1 = consumer_data[(consumer_data['Message_Type'] == "MOM")&(consumer_data['Vehicle_ID'] == vehicle_id_1)]
-    consumer_bsm_data_2 = consumer_data[(consumer_data['Message_Type'] == "BSM")&(consumer_data['Vehicle_ID'] == veh_ids[1])]
-    consumer_mom_data_2 = consumer_data[(consumer_data['Message_Type'] == "MOM")&(consumer_data['Vehicle_ID'] == vehicle_id_2)]
-
-    #calculate message frequency for all message types
-    veh1_bsm_frequency_averages, bsm_trimmed_1 = calculateBSMFrequency(consumer_bsm_data_1, start_time, end_time)
-    veh2_bsm_frequency_averages, bsm_trimmed_2 = calculateBSMFrequency(consumer_bsm_data_2, start_time, end_time)
-    veh1_mom_frequency_averages = calculateMOMFrequency(consumer_mom_data_1, start_time, end_time)
-    veh2_mom_frequency_averages = calculateMOMFrequency(consumer_mom_data_2, start_time, end_time)
-    veh1_mpm_frequency_averages = MPMPlotter(consumer_mpm_data_1, start_time, end_time)
-    veh2_mpm_frequency_averages = MPMPlotter(consumer_mpm_data_2, start_time, end_time)
-
-    # print("Start time: " + str(start_time) + " end time: " + str(end_time))
-    # print("veh1: ")
-    # print(veh1_mpm_frequency_averages)
-    # print("veh2: ")
-    # print(veh2_mpm_frequency_averages)
-
-    #now compare first timestamps for both dataframes and create final offset timestamp column for same reference timeframe
-    consumer_df_vehicle_1_first_time = bsm_trimmed_1['Machine_Time_BSM_to_Epoch'].iloc[0]
-    consumer_df_vehicle_2_first_time = bsm_trimmed_2['Machine_Time_BSM_to_Epoch'].iloc[0]
-    useOne = True
-
-    if consumer_df_vehicle_1_first_time > consumer_df_vehicle_2_first_time:
-        diff = consumer_df_vehicle_1_first_time - consumer_df_vehicle_2_first_time
-        bsm_trimmed_1['Final_Offset_Timestamp'] = bsm_trimmed_1['Machine_Time_BSM_to_Epoch']
-        bsm_trimmed_2['Final_Offset_Timestamp'] = bsm_trimmed_2['Machine_Time_BSM_to_Epoch'] + diff
-    elif consumer_df_vehicle_2_first_time >= consumer_df_vehicle_1_first_time:
-        diff = consumer_df_vehicle_2_first_time - consumer_df_vehicle_1_first_time
-        bsm_trimmed_2['Final_Offset_Timestamp'] = bsm_trimmed_2['Machine_Time_BSM_to_Epoch']
-        bsm_trimmed_1['Final_Offset_Timestamp'] = bsm_trimmed_1['Machine_Time_BSM_to_Epoch'] + diff
-        useOne = False
-
-    bsm_trimmed_1['Final_Offset_Timestamp_Adjusted'] = bsm_trimmed_1['Final_Offset_Timestamp'] - consumer_df_vehicle_1_first_time
-    bsm_trimmed_2['Final_Offset_Timestamp_Adjusted'] = bsm_trimmed_2['Final_Offset_Timestamp'] - consumer_df_vehicle_2_first_time
-
-    #plot acceleration vs time
-    # fig, ax1 = plt.subplots()
-    # fig.set_size_inches(10, 10)
-    # plt.plot(bsm_trimmed_1['Final_Offset_Timestamp_Adjusted'], bsm_trimmed_1['BSM_Accel_Long(m/s^2)'].astype(float), c="blue", label=vehicle_id_1)
-    # plt.plot(bsm_trimmed_2['Final_Offset_Timestamp_Adjusted'], bsm_trimmed_2['BSM_Accel_Long(m/s^2)'].astype(float), c="green", label=vehicle_id_2)
-    # plt.xlabel('Test Time (s)')
-    # plt.ylabel('Acceleration (m/s^2)')
-    # if bsm_trimmed_2['Final_Offset_Timestamp_Adjusted'].max() >= bsm_trimmed_1['Final_Offset_Timestamp_Adjusted'].max():
-    #     plt.xticks(np.arange(0, bsm_trimmed_2['Final_Offset_Timestamp_Adjusted'].max(), 2))
-    # else:
-    #     plt.xticks(np.arange(0, bsm_trimmed_1['Final_Offset_Timestamp_Adjusted'].max(), 2))
-    #
-    # plt.title("Vehicle 1 and Vehicle 2 BSM Acceleration")
-    # plt.legend()
-    # plt.savefig(f'{output_directory_path}/{filename}_Acceleration_vs_Time.png')
-
+def plot_bsm_frequency(veh1_bsm_frequency_averages, veh2_bsm_frequency_averages, consumer_bsm_data_1, filename):
     #plot BSM frequency
     figure(figsize=(10,10))
     plt.scatter([i[0] for i in veh1_bsm_frequency_averages], [i[1] for i in veh1_bsm_frequency_averages], c="blue", marker="^", label=vehicle_id_1)
@@ -193,6 +115,7 @@ def runner(filename, vehicle_id_1, vehicle_id_2):
     plt.tick_params(axis='both', which='major', labelsize=15)
     plt.savefig(f'{output_directory_path}/{filename}_BSM_Frequency.png')
 
+def plot_mom_frequency(veh1_mom_frequency_averages, veh2_mom_frequency_averages, consumer_mom_data_1, filename):
     #plot MOM frequency
     figure(figsize=(10,10))
     plt.scatter([i[0] for i in veh1_mom_frequency_averages], [i[1] for i in veh1_mom_frequency_averages], c="blue", marker="^", label=vehicle_id_1)
@@ -209,6 +132,7 @@ def runner(filename, vehicle_id_1, vehicle_id_2):
     plt.tick_params(axis='both', which='major', labelsize=15)
     plt.savefig(f'{output_directory_path}/{filename}_MOM_Frequency.png', fontsize=18)
 
+def plot_mpm_frequency(veh1_mpm_frequency_averages, veh2_mpm_frequency_averages, consumer_mpm_data_1, consumer_mpm_data_2, filename):
     #plot MPM frequency
     figure(figsize=(10,10))
     plt.scatter([i[0] for i in veh1_mpm_frequency_averages], [i[1] for i in veh1_mpm_frequency_averages], c="blue", marker="^", label=vehicle_id_1)
@@ -229,8 +153,78 @@ def runner(filename, vehicle_id_1, vehicle_id_2):
     plt.tick_params(axis='both', which='major', labelsize=15)
     plt.savefig(f'{output_directory_path}/{filename}_MPM_Frequency.png', fontsize=18)
 
+def setupPlotting(filename, vehicle_id_1, vehicle_id_2):
+    consumer_data = pd.read_csv(f'{input_directory_path}/{filename}_MS_consumer_parsed.csv')
 
-    # if useOne == True:
-    #     latency_parser.runner(consumer_bsm_data_1['Final_Offset_Timestamp'].iloc[0], consumer_bsm_data_1['Final_Offset_Timestamp'].iloc[-1])
-    # else:
-    #     latency_parser.runner(consumer_bsm_data_2['Final_Offset_Timestamp'].iloc[0], consumer_bsm_data_2['Final_Offset_Timestamp'].iloc[-1])
+    consumer_data_copy = consumer_data.copy()
+
+    #create individual df with specific message types
+    consumer_bsm = consumer_data_copy[(consumer_data_copy['Message_Type'] == "BSM")]
+    #get the vehicle ids used during testing
+    veh_ids = consumer_bsm['Vehicle_ID'].unique()
+
+    #call the MPM frequency function first to retrieve the first and last timestamps
+    #need to do this bc MPM generation starts after BSM and MOM
+    consumer_mpm_data_1 = consumer_data_copy[(consumer_data_copy['Message_Type'] == "MPM")&(consumer_data_copy['Vehicle_ID'] == vehicle_id_1)]
+    consumer_mpm_data_2 = consumer_data_copy[(consumer_data_copy['Message_Type'] == "MPM")&(consumer_data_copy['Vehicle_ID'] == vehicle_id_2)]
+    veh1_mpm_start, veh1_mpm_end = calculateMPMFrequency(consumer_mpm_data_1)
+    veh2_mpm_start, veh2_mpm_end = calculateMPMFrequency(consumer_mpm_data_2)
+
+    #figure out the time window to use based on smallest time window
+    start_time = veh1_mpm_start
+    if veh2_mpm_start >= veh1_mpm_start:
+        start_time = veh2_mpm_start
+
+    end_time = veh1_mpm_end
+    if veh2_mpm_end <= veh1_mpm_end:
+        end_time = veh2_mpm_end
+
+
+    consumer_bsm_data_1 = consumer_data_copy[(consumer_data_copy['Message_Type'] == "BSM")&(consumer_data_copy['Vehicle_ID'] == veh_ids[0])]
+    consumer_mom_data_1 = consumer_data_copy[(consumer_data_copy['Message_Type'] == "MOM")&(consumer_data_copy['Vehicle_ID'] == vehicle_id_1)]
+    consumer_bsm_data_2 = consumer_data_copy[(consumer_data_copy['Message_Type'] == "BSM")&(consumer_data_copy['Vehicle_ID'] == veh_ids[1])]
+    consumer_mom_data_2 = consumer_data_copy[(consumer_data_copy['Message_Type'] == "MOM")&(consumer_data_copy['Vehicle_ID'] == vehicle_id_2)]
+
+    #calculate message frequency for all message types
+    veh1_bsm_frequency_averages, bsm_trimmed_1 = calculateBSMFrequency(consumer_bsm_data_1, start_time, end_time)
+    veh2_bsm_frequency_averages, bsm_trimmed_2 = calculateBSMFrequency(consumer_bsm_data_2, start_time, end_time)
+    veh1_mom_frequency_averages = calculateMOMFrequency(consumer_mom_data_1, start_time, end_time)
+    veh2_mom_frequency_averages = calculateMOMFrequency(consumer_mom_data_2, start_time, end_time)
+    veh1_mpm_frequency_averages = MPMPlotter(consumer_mpm_data_1, start_time, end_time)
+    veh2_mpm_frequency_averages = MPMPlotter(consumer_mpm_data_2, start_time, end_time)
+
+    #now compare first timestamps for both dataframes and create final offset timestamp column for same reference timeframe
+    consumer_df_vehicle_1_first_time = bsm_trimmed_1['Machine_Time_BSM_to_Epoch'].iloc[0]
+    consumer_df_vehicle_2_first_time = bsm_trimmed_2['Machine_Time_BSM_to_Epoch'].iloc[0]
+    useOne = True
+
+    if consumer_df_vehicle_1_first_time > consumer_df_vehicle_2_first_time:
+        diff = consumer_df_vehicle_1_first_time - consumer_df_vehicle_2_first_time
+        bsm_trimmed_1['Final_Offset_Timestamp'] = bsm_trimmed_1['Machine_Time_BSM_to_Epoch']
+        bsm_trimmed_2['Final_Offset_Timestamp'] = bsm_trimmed_2['Machine_Time_BSM_to_Epoch'] + diff
+    elif consumer_df_vehicle_2_first_time >= consumer_df_vehicle_1_first_time:
+        diff = consumer_df_vehicle_2_first_time - consumer_df_vehicle_1_first_time
+        bsm_trimmed_2['Final_Offset_Timestamp'] = bsm_trimmed_2['Machine_Time_BSM_to_Epoch']
+        bsm_trimmed_1['Final_Offset_Timestamp'] = bsm_trimmed_1['Machine_Time_BSM_to_Epoch'] + diff
+        useOne = False
+
+    bsm_trimmed_1['Final_Offset_Timestamp_Adjusted'] = bsm_trimmed_1['Final_Offset_Timestamp'] - consumer_df_vehicle_1_first_time
+    bsm_trimmed_2['Final_Offset_Timestamp_Adjusted'] = bsm_trimmed_2['Final_Offset_Timestamp'] - consumer_df_vehicle_2_first_time
+
+    plot_bsm_frequency(veh1_bsm_frequency_averages, veh2_bsm_frequency_averages, consumer_bsm_data_1, filename)
+    plot_mom_frequency(veh1_mom_frequency_averages, veh2_mom_frequency_averages, consumer_mom_data_1, filename)
+    plot_mpm_frequency(veh1_mpm_frequency_averages, veh2_mpm_frequency_averages, consumer_mpm_data_1, consumer_mpm_data_2, filename)
+
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print('Run with: "python3 messaging_service_metrics.py logfileName"')
+        exit()
+    else:       
+        #name of log to process ex: messaging_service_01_25_10am
+        logFile = sys.argv[1]
+
+        #vehicle ids to use when plotting
+        vehicle_id_1 = constants.VEHICLE_ID_1
+        vehicle_id_2 = constants.VEHICLE_ID_2
+
+        setupPlotting(logFile, vehicle_id_1, vehicle_id_2)

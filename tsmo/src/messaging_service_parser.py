@@ -6,16 +6,7 @@ import constants
 import json
 import pandas as pd
 import sys
-import messaging_service_metrics
 import shutil
-
-#name of log to process ex: scheduling_service_01_25_10am
-logFile = sys.argv[1]
-#vehicle ids to use when plotting
-vehicle_id_1 = constants.VEHICLE_ID_1
-vehicle_id_2 = constants.VEHICLE_ID_2
-
-splitLine = [0]
 
 #clean out directories prior to running
 def cleaningDirectories():
@@ -24,12 +15,6 @@ def cleaningDirectories():
         os.makedirs(f'{constants.DATA_DIR}/{constants.MS_PARSED_OUTPUT_DIR}')
     else:
         os.makedirs(f'{constants.DATA_DIR}/{constants.MS_PARSED_OUTPUT_DIR}')
-
-    # if os.path.isdir(f'{constants.DATA_DIR}/{constants.PLOT_DIR}'):
-    #     shutil.rmtree(f'{constants.DATA_DIR}/{constants.PLOT_DIR}')
-    #     os.makedirs(f'{constants.DATA_DIR}/{constants.PLOT_DIR}')
-    # else:
-    #     os.makedirs(f'{constants.DATA_DIR}/{constants.PLOT_DIR}')
 
 #parser method to extract necessary fields from raw text file
 def outputParser():
@@ -139,7 +124,18 @@ def outputParser():
                                     csv_writer.writerow(consumer_row)
                                     csv_writer_consumer.writerow(consumer_row)
 
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print('Run with: "python3 messaging_service_parser.py logfileName"')
+        exit()
+    else:       
+        #name of log to process ex: messaging_service_01_25_10am
+        logFile = sys.argv[1]
 
-cleaningDirectories()
-outputParser()
-# messaging_service_metrics.runner(logFile, vehicle_id_1, vehicle_id_2)
+        #vehicle ids to use when plotting
+        vehicle_id_1 = constants.VEHICLE_ID_1
+        vehicle_id_2 = constants.VEHICLE_ID_2
+
+        cleaningDirectories()
+        outputParser()
+

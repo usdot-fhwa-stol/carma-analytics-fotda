@@ -34,18 +34,20 @@ def averageCalc(df, window, messageType):
 
 #trim the initial dataset and create common time scale
 def initializeData(consumer_df, producer_df, vehicle_1, vehicle_2):
+    consumer_df_copy = consumer_df.copy()
+    producer_df_copy = producer_df.copy()
+
     #create individual df specific to vehicle
-    consumer_df_vehicle_1 = consumer_df[consumer_df['v_id'] == vehicle_1]
-    producer_df_vehicle_1 = producer_df[producer_df['v_id'] == vehicle_1]
-    consumer_df_vehicle_2 = consumer_df[consumer_df['v_id'] == vehicle_2]
-    producer_df_vehicle_2 = producer_df[producer_df['v_id'] == vehicle_2]
+    consumer_df_vehicle_1 = consumer_df_copy[consumer_df_copy['v_id'] == vehicle_1]
+    producer_df_vehicle_1 = producer_df_copy[producer_df_copy['v_id'] == vehicle_1]
+    consumer_df_vehicle_2 = consumer_df_copy[consumer_df_copy['v_id'] == vehicle_2]
+    producer_df_vehicle_2 = producer_df_copy[producer_df_copy['v_id'] == vehicle_2]
 
     consumer_diff_1 = 0
     consumer_diff_2 = 0
     producer_diff_1 = 0
     producer_diff_2 = 0
 
-    print("vehicle 1: " + str(vehicle_1) + " vehicle 2: " + str(vehicle_2))
     #now compare first timestamps for both dataframes and create final offset timestamp column for same reference timeframe
     consumer_df_vehicle_1_first_time = consumer_df_vehicle_1['Message_Timestamp'].iloc[0]
     consumer_df_vehicle_2_first_time = consumer_df_vehicle_2['Message_Timestamp'].iloc[0]
@@ -125,7 +127,7 @@ def getVehicleAccessTimesConsumer(producer_veh_1, producer_veh_2):
         veh2_last_access_time = 0
 
 
-    return veh1_first_access_time, veh2_first_access_time, veh1_last_access_time, veh2_last_access_time
+    return [veh1_first_access_time, veh2_first_access_time, veh1_last_access_time, veh2_last_access_time]
 #returns when the two vehicles were granted access and when they exited the intersection (Adjusted for producer timestamp)
 def getVehicleAccessTimesProducer(producer_veh_1, producer_veh_2):
 
@@ -155,27 +157,13 @@ def getVehicleAccessTimesProducer(producer_veh_1, producer_veh_2):
         veh2_last_access_time = 0
 
 
-    return veh1_first_access_time, veh2_first_access_time, veh1_last_access_time, veh2_last_access_time
+    return [veh1_first_access_time, veh2_first_access_time, veh1_last_access_time, veh2_last_access_time]
 
-def runner(filename, vehicle_id_1, vehicle_id_2):
-    #using individual consumer/parsed files
-    consumer_data = pd.read_csv(f'{input_directory_path}/{filename}_SS_consumer_parsed.csv')
-    producer_data = pd.read_csv(f'{input_directory_path}/{filename}_SS_producer_parsed.csv')
-
-    #individual dataframes for the specific vehicles
-    consumer_data_vehicle_1, consumer_data_vehicle_2, producer_data_vehicle_1, producer_data_vehicle_2, consumer_diff_1, consumer_diff_2, producer_diff_1, producer_diff_2 = initializeData(consumer_data, producer_data, vehicle_id_1, vehicle_id_2)
-
-    #calculate values of interest
-    extractData(consumer_data_vehicle_1, producer_data_vehicle_1, consumer_diff_1, producer_diff_1)
-    # consumer_data_vehicle_1.to_csv(f'{output_directory_path}/test1.csv')
-
-    veh_1_status_intent_frequency_averages = averageCalc(consumer_data_vehicle_1, 10, "S_And_I")
-    extractData(consumer_data_vehicle_2, producer_data_vehicle_2, consumer_diff_2, producer_diff_2)
-    # consumer_data_vehicle_2.to_csv(f'{output_directory_path}/test2.csv')
-
-    veh_2_status_intent_frequency_averages = averageCalc(consumer_data_vehicle_2, 10, "S_And_I")
-
-    veh1_first_access, veh2_first_access, veh1_last_access, veh2_last_access = getVehicleAccessTimesConsumer(producer_data_vehicle_1, producer_data_vehicle_2)
+def stopping_distance_plot(consumer_data_vehicle_1, consumer_data_vehicle_2, producer_data_vehicle_1, producer_data_vehicle_2, access_arr, filename):
+    veh1_first_access = access_arr[0]
+    veh2_first_access = access_arr[1]
+    veh1_last_access = access_arr[2]
+    veh2_last_access = access_arr[3]
 
     #plot vehicle stopping distance and access versus time
     fig, ax1 = plt.subplots()
@@ -210,7 +198,13 @@ def runner(filename, vehicle_id_1, vehicle_id_2):
     plt.title(vehicle_id_1 + " and " + vehicle_id_2 + " Stopping Distance/Access Versus Time", fontsize=18)
     plt.savefig(f'{output_directory_path}/{filename}_Stopping_Distance_Vs_Time.png')
 
-    #plot vehicle speed and access versus time
+def vehicle_speed_vs_time_plot(consumer_data_vehicle_1, consumer_data_vehicle_2, producer_data_vehicle_1, producer_data_vehicle_2, access_arr, filename):
+    veh1_first_access = access_arr[0]
+    veh2_first_access = access_arr[1]
+    veh1_last_access = access_arr[2]
+    veh2_last_access = access_arr[3]
+
+     #plot vehicle speed and access versus time
     fig, ax1 = plt.subplots()
     fig.set_size_inches(10, 10)
     plt.plot(consumer_data_vehicle_1['Message_Timestamp_Adjusted_To_Consumer(s)'], consumer_data_vehicle_1['Speed_Converted(m/s)'], label=vehicle_id_1+" Speed", color="blue", linewidth=2)
@@ -242,6 +236,12 @@ def runner(filename, vehicle_id_1, vehicle_id_2):
     ax1.legend(loc="upper right", fontsize=18)
     plt.savefig(f'{output_directory_path}/{filename}_Speed_Vs_Time.png')
 
+def vehicle_acceleration_vs_time_plot(consumer_data_vehicle_1, consumer_data_vehicle_2, producer_data_vehicle_1, producer_data_vehicle_2, access_arr, filename):
+    veh1_first_access = access_arr[0]
+    veh2_first_access = access_arr[1]
+    veh1_last_access = access_arr[2]
+    veh2_last_access = access_arr[3]
+
     #plot vehicle acceleration vs time
     fig, ax1 = plt.subplots()
     fig.set_size_inches(10, 10)
@@ -261,6 +261,7 @@ def runner(filename, vehicle_id_1, vehicle_id_2):
     plt.legend(fontsize=18)
     plt.savefig(f'{output_directory_path}/{filename}_Acceleration_vs_Time.png')
 
+def status_intent_frequency_plot(consumer_data_vehicle_1, veh_1_status_intent_frequency_averages, veh_2_status_intent_frequency_averages, filename):
     #plot vehicle status and intent frequency
     figure(figsize=(10,10))
     plt.scatter([i[0] for i in veh_1_status_intent_frequency_averages], [i[1] for i in veh_1_status_intent_frequency_averages], c="blue", label=vehicle_id_1)
@@ -275,7 +276,12 @@ def runner(filename, vehicle_id_1, vehicle_id_2):
     plt.legend(fontsize=18)
     plt.savefig(f'{output_directory_path}/{filename}_S_And_I_Message_Frequency.png')
 
-    #plot vehicle state
+def vehicle_state_plot(consumer_data_vehicle_1, consumer_data_vehicle_2, producer_data_vehicle_1, producer_data_vehicle_2, access_arr, filename):
+    veh1_first_access = access_arr[0]
+    veh2_first_access = access_arr[1]
+    veh1_last_access = access_arr[2]
+    veh2_last_access = access_arr[3]
+
     fig, ax1 = plt.subplots()
     fig.set_size_inches(10, 10)
     plt.plot( producer_data_vehicle_1["Message_Timestamp_Adjusted_To_Consumer(s)"], producer_data_vehicle_1["State"], label=vehicle_id_1+ " State", color="blue", linewidth=2)
@@ -304,7 +310,16 @@ def runner(filename, vehicle_id_1, vehicle_id_2):
     plt.title(vehicle_id_1 + " and " + vehicle_id_2 + " State", fontsize=18)
     plt.savefig(f'{output_directory_path}/{filename}_State_Vs_Time.png')
 
-    veh1_first_access_pr, veh2_first_access_pr, veh1_last_access_pr, veh2_last_access_pr = getVehicleAccessTimesProducer(producer_data_vehicle_1, producer_data_vehicle_2)
+def departure_position_plot(consumer_data_vehicle_1, consumer_data_vehicle_2, producer_data_vehicle_1, producer_data_vehicle_2, access_arr_consumer, access_arr_pr, filename):
+    veh1_first_access = access_arr_consumer[0]
+    veh2_first_access = access_arr_consumer[1]
+    veh1_last_access = access_arr_consumer[2]
+    veh2_last_access = access_arr_consumer[3]
+
+    veh1_first_access_pr = access_arr_pr[0]
+    veh2_first_access_pr = access_arr_pr[1]
+    veh1_last_access_pr = access_arr_pr[2]
+    veh2_last_access_pr = access_arr_pr[3]
 
     # Departure position
     fig, ax1 = plt.subplots()
@@ -334,3 +349,50 @@ def runner(filename, vehicle_id_1, vehicle_id_2):
     plt.title(vehicle_id_1 + " and " + vehicle_id_2 + " Departure Position", fontsize=18)
     ax1.legend(loc="upper right", fontsize=18)
     plt.savefig(f'{output_directory_path}/{filename}_Departure_Position_Vs_Time.png')
+
+
+def setupPlotting(filename, vehicle_id_1, vehicle_id_2):
+    #using individual consumer/parsed files
+    consumer_data = pd.read_csv(f'{input_directory_path}/{filename}_SS_consumer_parsed.csv')
+    producer_data = pd.read_csv(f'{input_directory_path}/{filename}_SS_producer_parsed.csv')
+
+    #individual dataframes for the specific vehicles
+    consumer_data_vehicle_1, consumer_data_vehicle_2, producer_data_vehicle_1, producer_data_vehicle_2, consumer_diff_1, consumer_diff_2, producer_diff_1, producer_diff_2 = initializeData(consumer_data, producer_data, vehicle_id_1, vehicle_id_2)
+
+    #calculate values of interest
+    extractData(consumer_data_vehicle_1, producer_data_vehicle_1, consumer_diff_1, producer_diff_1)
+    veh_1_status_intent_frequency_averages = averageCalc(consumer_data_vehicle_1, 10, "S_And_I")
+
+    extractData(consumer_data_vehicle_2, producer_data_vehicle_2, consumer_diff_2, producer_diff_2)
+    veh_2_status_intent_frequency_averages = averageCalc(consumer_data_vehicle_2, 10, "S_And_I")
+
+    #store vehicle access times with respect to consumer in array
+    access_arr_consumer = getVehicleAccessTimesConsumer(producer_data_vehicle_1, producer_data_vehicle_2)
+    
+    #create plots
+    stopping_distance_plot(consumer_data_vehicle_1, consumer_data_vehicle_2, producer_data_vehicle_1, producer_data_vehicle_2, access_arr_consumer, filename)
+    vehicle_speed_vs_time_plot(consumer_data_vehicle_1, consumer_data_vehicle_2, producer_data_vehicle_1, producer_data_vehicle_2, access_arr_consumer, filename)
+    vehicle_acceleration_vs_time_plot(consumer_data_vehicle_1, consumer_data_vehicle_2, producer_data_vehicle_1, producer_data_vehicle_2, access_arr_consumer, filename)
+    vehicle_state_plot(consumer_data_vehicle_1, consumer_data_vehicle_2, producer_data_vehicle_1, producer_data_vehicle_2, access_arr_consumer, filename)
+    status_intent_frequency_plot(consumer_data_vehicle_1, veh_1_status_intent_frequency_averages, veh_2_status_intent_frequency_averages, filename)
+
+    #store vehicle access times with respect to producer in array
+    access_arr_producer = getVehicleAccessTimesProducer(producer_data_vehicle_1, producer_data_vehicle_2)
+    
+    #create plots
+    departure_position_plot(consumer_data_vehicle_1, consumer_data_vehicle_2, producer_data_vehicle_1, producer_data_vehicle_2, access_arr_consumer, access_arr_producer, filename)
+    
+
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print('Run with: "python3 scheduling_service_metrics.py logfileName"')
+        exit()
+    else:       
+        #name of log to process ex: scheduling_service_01_25_10am
+        logFile = sys.argv[1]
+
+        #vehicle ids to use when plotting
+        vehicle_id_1 = constants.VEHICLE_ID_1
+        vehicle_id_2 = constants.VEHICLE_ID_2
+
+        setupPlotting(logFile, vehicle_id_1, vehicle_id_2)

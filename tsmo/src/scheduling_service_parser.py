@@ -6,16 +6,8 @@ import constants
 import json
 import pandas as pd
 import sys
-import scheduling_service_metrics
 import shutil
-
-#name of log to process ex: scheduling_service_01_25_10am
-logFile = sys.argv[1]
-#vehicle ids to use when plotting
-vehicle_id_1 = constants.VEHICLE_ID_1
-vehicle_id_2 = constants.VEHICLE_ID_2
-
-splitLine = [0]
+import scheduling_service_metrics
 
 #clean out directories prior to running
 def cleaningDirectories():
@@ -25,12 +17,6 @@ def cleaningDirectories():
     else:
         os.makedirs(f'{constants.DATA_DIR}/{constants.SS_PARSED_OUTPUT_DIR}')
 
-    # if os.path.isdir(f'{constants.DATA_DIR}/{constants.PLOT_DIR}'):
-    #     shutil.rmtree(f'{constants.DATA_DIR}/{constants.PLOT_DIR}')
-    #     os.makedirs(f'{constants.DATA_DIR}/{constants.PLOT_DIR}')
-    # else:
-    #     os.makedirs(f'{constants.DATA_DIR}/{constants.PLOT_DIR}')
-
 #parser method to extract necessary fields from raw text file
 def outputParser():
     input_directory_path = f'{constants.DATA_DIR}/{constants.RAW_INPUT_DIR}'
@@ -39,6 +25,7 @@ def outputParser():
     firstProducerRow = True
     firstConsumerRow = True
 
+    #find the logfile of interest in the raw text files directory
     for file in all_in_filenames:
         fileName = file.split(".")[0]
         if fileName == logFile:
@@ -56,6 +43,7 @@ def outputParser():
             nullProducer = []
             csvLineCount = 0
 
+            #write data of interest to csv files, one for producer data, one for consumer data, and one with both
             with open(f'{output_directory_path}/{filename}_SS_parsed.csv', 'w', newline='') as write_obj:
                 csv_writer = writer(write_obj)
                 csv_writer.writerow(["Kafka", "Machine_Date", "Machine_Time", "Message_Timestamp", "v_id", "v_length", "cur_speed", "cur_accel",
@@ -229,20 +217,17 @@ def outputParser():
                                     consumedMessage = True
                                     nullProducer.clear()
 
-#def fileSplitter():
-    # output_directory_path = f'{constants.DATA_DIR}/{constants.SS_PARSED_OUTPUT_DIR}'
-    # print(splitLine)
-    # parsedFile = pd.read_csv(f'{output_directory_path}/{logFile}_parsed.csv', skiprows=1)
-    #
-    # csvfile = open('import_1458922827.csv', 'r').readlines()
-    # filename = 1
-    # for i in range(len(csvfile)):
-    #     if i % 1000 == 0:
-    #         open(str(filename) + '.csv', 'w+').writelines(csvfile[i:i+1000])
-    #         filename += 1
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print('Run with: "python3 scheduling_service_parser.py logfileName"')
+        exit()
+    else:       
+        #name of log to process ex: scheduling_service_01_25_10am
+        logFile = sys.argv[1]
 
+        #vehicle ids to use when plotting
+        vehicle_id_1 = constants.VEHICLE_ID_1
+        vehicle_id_2 = constants.VEHICLE_ID_2
 
-cleaningDirectories()
-outputParser()
-#fileSplitter()
-scheduling_service_metrics.runner(logFile, vehicle_id_1, vehicle_id_2)
+        cleaningDirectories()
+        outputParser()
