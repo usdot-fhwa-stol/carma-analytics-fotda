@@ -30,7 +30,10 @@ import numpy as np
 def convert_to_datetime(x):
     return datetime.datetime.fromtimestamp(int(x)/1000)
     
-# Method to handle processing of single run stored in pandas dataframe df
+# Method to handle processing of single run. It converts the scheduling log timestamps and entering times into
+# datetime objects. It then takes a subset of the modified spat data using the signal group of interest and splits
+# the data based on the first and last timestamps in the scheduling log data. It plots vehicle entering time vs time, 
+# as well as the signal controller state.
 def plot_run(scheduling_df, modified_spat_df, signal_group, vehicle_id, run):
     output_directory_path = f'{constants.DATA_DIR}/{constants.PLOT_DIR}'
 
@@ -41,7 +44,7 @@ def plot_run(scheduling_df, modified_spat_df, signal_group, vehicle_id, run):
     #get min and max times for scheduling data and bin the spat data with this window
     min_time = df_ev['timestamps'].min()
     max_time = df_ev['timestamps'].max()
-    if not df_dv.empty:
+    if not df_dv.empty: #if the vehicle changes state to DV, update the max_time variable
         max_time = df_dv['timestamps'].max()   
 
     spat_subset_df = modified_spat_df[(modified_spat_df['Signal_Group'] == int(signal_group))&(modified_spat_df['Epoch_Time(ms)'] > min_time)&(modified_spat_df['Epoch_Time(ms)'] < max_time)]
@@ -54,6 +57,7 @@ def plot_run(scheduling_df, modified_spat_df, signal_group, vehicle_id, run):
     df_dv['et_datetime'] = df_dv['et'].apply(convert_to_datetime)
     spat_subset_df_copy['datetime'] = spat_subset_df_copy['Epoch_Time(ms)'].apply(convert_to_datetime)
 
+    #plot vehicle entering time vs time
     fig, ax = plt.subplots()
     fig.set_size_inches(10, 10)
 
@@ -67,6 +71,7 @@ def plot_run(scheduling_df, modified_spat_df, signal_group, vehicle_id, run):
     phase_x_max_location = phase_x_min_location + diff_ms
 
     #iterate through spat kafka data and draw a horizontal line based on signal state
+    #syntax for drawing horizontal lines: ax.hlines(y, xmin, xmax)
     for i in range(0, len(spat_subset_df_copy)-1):
             #red state
             if (spat_subset_df_copy['Event_State'].iloc[i] == 3)&(spat_subset_df_copy['Event_State'].iloc[i+1] == 3):
