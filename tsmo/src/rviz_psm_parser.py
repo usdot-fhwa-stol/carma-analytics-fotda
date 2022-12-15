@@ -1,3 +1,6 @@
+#This script is used to convert the external object timestamps created on Carma Platform to epoch times. These timestamps
+#will be used for further analysis. The external object timestamps are part of the raw test data and are contained in a csv
+#file for each test case.
 import sys
 from csv import writer
 from csv import reader
@@ -11,6 +14,7 @@ import shutil
 
 rviz_directory_path = f'{constants.DATA_DIR}/{constants.RVIZ_PSM_DIR}'
 
+#This function will concat all of the individual object timestamp files into one file.
 def concatFiles():
     all_in_filenames = os.listdir(rviz_directory_path)
     final_files = []
@@ -38,6 +42,7 @@ def speedHelper(row):
 
     return final
 
+#Convert timestamps to epoch times and perform unit conversion for speed values
 def converter():
     all_timestamps = pd.read_csv(f'{rviz_directory_path}/All_timestamps.csv')
     all_timestamps['Speed_Converted'] = all_timestamps.apply(lambda row: speedHelper(row), axis=1)
@@ -46,6 +51,7 @@ def converter():
     all_timestamps['Speed_Converted_Rounded'] = all_timestamps['Speed_Converted'].round().astype(int)
     #convert incoming psm/external object datetime to time since epoch
     all_timestamps['External_Object_timestamp_converted'] = pd.to_datetime(all_timestamps['External_Object_timestamp']).map(pd.Timestamp.timestamp, na_action='ignore')
+    
     all_timestamps['Incoming_psm_timestamp_converted'] = pd.to_datetime(all_timestamps['Incoming_psm_timestamp']).map(pd.Timestamp.timestamp, na_action='ignore')
     all_timestamps.to_csv(f'{rviz_directory_path}/All_timestamps_converted.csv', index=False)
 
@@ -56,7 +62,7 @@ def converter():
 
 if __name__ == '__main__':
     if len(sys.argv) < 1:
-        print('Run with: "python test_log_parser.py"')
+        print('Run with: "python3 rviz_psm_parser.py"')
     else:
         concatFiles()
         converter()

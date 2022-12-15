@@ -1,3 +1,7 @@
+#This script is to parse the raw docker log files collected during testing. Various fields of interest such as time of
+#detection by the sensor and receive time from V2X Hub are extracted. These values are placed into a set of csv files that
+#are separated by test and trial numbers. Finally all extracted test/trial data is concatenated into one large csv file 
+#named "All_docker_parsed.csv".
 import sys
 from csv import writer
 from csv import reader
@@ -7,24 +11,17 @@ import json
 import pandas as pd
 import sys
 import shutil
-
-#clean out directories prior to running
-def cleaningDirectories():
-    if os.path.isdir(f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}'):
-        shutil.rmtree(f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}')
-        os.makedirs(f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}')
-    else:
-        os.makedirs(f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}')
+pd.options.mode.chained_assignment = None
 
 #parser method to extract necessary fields from raw text file
-def dockerLogParser():
+def dockerLogParser(logFile):
     input_directory_path = f'{constants.DATA_DIR}/{constants.RAW_INPUT_DIR}'
     output_directory_path = f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}'
     all_in_filenames = os.listdir(input_directory_path)
 
+    #find logfile in directory
     for file in all_in_filenames:
-        fileName = file.split(".")[0]
-        if fileName == logFile:
+        if file == logFile:
             filename = file.split(".")[0]
 
             #Convert the text file into an array of lines
@@ -36,6 +33,7 @@ def dockerLogParser():
             #removing empty strings
             textList = [i for i in textList if i]
 
+            #write data fields of interest to a csv file
             with open(f'{output_directory_path}/{filename}_parsed.csv', 'w', newline='') as write_obj:
                 csv_writer = writer(write_obj)
                 csv_writer.writerow(["FLIR_Ped_Time", "V2XHub_Ped_Rx_Time", "V2XHub_PSM_Tx_Time", "ped_id", "PSM_Count", "PSM_Hex"])
@@ -144,18 +142,21 @@ def dockerLogParser():
 
                         csv_writer.writerow([flir_ped_create_time, v2xhub_ped_rx_datetime, final_v2xhub_tx_datetime, id, count, hex])
 
-def dockerLogSplitter():
+#This function takes the parsed csv file created above and splits it up into individual files for each test
+def dockerLogSplitter(logFile, timestamp_file, date):
     text_directory_path = f'{constants.DATA_DIR}/{constants.RAW_TEXT_DIR}'
     input_directory_path = f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}'
     output_directory_path = f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}'
     all_in_filenames = os.listdir(input_directory_path)
 
-    dateToSearch = logFile.split("_")[2] + "_" + logFile.split("_")[3] + "_" + logFile.split("_")[4]
+    #find the parsed csv file that was created in the dockerLogParser function
+    logFileName = logFile.split(".")[0]
+    dateToSearch = logFileName.split("_")[2] + "_" + logFileName.split("_")[3] + "_" + logFileName.split("_")[4]
+
     for file in all_in_filenames:
         if "parsed" in file and dateToSearch in file:
             parsedFile = file
 
-    print(parsedFile)
     #read parsed docker log file created in above function
     parsedFileData = pd.read_csv(f'{input_directory_path}/{parsedFile}')
 
@@ -166,18 +167,22 @@ def dockerLogSplitter():
     #calculate v2x hub processing time by calculating difference
     parsedFileData['V2XHub_Processing_Time(s)'] = parsedFileData['V2XHub_PSM_Tx_Time_converted'] - parsedFileData['V2XHub_Ped_Rx_Time_converted']
 
-    test_timestamps = pd.read_csv(f'{text_directory_path}/CP_Test_timestamps_converted.csv')
+    #use the csv file created by the test_log_parser.py
+    test_timestamps = pd.read_csv(f'{text_directory_path}/{timestamp_file}')
     tests_day = test_timestamps[test_timestamps['Date'] == date]
     tests = tests_day['Test'].unique().astype(int)
 
-    #iterate through each trial of the different tests and create parsed docker log files for each
+    parsedFileDataCopy = parsedFileData.copy()
+
+    #iterate through each trial of the different tests and create parsed docker log files for each using the start and end timestamps
+    #in the test_timestamps file
     for testnum in tests:
         for i in range(1,9):
             try:
                 test_start = tests_day['Start_converted'][(tests_day['Test'] == float(testnum)) & (tests_day['Trial'] == float(i))]
                 test_stop = tests_day['End_converted'][(tests_day['Test'] == float(testnum)) & (tests_day['Trial'] == float(i))]
                 #split parsed docker log file based on start/end time of each trial
-                dockerParsedTestTrialSubset = parsedFileData[(parsedFileData['V2XHub_Ped_Rx_Time_converted'] > float(test_start)) & (parsedFileData['V2XHub_Ped_Rx_Time_converted'] < float(test_stop))]
+                dockerParsedTestTrialSubset = parsedFileDataCopy[(parsedFileDataCopy['V2XHub_Ped_Rx_Time_converted'] > float(test_start)) & (parsedFileDataCopy['V2XHub_Ped_Rx_Time_converted'] < float(test_stop))]
                 dockerParsedTestTrialSubset['Test_Num'] = int(testnum)
                 dockerParsedTestTrialSubset['Trial_Num'] = int(i)
 
@@ -190,7 +195,7 @@ def dockerLogSplitter():
                 print("No docker log data for test: " + str(testnum) + " trial: " + str(i))
                 continue
 
-#will concat all of the individual parsed files into one file
+#This function will concat all of the individual parsed files into one file
 #***should only be run once all days of testing have been analyzed
 def concatFiles():
     parsed_output_directory_path = f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}'
@@ -208,12 +213,13 @@ def concatFiles():
     concatenated_df.to_csv(f'{parsed_output_directory_path}/{out_filename}', index=False)
 
 if __name__ == '__main__':
-    if len(sys.argv) < 3:
-        print('Run with docker log name and date: "python docker_log_parser.py" V2X_Hub_5_23_2022 05/23/2022')
+    if len(sys.argv) < 4:
+        print('Run with docker log name and date: "python3 docker_log_parser.py" V2X_Hub_5_23_2022 05/23/22 timestampFileName')
     else:
         logFile = sys.argv[1]
         date = sys.argv[2]
-        # cleaningDirectories()
-        # dockerLogParser()
-        # dockerLogSplitter()
+        timestamp_file = sys.argv[3]
+        
+        dockerLogParser(logFile)
+        dockerLogSplitter(logFile, timestamp_file, date)
         concatFiles()

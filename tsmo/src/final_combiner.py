@@ -1,3 +1,5 @@
+#This script is used to combine all of the previous parsed data files into one large csv containing all of the necessary
+#information for plotting. The data is compiled and tranformed appropriately, adding several columns for metrics of interest.
 import sys
 from csv import writer
 from csv import reader
@@ -10,15 +12,7 @@ import sys
 import shutil
 pd.options.mode.chained_assignment = None
 
-#clean out directories prior to running
-def cleaningDirectories():
-    if os.path.isdir(f'{constants.DATA_DIR}/{constants.FINAL_OUTPUT_DIR}'):
-        shutil.rmtree(f'{constants.DATA_DIR}/{constants.FINAL_OUTPUT_DIR}')
-        os.makedirs(f'{constants.DATA_DIR}/{constants.FINAL_OUTPUT_DIR}')
-    else:
-        os.makedirs(f'{constants.DATA_DIR}/{constants.FINAL_OUTPUT_DIR}')
-
-def combiner():
+def combiner(date, timestamp_file):
     text_directory_path = f'{constants.DATA_DIR}/{constants.RAW_TEXT_DIR}'
     docker_log_directory_path = f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}'
     merged_directory_path = f'{constants.DATA_DIR}/{constants.MERGED_DIR}'
@@ -27,7 +21,7 @@ def combiner():
 
     external_object_timestamps = pd.read_csv(f'{external_object_directory_path}/All_timestamps_converted_removed_empty.csv')
 
-    test_timestamps = pd.read_csv(f'{text_directory_path}/CP_Test_timestamps_converted.csv')
+    test_timestamps = pd.read_csv(f'{text_directory_path}/{timestamp_file}')
     tests_day = test_timestamps[test_timestamps['Date'] == date]
     tests = tests_day['Test'].unique().astype(int)
 
@@ -67,7 +61,6 @@ def combiner():
                 # external_object_subset.drop_duplicates(subset=['External_Object_timestamp_converted'], keep='first', inplace=True)
                 external_object_subset.drop(external_object_subset[external_object_subset['Incoming_psm_timestamp_converted'] > external_object_subset['External_Object_timestamp_converted']].index, inplace=True)
 
-                external_object_subset.to_csv('external_object.csv')
                 final = pd.merge_asof(temp,external_object_subset,on='time_to_match',direction='forward',allow_exact_matches=False)
                 #need to drop duplicates caused by above forward fill
                 final.drop_duplicates(subset=['time_to_match'], keep='first', inplace=True)
@@ -151,11 +144,11 @@ def concatFiles():
     concatenated_removed_df.to_csv(f'{final_directory_path}/{out_filename}', index=False)
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print('Run with: "python final_combiner.py 05/23/2022"')
+    if len(sys.argv) < 3:
+        print('Run with: "python3 final_combiner.py 05/23/22 testTimestampFileName"')
     else:
         date = sys.argv[1]
-
-        # cleaningDirectories()
-        combiner()
-        # concatFiles()
+        timestamp_file = sys.argv[2]
+        
+        combiner(date, timestamp_file)
+        concatFiles()

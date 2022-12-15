@@ -1,3 +1,7 @@
+#This script is used to extract the timestamp and payload for every packet sent and received by both the OBU and RSU. The raw data
+#is in the form of a pcap file and is extracted using the Wireshark command line tool "tshark". The payload is then decoded with 
+#the use of the J2735.py script. Finally the transmit and receive files are merged together based on payload, giving the communication
+#between the OBU and RSU.
 import sys
 from csv import writer
 from csv import reader
@@ -15,26 +19,6 @@ pcap_directory_path = f'{constants.DATA_DIR}/{constants.RAW_PCAP_DIR}'
 tshark_directory_path = f'{constants.DATA_DIR}/{constants.TSHARK_DIR}'
 payload_directory_path = f'{constants.DATA_DIR}/{constants.PAYLOAD_DIR}'
 merged_directory_path = f'{constants.DATA_DIR}/{constants.MERGED_DIR}'
-
-#clean out directories prior to running
-def cleaningDirectories():
-    if os.path.isdir(f'{constants.DATA_DIR}/{constants.TSHARK_DIR}'):
-        shutil.rmtree(f'{constants.DATA_DIR}/{constants.TSHARK_DIR}')
-        os.makedirs(f'{constants.DATA_DIR}/{constants.TSHARK_DIR}')
-    else:
-        os.makedirs(f'{constants.DATA_DIR}/{constants.TSHARK_DIR}')
-
-    if os.path.isdir(f'{constants.DATA_DIR}/{constants.PAYLOAD_DIR}'):
-        shutil.rmtree(f'{constants.DATA_DIR}/{constants.PAYLOAD_DIR}')
-        os.makedirs(f'{constants.DATA_DIR}/{constants.PAYLOAD_DIR}')
-    else:
-        os.makedirs(f'{constants.DATA_DIR}/{constants.PAYLOAD_DIR}')
-
-    if os.path.isdir(f'{constants.DATA_DIR}/{constants.MERGED_DIR}'):
-        shutil.rmtree(f'{constants.DATA_DIR}/{constants.MERGED_DIR}')
-        os.makedirs(f'{constants.DATA_DIR}/{constants.MERGED_DIR}')
-    else:
-        os.makedirs(f'{constants.DATA_DIR}/{constants.MERGED_DIR}')
 
 #writes the timestamp and whole pcap hex to a csv
 def convert_pcap_to_csv():
@@ -148,8 +132,8 @@ def payloadHelper():
 
 
 #perform a left merge on tx and rx file to get communication between RSU and OBU
-def merge():
-    with open(f'{merged_directory_path}/DSRC_Test_Metrics.csv', 'w', newline='') as write_obj:
+def merge(date, timestamp_file):
+    with open(f'{merged_directory_path}/DSRC_Test_Metrics.csv', 'a', newline='') as write_obj:
         csv_writer = writer(write_obj)
         csv_writer.writerow(["Test", "Trial", "Tx_Count", "Rx_Count", "Missed_Packet_Count", "PER"])
 
@@ -162,21 +146,33 @@ def merge():
             if "Rx" in file:
                 rx_files.append(file)
 
-        for txFile in tx_files:
-            tx_date = "0" + txFile.split("_")[3] + "/" + txFile.split("_")[4] + "/" + txFile.split("_")[5]
+        test_date_splitter = date.split("/")
+        test_month = test_date_splitter[0].lstrip("0")
+        test_day = test_date_splitter[1]
+        test_year = test_date_splitter[2]
 
+        for txFile in tx_files:
+            tx_date_month = txFile.split("_")[3] 
+            tx_date_day = txFile.split("_")[4] 
+            tx_date_year = txFile.split("_")[5]
+
+            tx_date = tx_date_month + "/" + tx_date_day + "/" + tx_date_year
             for rxFile in rx_files:
-                rx_date = "0" + rxFile.split("_")[3] + "/" + rxFile.split("_")[4] + "/" + rxFile.split("_")[5]
+                rx_date_month = rxFile.split("_")[3] 
+                rx_date_day = rxFile.split("_")[4] 
+                rx_date_year = rxFile.split("_")[5]
+
+                rx_date = rx_date_month + "/" + rx_date_day + "/" + rx_date_year
 
                 #only want to match data from same test dates
-                if tx_date == rx_date and tx_date == date:
+                if tx_date == rx_date and tx_date_month == test_month and tx_date_day == test_day and tx_date_year == test_year:
                     txFile = pd.read_csv(f'{payload_directory_path}/{txFile}')
                     #subtract 4 hours for conversion from GMT to local time
                     txFile['timestamp_converted'] = txFile['timestamp'] - 14400
                     rxFile = pd.read_csv(f'{payload_directory_path}/{rxFile}')
                     rxFile['timestamp_converted'] = rxFile['timestamp'] - 14400
 
-                    test_timestamps = pd.read_csv(f'{text_directory_path}/CP_Test_timestamps_converted.csv')
+                    test_timestamps = pd.read_csv(f'{text_directory_path}/{timestamp_file}')
                     tests_day = test_timestamps[test_timestamps['Date'] == date]
                     tests = tests_day['Test'].unique()
 
@@ -250,12 +246,13 @@ def concatFiles():
     concatenated_df.to_csv(f'{merged_directory_path}/{out_filename}', index=False)
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print('Run with: "python pcap_parser.py" 05/23/2022')
+    if len(sys.argv) < 3:
+        print('Run with: "python3 pcap_parser.py" 05/23/2022 timestampFileName')
     else:
         date = sys.argv[1]
-        # cleaningDirectories()
-        # convert_pcap_to_csv()
-        # payloadHelper()
-        # merge()
+        timestamp_file = sys.argv[2]
+
+        convert_pcap_to_csv()
+        payloadHelper()
+        merge(date, timestamp_file)
         concatFiles()

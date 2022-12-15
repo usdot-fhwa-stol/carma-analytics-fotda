@@ -1,3 +1,4 @@
+#This script uses all previously generated analysis csv files and plots several metrics of interest for each test case.
 import sys
 from csv import writer
 from csv import reader
@@ -13,14 +14,6 @@ import math
 from matplotlib.ticker import (MultipleLocator, FormatStrFormatter,
                                AutoMinorLocator)
 pd.options.mode.chained_assignment = None
-
-#clean out directories prior to running
-def cleaningDirectories():
-    if os.path.isdir(f'{constants.DATA_DIR}/{constants.PLOT_DIR}'):
-        shutil.rmtree(f'{constants.DATA_DIR}/{constants.PLOT_DIR}')
-        os.makedirs(f'{constants.DATA_DIR}/{constants.PLOT_DIR}')
-    else:
-        os.makedirs(f'{constants.DATA_DIR}/{constants.PLOT_DIR}')
 
 def metrics(testnum):
     merged_directory_path = f'{constants.DATA_DIR}/{constants.MERGED_DIR}'
@@ -139,10 +132,12 @@ def plot(testnum):
         except:
             print("No flir rx data for test: " + str(testnum) + " trial: " + str(i))
 
-    plt.xlabel('Test Time (s)')
-    plt.ylabel('V2X Hub Receive Interval of Sensor Data (s)')
+    plt.xlabel('Test Time (s)', fontsize=18)
+    plt.ylabel('V2X Hub Receive Interval of Sensor Data (s)', fontsize=18)
+    plt.xticks(fontsize=15)
+    plt.yticks(fontsize=15)
     plt.ylim(0,subset['rx_diff'].quantile(0.75) + 0.1)
-    plt.title("Test " + str(test_num) + " V2X Hub Receive Interval of Sensor Data")
+    plt.title("Test " + str(test_num) + " V2X Hub Receive Interval of Sensor Data", fontsize=18)
     plt.grid(True)
     filename = "Test_" + str(test_num) + "_Plot_1_V2X_Hub_Rx_Interval"
     plt.savefig(f'{plot_directory_path}/{filename}.png')
@@ -158,10 +153,12 @@ def plot(testnum):
         except:
             print("No v2x hub processing data for test: " + str(testnum) + " trial: " + str(i))
 
-    plt.xlabel('Test Time (s)')
-    plt.ylabel('Time to Generate PSM (s)')
+    plt.xlabel('Test Time (s)', fontsize=18)
+    plt.ylabel('Time to Generate PSM (s)', fontsize=18)
+    plt.xticks(fontsize=15)
+    plt.yticks(fontsize=15)
     plt.ylim(0,subset['V2XHub_Processing_Time(s)'].quantile(0.75)+0.004)
-    plt.title("Test " + str(test_num) + " V2X Hub PSM Processing Time")
+    plt.title("Test " + str(test_num) + " V2X Hub PSM Processing Time", fontsize=18)
     plt.grid(True)
     filename = "Test_" + str(test_num) + "_Plot_5_V2X_Hub_PSM_Processing_Time"
     plt.savefig(f'{plot_directory_path}/{filename}.png')
@@ -179,10 +176,12 @@ def plot(testnum):
         except:
             print("No V2X Hub TTI data for test: " + str(testnum) + " trial: " + str(i))
 
-    plt.xlabel('Test Time (s)')
-    plt.ylabel('V2X Hub PSM TTI (s)')
+    plt.xlabel('Test Time (s)', fontsize=18)
+    plt.ylabel('V2X Hub PSM TTI (s)', fontsize=18)
+    plt.xticks(fontsize=15)
+    plt.yticks(fontsize=15)
     plt.ylim(0,subset['tx_diff'].quantile(0.75) + 0.1)
-    plt.title("Test " + str(test_num) + " V2X Hub PSM TTI")
+    plt.title("Test " + str(test_num) + " V2X Hub PSM TTI", fontsize=18)
     plt.grid(True)
     filename = "Test_" + str(test_num) + "_Plot_2_V2X_Hub_PSM_TTI"
     plt.savefig(f'{plot_directory_path}/{filename}.png')
@@ -198,10 +197,12 @@ def plot(testnum):
         except:
             print("No RSU TTI data for test: " + str(testnum) + " trial: " + str(i))
 
-    plt.xlabel('Test Time (s)')
-    plt.ylabel('RSU TTI (s)')
+    plt.xlabel('Test Time (s)', fontsize=18)
+    plt.ylabel('RSU TTI (s)', fontsize=18)
+    plt.xticks(fontsize=15)
+    plt.yticks(fontsize=15)
     plt.ylim(0,subset['TTI'].quantile(0.75)+0.2)
-    plt.title("Test " + str(test_num) + " RSU TTI")
+    plt.title("Test " + str(test_num) + " RSU TTI", fontsize=18)
     plt.grid(True)
     filename = "Test_" + str(test_num) + "_Plot_3_RSU_TTI"
     plt.savefig(f'{plot_directory_path}/{filename}.png')
@@ -217,10 +218,12 @@ def plot(testnum):
         except:
             print("No OBU IPG data for test: " + str(testnum) + " trial: " + str(i))
 
-    plt.xlabel('Test Time (s)')
-    plt.ylabel('OBU Rx Interval (s)')
+    plt.xlabel('Test Time (s)', fontsize=18)
+    plt.ylabel('OBU Rx Interval (s)', fontsize=18)
+    plt.xticks(fontsize=15)
+    plt.yticks(fontsize=15)
     plt.ylim(0,subset['IPG'].quantile(0.75)+0.2)
-    plt.title("Test " + str(test_num) + " OBU Receive Interval")
+    plt.title("Test " + str(test_num) + " OBU Receive Interval", fontsize=18)
     plt.grid(True)
     filename = "Test_" + str(test_num) + "_Plot_4_OBU_Rx"
     plt.savefig(f'{plot_directory_path}/{filename}.png')
@@ -236,10 +239,12 @@ def plot(testnum):
         except:
             print("No OBU IPG data for test: " + str(testnum) + " trial: " + str(i))
 
-    plt.xlabel('Test Time (s)')
-    plt.ylabel('RSU-OBU Latency (s)')
+    plt.xlabel('Test Time (s)', fontsize=18)
+    plt.ylabel('RSU-OBU Latency (s)', fontsize=18)
+    plt.xticks(fontsize=15)
+    plt.yticks(fontsize=15)
     plt.ylim(0,subset['Latency'].quantile(0.75)+0.005)
-    plt.title("Test " + str(test_num) + " RSU-OBU Latency")
+    plt.title("Test " + str(test_num) + " RSU-OBU Latency", fontsize=18)
     plt.grid(True)
     filename = "Test_" + str(test_num) + "_Plot_7_RSU_OBU_Latency"
     plt.savefig(f'{plot_directory_path}/{filename}.png')
@@ -255,10 +260,12 @@ def plot(testnum):
         except:
             print("No flir rx obu latency data for test: " + str(testnum) + " trial: " + str(i))
 
-    plt.xlabel('Test Time (s)')
-    plt.ylabel('V2X Hub Rx -> OBU Latency (s)')
+    plt.xlabel('Test Time (s)', fontsize=18)
+    plt.ylabel('V2X Hub Rx -> OBU Latency (s)', fontsize=18)
+    plt.xticks(fontsize=15)
+    plt.yticks(fontsize=15)
     plt.ylim(0,subset['FLIR_Rx_OBU_Latency(s)'].quantile(0.75)+0.01)
-    plt.title("Test " + str(test_num) + " V2X Hub Rx -> Carma OBU Latency")
+    plt.title("Test " + str(test_num) + " V2X Hub Rx -> Carma OBU Latency", fontsize=18)
     plt.grid(True)
     filename = "Test_" + str(test_num) + "_Plot_8_V2XHub_Rx_OBU_Latency"
     plt.savefig(f'{plot_directory_path}/{filename}.png')
@@ -274,10 +281,12 @@ def plot(testnum):
         except:
             print("No v2xhub rsu communication data for test: " + str(testnum) + " trial: " + str(i))
 
-    plt.xlabel('Test Time (s)')
-    plt.ylabel('V2X Hub PSM Create-RSU Tx (s)')
+    plt.xlabel('Test Time (s)', fontsize=18)
+    plt.ylabel('V2X Hub PSM Create-RSU Tx (s)', fontsize=18)
+    plt.xticks(fontsize=15)
+    plt.yticks(fontsize=15)
     plt.ylim(0,subset['V2XHub_RSU_Communication(s)'].quantile(0.75)+0.01)
-    plt.title("Test " + str(test_num) + " V2X Hub PSM Create-RSU Tx")
+    plt.title("Test " + str(test_num) + " V2X Hub PSM Create-RSU Tx", fontsize=18)
     plt.grid(True)
     filename = "Test_" + str(test_num) + "_Plot_6_V2X_Hub_Create_RSU_Tx"
     plt.savefig(f'{plot_directory_path}/{filename}.png')
@@ -293,10 +302,12 @@ def plot(testnum):
         except:
             print("No flir v2xhub offset data for test: " + str(testnum) + " trial: " + str(i))
 
-    plt.xlabel('Test Time (s)')
-    plt.ylabel('Sensor - V2X Hub Time Offset (s)')
+    plt.xlabel('Test Time (s)', fontsize=18)
+    plt.ylabel('Sensor - V2X Hub Time Offset (s)', fontsize=18)
+    plt.xticks(fontsize=15)
+    plt.yticks(fontsize=15)
     plt.ylim(0,subset['FLIR_Ped_V2XHub_Diff(s)'].quantile(0.75) + 0.01)
-    plt.title("Test " + str(test_num) + " Sensor - V2X Hub Time Offset")
+    plt.title("Test " + str(test_num) + " Sensor - V2X Hub Time Offset", fontsize=18)
     plt.grid(True)
     filename = "Test_" + str(test_num) + "_Plot_9_Sensor_V2XHub_Time_Offset"
     plt.savefig(f'{plot_directory_path}/{filename}.png')
@@ -307,6 +318,5 @@ if __name__ == '__main__':
         print('Run with: "python plotter.py testnum"')
     else:
         test_num = sys.argv[1]
-        # cleaningDirectories()
         metrics(test_num)
         plot(test_num)
