@@ -1,10 +1,10 @@
 """ This is an analysis script for creating plots of entering_times and signal group phase, against timestamps of vehicles
 using scheduling_service logs and modified_spat kafka data. The plots are created for EV and DV states. This script requires a scheduling_service 
 log csv to be passed as an argument, as well as parsed modified_spat data. To get the parsed modified_spat data, use the modified_spat_parser.py
-script in this repo on the modified_spat kafka log. The signal group and vehicle id of interest are also required to run the script """
+script in this repo on the modified_spat kafka log. The signal group of interest is also required to run the script """
 
 ## How to use this script:
-""" Run with python3 entering_time_spat_plotter.py schedulingCsvName spatParsedCsvName desiredSignalGroup vehicleID """
+""" Run with python3 entering_time_spat_plotter.py schedulingCsvName spatParsedCsvName desiredSignalGroup"""
 
 ### Additional Note
 """Current implementation adds line breaks when there is no vehicle in the intersection and only has entries when the vehicle has carma engaged.
@@ -123,9 +123,10 @@ def plot_run(scheduling_df, modified_spat_df, signal_group, vehicle_id, run):
     plotName = "Signal_Group_" + str(signal_group) + "_" + vehicle_id + "_Entering_Time_Run_" + str(run) + "_plot.png"
     plt.savefig(f'{output_directory_path}/{plotName}')
 
-#This function will first separate the data in the scheduling log csv file into separate dataframes for each run.
-#It then hands the separated data frames to the plot_run function along with the modified_spat kafka data
-def process_runs(scheduling_log_name, modified_spat_log_name, signal_group, vehicle_id):
+#This function will first separate the data in the scheduling log csv file into separate dataframes for each run 
+#and for each vehicle in the run. It then hands the separated data frames to the plot_run function along with the 
+#modified_spat kafka data
+def process_runs(scheduling_log_name, modified_spat_log_name, signal_group):
     scheduling_log_directory_path = f'{constants.DATA_DIR}/{constants.RAW_LOG_DIR}'
     spat_parsed_directory_path = f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}'
 
@@ -144,23 +145,27 @@ def process_runs(scheduling_log_name, modified_spat_log_name, signal_group, vehi
 
             run = 0
             for scheduling_df in scheduling_df_list:
-                scheduling_df_veh_subset = scheduling_df[scheduling_df['vehicle_id'] == vehicle_id]
-
                 # Drop all NA values
-                scheduling_df_veh_subset = scheduling_df_veh_subset.dropna()
-                if not scheduling_df_veh_subset.empty:
+                scheduling_df = scheduling_df.dropna()
+                if not scheduling_df.empty:
                     run += 1
-                    plot_run(scheduling_df_veh_subset, modified_spat_df, signal_group, vehicle_id, run)
+
+                    #Get the vehicle_id used for this run
+                    #If there are multiple unique vehicles, call the plot_run for each vehicle
+                    vehicle_list = scheduling_df['vehicle_id'].unique()
+
+                    for vehicle_id in vehicle_list:
+                        scheduling_df_veh_subset = scheduling_df[scheduling_df['vehicle_id'] == vehicle_id]
+                        plot_run(scheduling_df_veh_subset, modified_spat_df, signal_group, vehicle_id, run)
 
             print("Number of runs: ", run)
 
 if __name__ == '__main__' :
-    if len(sys.argv) < 5:
-        print("Run with python3 entering_time_spat_plotter.py schedulingCsvName spatParsedCsvName desiredSignalGroup vehicleID")
+    if len(sys.argv) < 4:
+        print("Run with python3 entering_time_spat_plotter.py schedulingCsvName spatParsedCsvName desiredSignalGroup")
         exit()
 
     scheduling_csv_file_name = sys.argv[1]
     spat_csv_file_name = sys.argv[2]
     signal_group = sys.argv[3]
-    vehicle_id = sys.argv[4]
-    process_runs(scheduling_csv_file_name, spat_csv_file_name, signal_group, vehicle_id)
+    process_runs(scheduling_csv_file_name, spat_csv_file_name, signal_group)

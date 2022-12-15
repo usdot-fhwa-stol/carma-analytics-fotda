@@ -37,8 +37,6 @@ def kafkaParser(logname):
                 gmt5 = pytz.timezone('Etc/GMT+5')
                 first_day_epoch = utc.localize(naive).astimezone(gmt5).timestamp()*1000
 
-                # first_day_epoch = datetime(datetime.now(timezone.utc).year, 1, 1, 0, 0, 0).timestamp() * 1000 #get time since epoch for beggining of year in ms
-                # print(first_day_epoch)
                 #extract relevant elements from the json
                 for i in range(0, len(textList)):
                     try:
@@ -59,11 +57,11 @@ def kafkaParser(logname):
                         epoch_sec = epoch_ms / 1000
 
                         #iterate through all states
-                        for i in range(0, len(states)):
-                            signal_group = states[i]['signal_group']
+                        for j in range(0, len(states)):
+                            signal_group = states[j]['signal_group']
 
                             #retrieve the first element in state_time_speed object
-                            state_time_speed = states[i]['state_time_speed'][0]
+                            state_time_speed = states[j]['state_time_speed'][0]
                             event_state = state_time_speed['event_state']
 
                             #match event state to signal head color
@@ -78,7 +76,6 @@ def kafkaParser(logname):
                             epoch_ms, epoch_sec])
                     except:
                         print("Error extracting json info for line: " + str(textList[i]))
-
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
