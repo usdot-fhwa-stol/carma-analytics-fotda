@@ -91,6 +91,8 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
         #get lanelet length based on entry lane id from intersection model data
         lanelet_length = intersection_model['Length(m)'][intersection_model['Entry_lane_id'] == lane].iloc[0]
         dates=[dt.datetime.fromtimestamp(ts) for ts in status_intent_subset["Timestamp(s)"]]
+
+        #plot distance travelled vs time using the vehicle speed as the color of the dots
         sns.scatterplot(data=status_intent_subset, x=dates, y=lanelet_length - status_intent_subset['Cur_ds(m)'], 
         hue=status_intent_subset['Cur_Speed'], hue_order=status_intent_subset['Cur_Speed'], palette='viridis', ax=ax1)
 
@@ -98,14 +100,13 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
         axs=plt.gca()
         xfmt = md.DateFormatter('%H:%M:%S') 
         axs.xaxis.set_major_formatter(xfmt)
+        axs.xaxis.set_major_locator(md.SecondLocator(interval=3))
         fig.autofmt_xdate()
         plt.xlim(min_datetime, max_datetime)
-        #TODO update plot title/name once log naming convention has been established
-        plt.xlabel('Date-Time')
+        plt.xlabel('Time')
         plt.ylabel('Distance Travelled (m)')
         fig.suptitle(vehicle_id + " Distance vs Time Signal Group " + str(signal_group) + " Run " + str(run))
-
-        ax1.legend(title='Vehicle Speed (m/s)', loc='center left', bbox_to_anchor=(0.9, 0.5))
+        ax1.legend(title='Veh Speed \n(m/s)', loc='center left', bbox_to_anchor=(1, 0.5))
         plotName = vehicle_id + "_Distance_Vs_Time_Signal_Group_" + signal_group + "_run_" + str(run) + ".png"
         plt.savefig(f'{output_directory_path}/{plotName}')
 
