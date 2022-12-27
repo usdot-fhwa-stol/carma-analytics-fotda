@@ -56,8 +56,6 @@ def kafkaParser(logname):
                         epoch_ms = (moy* 60000) + timestamp + first_day_epoch #convert moy to milliseconds              
                         epoch_sec = epoch_ms / 1000
 
-                        if (int(len(states)) != 5):
-                            print("Number of states: " + str(len(states)))
 
                         #iterate through all states
                         for j in range(0, len(states)):
