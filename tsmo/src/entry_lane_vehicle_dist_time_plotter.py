@@ -75,6 +75,6 @@ def status_intent_plotter():
 
 if __name__ == '__main__':
     if len(sys.argv) < 1:
-        print('Run with: "python status_intent_plotter.py"')
+        print('Run with: "python entry_lane_vehicle_dist_time_plotter.py"')
     else:          
         status_intent_plotter()    

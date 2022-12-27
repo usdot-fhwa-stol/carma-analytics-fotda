@@ -15,7 +15,7 @@ def cleaningDirectories():
         os.makedirs(f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}')
 
 #parser method to extract necessary fields from raw text file
-def kafkaParser():
+def kafkaParser(logname):
     input_directory_path = f'{constants.DATA_DIR}/{constants.RAW_LOG_DIR}'
     output_directory_path = f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}'
     all_in_filenames = os.listdir(input_directory_path)
@@ -44,8 +44,8 @@ def kafkaParser():
                         timestamp = status_intent_message_json['metadata']['timestamp']
                         veh_id = status_intent_message_json['payload']['v_id']
                         cur_ds = status_intent_message_json['payload']['cur_ds']
-                        cur_speed = status_intent_message_json['payload']['cur_speed'] * 0.02 #convert to m/s
-                        cur_accel = status_intent_message_json['payload']['cur_accel'] * 0.01 #convert to m/s^2
+                        cur_speed = status_intent_message_json['payload']['cur_speed']
+                        cur_accel = status_intent_message_json['payload']['cur_accel']
                         cur_lane_id = status_intent_message_json['payload']['cur_lane_id']
                         entry_lane_id = status_intent_message_json['payload']['entry_lane_id']
                         link_lane_id = status_intent_message_json['payload']['link_lane_id']
@@ -63,7 +63,8 @@ def kafkaParser():
 
 
 if __name__ == '__main__':
-    if len(sys.argv) < 1:
-        print('Run with: "python status_intent_parser.py"')
+    if len(sys.argv) < 2:
+        print('Run with: "python3 status_intent_parser.py logname"')
     else:       
-        kafkaParser()
+        logname = sys.argv[1]
+        kafkaParser(logname)
