@@ -6,14 +6,6 @@ import json
 import pandas as pd
 import shutil
 
-#clean out directories prior to running
-def cleaningDirectories():
-    if os.path.isdir(f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}'):
-        shutil.rmtree(f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}')
-        os.makedirs(f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}')
-    else:
-        os.makedirs(f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}')
-
 #parser method to extract necessary fields from raw text file
 def kafkaParser(logname):
     input_directory_path = f'{constants.DATA_DIR}/{constants.RAW_LOG_DIR}'

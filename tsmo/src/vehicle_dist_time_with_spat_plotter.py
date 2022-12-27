@@ -1,3 +1,10 @@
+""" This is an analysis script for creating plots of vehicle trajectory vs time, along with spat signal data. It requires
+the prior use of the modified_spat_parser.py and the status_intent_parser.py scripts to generate the necessary data from
+the spat and status and intent kafka topic logs. Once those csv files have been generated, select the vehicle id and signal
+group of interest. """
+
+## How to use this script:
+""" Run with python3 vehicle_dist_time_with_spat_plotter.py parsedSpatLog parsedStatusIntentLog vehicleID signalGroup"""
 import pandas as pd
 import numpy as np
 import math
@@ -12,6 +19,8 @@ import matplotlib.dates as md
 import datetime as dt
 import seaborn as sns 
 
+#This function will plot spat signal state data, as well as the vehicle trajectory data, for each run in the
+#status and intent kafka log.
 def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
     input_directory_path = f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}'
     output_directory_path = f'{constants.DATA_DIR}/{constants.PLOT_DIR}'
@@ -28,22 +37,18 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
             status_intent_data = pd.read_csv(f'{input_directory_path}/{file}')
   
     #Need to split parsed status and intent into individual runs. Do this by checking the difference in consecutive
-    #timestamps. If the diff is larger than 30000 ms (1 min), this indicates the start of a new run.
+    #timestamps. If the diff is larger than 30000 ms (30 seconds), this indicates the start of a new run.
     status_intent_list = np.split(status_intent_data, status_intent_data[status_intent_data['Timestamp(ms)'].diff() > 30000].index)
 
     run = 0   
     #Iterate through each run in the status and intent data, and find the associated spat data
     for status_intent_subset in status_intent_list:
-        run += 1
-
         #Get min and max times of status and intent to bound the spat data
         status_intent_subset['Timestamp(s)'] = status_intent_subset['Timestamp(ms)'] / 1000
         min_epoch_time = status_intent_subset['Timestamp(ms)'].min()
-        max_epoch_time = status_intent_subset['Timestamp(ms)'].max()
+        max_epoch_time = status_intent_subset['Timestamp(ms)'].max() + 5000 #add extra 5 seconds of data for better visualization
 
-        min_datetime = dt.datetime.fromtimestamp(status_intent_subset['Timestamp(s)'].min())
-        max_datetime = dt.datetime.fromtimestamp(status_intent_subset['Timestamp(s)'].max())
-
+        #get subset of spat data using min and max times for the run and the desired signal group
         spat_subset = spat_data[(spat_data['Epoch_Time(ms)'] > min_epoch_time)&(spat_data['Epoch_Time(ms)'] <= max_epoch_time)&(spat_data['Signal_Group'].astype(int) == int(signal_group))]             
 
         fig, ax1 = plt.subplots()
@@ -51,7 +56,7 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
 
         #get entry lane id for this run
         lane = status_intent_subset['Entry_lane_id'].iloc[0]
-        #get the max distance, just to place the spat data slightly above
+        #get the max distance in the dataset, just to place the spat data slightly above
         max_ds = status_intent_subset['Cur_ds(m)'].max() + 10
 
         #iterate through spat kafka data and draw a horizontal line based on signal state
@@ -100,8 +105,12 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
         axs=plt.gca()
         xfmt = md.DateFormatter('%H:%M:%S') 
         axs.xaxis.set_major_formatter(xfmt)
-        axs.xaxis.set_major_locator(md.SecondLocator(interval=3))
+        axs.xaxis.set_major_locator(md.SecondLocator(interval=3)) #add tick mark every 3 seconds
         fig.autofmt_xdate()
+
+        min_datetime = dt.datetime.fromtimestamp(status_intent_subset['Timestamp(s)'].min())
+        max_datetime = dt.datetime.fromtimestamp(status_intent_subset['Timestamp(s)'].max()+5) #add extra 5 seconds of data
+
         plt.xlim(min_datetime, max_datetime)
         plt.xlabel('Time')
         plt.ylabel('Distance Travelled (m)')
