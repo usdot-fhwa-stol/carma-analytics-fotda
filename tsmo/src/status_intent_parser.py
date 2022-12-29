@@ -13,7 +13,7 @@ def kafkaParser(logname):
     all_in_filenames = os.listdir(input_directory_path)
 
     for file in all_in_filenames:
-        if "status_intent" in file:
+        if logname in file:
             fileName = file.split(".")[0]
             #Convert the text file into an array of lines
             with open(f'{input_directory_path}/{file}', encoding="utf8", errors='ignore') as textFile:
