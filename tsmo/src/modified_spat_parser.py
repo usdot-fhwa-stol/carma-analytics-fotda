@@ -56,6 +56,7 @@ def kafkaParser(logname):
                         epoch_ms = (moy* 60000) + timestamp + first_day_epoch #convert moy to milliseconds              
                         epoch_sec = epoch_ms / 1000
 
+
                         #iterate through all states
                         for j in range(0, len(states)):
                             signal_group = states[j]['signal_group']
