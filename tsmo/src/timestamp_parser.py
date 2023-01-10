@@ -1,4 +1,5 @@
-""" This is a parsing script that can be used to extract timestamps from any of the kafka logfiles. """
+""" This is a parsing script that can be used to extract timestamps from any of the kafka logfiles and write
+them to a csv file. """
 
 ## How to use this script:
 """ Run with python3 timestamp_parser.py logName"""
@@ -27,7 +28,7 @@ def kafkaParser(logname):
                     textList.append(line.strip().replace("\n", ""))
 
             #write data of interest to csv which will be used to produce plots
-            with open(f'{output_directory_path}/{fileName}_parsed.csv', 'w', newline='') as write_obj:
+            with open(f'{output_directory_path}/{fileName}_timestamps.csv', 'w', newline='') as write_obj:
                 csv_writer = writer(write_obj)
                 csv_writer.writerow(["Message_Count", "Timestamp(ms)"])
 
