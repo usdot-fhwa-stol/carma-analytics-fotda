@@ -1,3 +1,8 @@
+""" This is a plotting script that can be used to generate a plot displaying the status of every signal group 
+over time. It requires the modified spat topic data to be extracted using the modified_spat_parser.py script."""
+
+## How to use this script:
+""" Run with python3 all_signal_groups_plotter.py spatParsedFile"""
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -16,7 +21,7 @@ pd.options.mode.chained_assignment = None
 # This method will read the parsed spat data produced by the modified_spat_parser script. It then will
 # iterate through all signal groups and plot the signal state as a horizontal line with a corresponding
 # color.
-def modified_spat_plotter(parsedFile):
+def plotter(parsedFile):
     input_directory_path = f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}'
     output_directory_path = f'{constants.DATA_DIR}/{constants.PLOT_DIR}'
    
@@ -88,7 +93,7 @@ def modified_spat_plotter(parsedFile):
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print('Run with: "python3 modified_spat_plotter.py spatParsedFile"')
+        print('Run with: "python3 all_signal_groups_plotter.py spatParsedFile"')
     else:          
         parsedFile = sys.argv[1]
-        modified_spat_plotter(parsedFile)    
+        plotter(parsedFile)    
