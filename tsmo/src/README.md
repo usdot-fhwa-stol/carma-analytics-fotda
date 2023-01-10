@@ -16,3 +16,4 @@ Available plots to be generated:
 3. MOM broadcast frequency vs time (source: scheduling plan topic, script: frequency_plotter.py)
 4. Vehicle trajectory vs time, w/ spat signal group data (source: status and intent, modified spat topics, script: vehicle_dist_time_plotter.py)
 5. All signal groups status vs time (source: modified spat topic, script: all_signal_groups_plotter.py)
+6. Vehicle entering time vs time (state data available as well), w/ spat signal group data (source: schedule logs, scheduling plan kafka topic, script: one_veh_et_spat_plotter.py)

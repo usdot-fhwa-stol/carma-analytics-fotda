@@ -1,10 +1,11 @@
 """ This is an analysis script for creating plots of entering_times and signal group phase, against timestamps of vehicles
 using scheduling_service logs and modified_spat kafka data. The plots are created for EV and DV states. This script requires a scheduling_service 
 log csv to be passed as an argument, as well as parsed modified_spat data. To get the parsed modified_spat data, use the modified_spat_parser.py
-script in this repo on the modified_spat kafka log. The signal group of interest is also required to run the script """
+script in this repo on the modified_spat kafka log. The signal group of interest is also required to run the script. The script will
+create individual plots for each run, as well as for each vehicle participating in the run. """
 
 ## How to use this script:
-""" Run with python3 entering_time_spat_plotter.py schedulingCsvName spatParsedCsvName desiredSignalGroup"""
+""" Run with python3 one_veh_et_spat_plotter.py schedulingCsvName spatParsedCsvName desiredSignalGroup"""
 
 ### Additional Note
 """Current implementation adds line breaks when there is no vehicle in the intersection and only has entries when the vehicle has carma engaged.
@@ -162,7 +163,7 @@ def process_runs(scheduling_log_name, modified_spat_log_name, signal_group):
 
 if __name__ == '__main__' :
     if len(sys.argv) < 4:
-        print("Run with python3 entering_time_spat_plotter.py schedulingCsvName spatParsedCsvName desiredSignalGroup")
+        print("Run with python3 one_veh_et_spat_plotter.py schedulingCsvName spatParsedCsvName desiredSignalGroup")
         exit()
 
     scheduling_csv_file_name = sys.argv[1]
