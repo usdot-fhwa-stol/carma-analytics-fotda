@@ -12,8 +12,8 @@ for the appropriate input. All of the plotting scripts require that the user has
 
 Available plots to be generated:
 1. Vehicle Acceleration vs time (source: status and intent topic, script: vehicle_acceleration_plotter.py)
-2. Spat broadcast frequency vs time (source: modified spat topic, script: frequency_plotter.py)
-3. MOM broadcast frequency vs time (source: scheduling plan topic, script: frequency_plotter.py)
+2. Carma-Streets Modified Spat topic broadcast frequency vs time (source: modified spat topic, script: frequency_plotter.py)
+3. Carma-Streets MOM topic broadcast frequency vs time (source: scheduling plan topic, script: frequency_plotter.py)
 4. Vehicle trajectory vs time, w/ spat signal group data (source: status and intent, modified spat topics, script: vehicle_dist_time_plotter.py)
 5. All signal groups status vs time (source: modified spat topic, script: all_signal_groups_plotter.py)
 6. Vehicle entering time vs time (state data available as well), w/ spat signal group data (source: schedule logs, scheduling plan kafka topic, script: one_veh_et_spat_plotter.py)
