@@ -1,7 +1,7 @@
 This directory contains several scripts that can be used to extract relevant data from the various kafka topics and generate
 the required plots to validate Carma-Streets UC3 functionality. The user should clone this repo and switch to the UC3 Analysis 
 branch. Inside of the "tsmo" directory, create a "data" directory with a set of subdirectories that are called out in the "constants.py"
-script (Intersection_Model, Parsed_Log_Output, etc.). After all of the necessary directories have been created, place the raw
+script (Intersection_Model, Parsed_Log_Output, etc.). An example directory hierarchy can be found in the "data" directory here. After all of the necessary directories have been created, place the raw
 test data (Kafka logs/csv files) in the "Raw_Log_Files" directory. Then place the intersection model json file, corresponding to the
 intersection that was tested on, in the "Intersection_Model" directory.
 
