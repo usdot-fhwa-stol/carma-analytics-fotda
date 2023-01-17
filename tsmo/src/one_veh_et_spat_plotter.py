@@ -43,12 +43,23 @@ def plot_run(scheduling_df, modified_spat_df, signal_group, vehicle_id, run):
     df_dv  = scheduling_df[scheduling_df["state"] == "DV"].copy()
 
     #get min and max times for scheduling data and bin the spat data with this window
+    #find the max time using the scheduling csv timestamps or the vehicle entering time 
     min_time = df_ev['timestamps'].min()
-    max_time = df_ev['timestamps'].max()
-    if not df_dv.empty: #if the vehicle changes state to DV, update the max_time variable
-        max_time = df_dv['timestamps'].max()   
 
-    spat_subset_df = modified_spat_df[(modified_spat_df['Signal_Group'] == int(signal_group))&(modified_spat_df['Epoch_Time(ms)'] > min_time)&(modified_spat_df['Epoch_Time(ms)'] < max_time)]
+    if df_ev['et'].max() > df_ev['timestamps'].max():
+        max_time = df_ev['et'].max()
+    else:
+        max_time = df_ev['timestamps'].max()
+    
+    #if the vehicle changes state to DV, update the max_time variable
+    if not df_dv.empty:
+        if df_dv['et'].max() > df_dv['timestamps'].max():
+            max_time = df_dv['et'].max()
+        else:
+            max_time = df_dv['timestamps'].max() 
+
+    #add some buffer for spat data
+    spat_subset_df = modified_spat_df[(modified_spat_df['Signal_Group'] == int(signal_group))&(modified_spat_df['Epoch_Time(ms)'] >= min_time)&(modified_spat_df['Epoch_Time(ms)'] <= max_time)]
     spat_subset_df_copy = spat_subset_df.copy()
 
     # Convert timestamps and entering timestamps to datetime values
