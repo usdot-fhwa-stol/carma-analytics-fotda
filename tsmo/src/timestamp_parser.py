@@ -2,7 +2,7 @@
 them to a csv file. """
 
 ## How to use this script:
-""" Run with python3 timestamp_parser.py logName"""
+""" Run with python3 timestamp_parser.py kafkaLogName"""
 import sys
 from csv import writer
 import os
@@ -48,7 +48,7 @@ def kafkaParser(logname):
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print('Run with: "python3 timestamp_parser.py logname"')
+        print('Run with: "python3 timestamp_parser.py kafkaLogName"')
     else:       
         logname = sys.argv[1]
         kafkaParser(logname)

@@ -1,9 +1,10 @@
 """ This is a plotting script that can be used to generate plots displaying the frequency of transmission
 or reception of a particular message. This script requires that timestamps have already been extracted from
-the appropriate kafka log, with the use of the "timestamp_parser.py" script."""
+the appropriate kafka log or pcap file, with the use of either the "timestamp_parser.py" script or the
+"platform_obu_pcap_parser.py" script."""
 
 ## How to use this script:
-""" Run with python3 frequency_plotter.py messageType(MOM, SPAT) startTime(epoch milliseconds) endTime(epoch milliseconds)"""
+""" Run with python3 frequency_plotter.py messageType(MOM, SPAT, BSM_in, MOM_in, MPM_in) startTime(epoch milliseconds) endTime(epoch milliseconds)"""
 import pandas as pd
 import numpy as np
 import math
@@ -58,7 +59,7 @@ def plotter(messageType, start, end):
     #plot the message frequencies vs time, as well as the max/min range value based on message type
     fig, ax1 = plt.subplots()
     fig.set_size_inches(10, 10)        
-    plt.scatter([i[0] for i in tenValueAverages], [i[1] for i in tenValueAverages], c="blue", marker="^")
+    plt.scatter([i[0] for i in tenValueAverages], [i[1] for i in tenValueAverages], c="blue", marker="^", label=messageType)
     # spat broadcast requirement is 10Hz +/- 5, MOM is 1Hz +/- 0.5
     if messageType == "spat":
         plt.axhline(y=5, color='r', linestyle='--', label="frequency lower bound")
@@ -75,15 +76,15 @@ def plotter(messageType, start, end):
     plt.xlabel('Date-Time')
     plt.ylabel('Frequency (Hz)')
     plt.xlim(min_time, max_time)
-    fig.suptitle(filename.split("_")[4] + " " + filename.split("_")[5] + " " + filename.split("_")[6] + " " + str(messageType).replace("_", " ") + " message frequency")
+    fig.suptitle(str(messageType).replace("_", " ") + " message frequency")
     plt.legend()
-    plotName = filename.split("_")[4] + "_" + filename.split("_")[5] + "_" + filename.split("_")[6] + "_" + str(messageType) + "_message_frequency.png"
+    plotName = str(messageType) + "_message_frequency.png"
     plt.savefig(f'{output_directory_path}/{plotName}')
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 4:
-        print('Run with: "python3 frequency_plotter.py messageType(MOM, SPAT) startTime(epoch milliseconds) endTime(epoch milliseconds)"')
+        print('Run with: "python3 frequency_plotter.py messageType(MOM, SPAT, BSM_in, MOM_in, MPM_in) startTime(epoch milliseconds) endTime(epoch milliseconds)"')
     else:  
         message = sys.argv[1] 
         start = sys.argv[2]
@@ -95,8 +96,14 @@ if __name__ == '__main__':
             messageType = "scheduling_plan"
         elif message == "SPAT":
             messageType = "spat"
+        elif message == "BSM_in":
+            messageType = "bsm_in"
+        elif message == "MOM_in":
+            messageType = "mom_in"
+        elif message == "MPM_in":
+            messageType = "mpm_in"
         else:
-            print("Please input a message type from the available options (MOM, SPAT)")
+            print("Please input a message type from the available options (MOM, SPAT, BSM_in, MOM_in, MPM_in)")
             exit()
 
         plotter(messageType, start, end)  
