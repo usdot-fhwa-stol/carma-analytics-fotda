@@ -41,92 +41,105 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
     status_intent_list = np.split(status_intent_data, status_intent_data[status_intent_data['Timestamp(ms)'].diff() > 30000].index)
 
     run = 1   
-    #Iterate through each run in the status and intent data, and find the associated spat data
+    #Iterate through each run in the status and intent data, and find the associated vehicle/spat data
     for status_intent_subset in status_intent_list:
         #Only want data where vehicle is in EV state
-        status_intent_subset_ev = status_intent_subset[status_intent_subset['Vehicle_state'] == "EV"]
+        status_intent_subset_ev = status_intent_subset[(status_intent_subset['Vehicle_state'] == "EV")&(status_intent_subset['Vehicle_ID'] == str(vehicle_id))]
 
-        status_intent_subset_ev_copy = status_intent_subset_ev.copy()
-        #Get min and max times of status and intent to bound the spat data
-        status_intent_subset_ev_copy['Timestamp(s)'] = status_intent_subset_ev_copy['Timestamp(ms)'] / 1000
-        min_epoch_time = status_intent_subset_ev_copy['Timestamp(ms)'].min()
-        max_epoch_time = status_intent_subset_ev_copy['Timestamp(ms)'].max() + 5000 #add extra 5 seconds of data for better visualization
+        #need to check if the input vehicle participated in the run
+        if len(status_intent_subset_ev) != 0:
+            status_intent_subset_ev_copy = status_intent_subset_ev.copy()
+            #Get min and max times of status and intent to bound the spat data
+            status_intent_subset_ev_copy['Timestamp(s)'] = status_intent_subset_ev_copy['Timestamp(ms)'] / 1000
+            min_epoch_time = status_intent_subset_ev_copy['Timestamp(ms)'].min()
+            max_epoch_time = status_intent_subset_ev_copy['Timestamp(ms)'].max() + 5000 #add extra 5 seconds of data for better visualization
 
-        #get subset of spat data using min and max times for the run and the desired signal group
-        spat_subset = spat_data[(spat_data['Epoch_Time(ms)'] > min_epoch_time)&(spat_data['Epoch_Time(ms)'] <= max_epoch_time)&(spat_data['Signal_Group'].astype(int) == int(signal_group))]             
+            #get subset of spat data using min and max times for the run and the desired signal group
+            spat_subset = spat_data[(spat_data['Epoch_Time(ms)'] > min_epoch_time)&(spat_data['Epoch_Time(ms)'] <= max_epoch_time)&(spat_data['Signal_Group'].astype(int) == int(signal_group))]             
 
-        #get entry lane id for this run
-        lane = status_intent_subset_ev_copy['Entry_lane_id'].iloc[0]
-            
-        #get lanelet length/stop bar location based on entry lane id from intersection model data
-        lanelet_length = intersection_model['Length(m)'][intersection_model['Entry_lane_id'] == lane].iloc[0]
+            #get entry lane id for this run
+            lane = status_intent_subset_ev_copy['Entry_lane_id'].iloc[0]
+                
+            #get lanelet length/stop bar location based on entry lane id from intersection model data
+            lanelet_length = intersection_model['Length(m)'][intersection_model['Entry_lane_id'] == lane].iloc[0]
 
-        #place the spat data slightly above the stop bar value
-        plot_spat_location = lanelet_length + 10
+            #place the spat data slightly above the stop bar value
+            plot_spat_location = lanelet_length + 10
 
-        fig, ax1 = plt.subplots()
-        fig.set_size_inches(10, 10)         
+            fig, ax1 = plt.subplots()
+            fig.set_size_inches(10, 10)         
 
-        #iterate through spat kafka data and draw a horizontal line based on signal state
-        #syntax for drawing horizontal lines: ax.hlines(y, xmin, xmax)
-        for i in range(0, len(spat_subset)-1):
-            #red state
-            if (spat_subset['Event_State'].iloc[i] == 3)&(spat_subset['Event_State'].iloc[i+1] == 3):
-                time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
-                time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
-                ax1.hlines(plot_spat_location, time1, time2, color='red', linewidth=10)
-            #green state
-            elif (spat_subset['Event_State'].iloc[i] == 6)&(spat_subset['Event_State'].iloc[i+1] == 6):
-                time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
-                time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
-                ax1.hlines(plot_spat_location, time1, time2, color='green', linewidth=10)
-            #yellow state
-            elif (spat_subset['Event_State'].iloc[i] == 8)&(spat_subset['Event_State'].iloc[i+1] == 8):
-                time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
-                time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
-                ax1.hlines(plot_spat_location, time1, time2, color='yellow', linewidth=10)
-            #change in state from red to green, draw green
-            elif (spat_subset['Event_State'].iloc[i] == 3)&(spat_subset['Event_State'].iloc[i+1] == 6):
-                time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
-                time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
-                ax1.hlines(plot_spat_location, time1, time2, color='green', linewidth=10)
-            #change in state from green to yellow, draw yellow
-            elif (spat_subset['Event_State'].iloc[i] == 6)&(spat_subset['Event_State'].iloc[i+1] == 8):
-                time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
-                time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
-                ax1.hlines(plot_spat_location, time1, time2, color='yellow', linewidth=10)
-                #change in state from yellow to red, draw red
-            elif (spat_subset['Event_State'].iloc[i] == 8)&(spat_subset['Event_State'].iloc[i+1] == 3):
-                time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
-                time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
-                ax1.hlines(plot_spat_location, time1, time2, color='red', linewidth=10)
+            #iterate through spat kafka data and draw a horizontal line based on signal state
+            #syntax for drawing horizontal lines: ax.hlines(y, xmin, xmax)
+            for i in range(0, len(spat_subset)-1):
+                #red state
+                if (spat_subset['Event_State'].iloc[i] == 3)&(spat_subset['Event_State'].iloc[i+1] == 3):
+                    time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
+                    time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
+                    ax1.hlines(plot_spat_location, time1, time2, color='red', linewidth=10)
+                #green state
+                elif (spat_subset['Event_State'].iloc[i] == 6)&(spat_subset['Event_State'].iloc[i+1] == 6):
+                    time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
+                    time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
+                    ax1.hlines(plot_spat_location, time1, time2, color='green', linewidth=10)
+                #yellow state
+                elif (spat_subset['Event_State'].iloc[i] == 8)&(spat_subset['Event_State'].iloc[i+1] == 8):
+                    time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
+                    time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
+                    ax1.hlines(plot_spat_location, time1, time2, color='yellow', linewidth=10)
+                #change in state from red to green, draw green
+                elif (spat_subset['Event_State'].iloc[i] == 3)&(spat_subset['Event_State'].iloc[i+1] == 6):
+                    time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
+                    time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
+                    ax1.hlines(plot_spat_location, time1, time2, color='green', linewidth=10)
+                #change in state from green to yellow, draw yellow
+                elif (spat_subset['Event_State'].iloc[i] == 6)&(spat_subset['Event_State'].iloc[i+1] == 8):
+                    time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
+                    time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
+                    ax1.hlines(plot_spat_location, time1, time2, color='yellow', linewidth=10)
+                    #change in state from yellow to red, draw red
+                elif (spat_subset['Event_State'].iloc[i] == 8)&(spat_subset['Event_State'].iloc[i+1] == 3):
+                    time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
+                    time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
+                    ax1.hlines(plot_spat_location, time1, time2, color='red', linewidth=10)
 
-        #convert epoch times to datetime 
-        dates=[dt.datetime.fromtimestamp(ts) for ts in status_intent_subset_ev_copy["Timestamp(s)"]]
+            #convert epoch times to datetime 
+            dates=[dt.datetime.fromtimestamp(ts) for ts in status_intent_subset_ev_copy["Timestamp(s)"]]
 
-        #plot distance travelled vs time using the vehicle speed as the color of the dots
-        sns.scatterplot(data=status_intent_subset_ev_copy, x=dates, y=lanelet_length - status_intent_subset_ev_copy['Cur_ds(m)'], 
-        hue=status_intent_subset_ev['Cur_Speed'], hue_order=status_intent_subset_ev_copy['Cur_Speed'], palette='viridis', ax=ax1)
+            #plot distance travelled vs time using the vehicle speed as the color of the dots
+            #need to take the vehicle's distance from the rear axle to the front bumper into account
+            if vehicle_id == "DOT-45244":
+                sns.scatterplot(data=status_intent_subset_ev_copy, x=dates, y=lanelet_length - (status_intent_subset_ev_copy['Cur_ds(m)']-constants.DOT_45244_FRONT_BUMPER_DIST), 
+                hue=status_intent_subset_ev['Cur_Speed'], hue_order=status_intent_subset_ev_copy['Cur_Speed'], palette='viridis', ax=ax1)
+            elif vehicle_id == "DOT-45245":
+                sns.scatterplot(data=status_intent_subset_ev_copy, x=dates, y=lanelet_length - (status_intent_subset_ev_copy['Cur_ds(m)']-constants.DOT_45245_FRONT_BUMPER_DIST), 
+                hue=status_intent_subset_ev['Cur_Speed'], hue_order=status_intent_subset_ev_copy['Cur_Speed'], palette='viridis', ax=ax1)
+            elif vehicle_id == "DOT-45254":
+                sns.scatterplot(data=status_intent_subset_ev_copy, x=dates, y=lanelet_length - (status_intent_subset_ev_copy['Cur_ds(m)']-constants.DOT_45254_FRONT_BUMPER_DIST), 
+                hue=status_intent_subset_ev['Cur_Speed'], hue_order=status_intent_subset_ev_copy['Cur_Speed'], palette='viridis', ax=ax1)
 
-        plt.xticks(rotation=75)
-        axs=plt.gca()
-        xfmt = md.DateFormatter('%H:%M:%S') 
-        axs.xaxis.set_major_formatter(xfmt)
-        axs.xaxis.set_major_locator(md.SecondLocator(interval=3)) #add tick mark every 3 seconds
-        fig.autofmt_xdate()
+            plt.xticks(rotation=75)
+            axs=plt.gca()
+            xfmt = md.DateFormatter('%H:%M:%S') 
+            axs.xaxis.set_major_formatter(xfmt)
+            axs.xaxis.set_major_locator(md.SecondLocator(interval=3)) #add tick mark every 3 seconds
+            fig.autofmt_xdate()
 
-        min_datetime = dt.datetime.fromtimestamp(status_intent_subset_ev_copy['Timestamp(s)'].min())
-        max_datetime = dt.datetime.fromtimestamp(status_intent_subset_ev_copy['Timestamp(s)'].max()+5) #add extra 5 seconds of data
-        #plot horizontal line at stop bar location
-        ax1.hlines(lanelet_length, min_datetime, max_datetime, color='orange', linewidth=2, label="stop\n bar")
+            min_datetime = dt.datetime.fromtimestamp(status_intent_subset_ev_copy['Timestamp(s)'].min())
+            max_datetime = dt.datetime.fromtimestamp(status_intent_subset_ev_copy['Timestamp(s)'].max()+5) #add extra 5 seconds of data
+            #plot horizontal line at stop bar location
+            ax1.hlines(lanelet_length, min_datetime, max_datetime, color='orange', linewidth=2, label="stop\n bar")
 
-        plt.xlim(min_datetime, max_datetime)
-        plt.xlabel('Time')
-        plt.ylabel('Distance Travelled (m)')
-        fig.suptitle(vehicle_id + " Distance vs Time Signal Group " + str(signal_group) + " Run " + str(run))
-        ax1.legend(title='Veh Speed \n(m/s)', loc='center left', bbox_to_anchor=(1, 0.5))
-        plotName = vehicle_id + "_Distance_Vs_Time_Signal_Group_" + signal_group + "_run_" + str(run) + ".png"
-        plt.savefig(f'{output_directory_path}/{plotName}')
+            plt.xlim(min_datetime, max_datetime)
+            plt.xlabel('Time')
+            plt.ylabel('Distance Travelled (m)')
+            fig.suptitle(vehicle_id + " Distance vs Time Signal Group " + str(signal_group) + " Run " + str(run))
+            ax1.legend(title='Veh Speed \n(m/s)', loc='center left', bbox_to_anchor=(1, 0.5))
+            plotName = vehicle_id + "_Distance_Vs_Time_Signal_Group_" + signal_group + "_run_" + str(run) + ".png"
+            plt.savefig(f'{output_directory_path}/{plotName}')
+        
+        else:
+            print("No " + str(vehicle_id) + " data for run " + str(run))
 
         run += 1
 

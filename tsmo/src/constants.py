@@ -8,3 +8,6 @@ PLOT_DIR = 'Plots'
 BSM_IDENTIFIER = "0014"
 MOM_IDENTIFIER = "00f3"
 MPM_IDENTIFIER = "00f2"
+DOT_45244_FRONT_BUMPER_DIST = 4 #Blue lexus distance (meters) from rear axle to front bumper from carma.urdf in vehicle calibration repo
+DOT_45245_FRONT_BUMPER_DIST = 4.235 #Black pacifica distance (meters) from rear axle to front bumper from carma.urdf in vehicle calibration repo
+DOT_45254_FRONT_BUMPER_DIST = 4.235 #Ford fusion distance (meters) from rear axle to front bumper from carma.urdf in vehicle calibration repo
