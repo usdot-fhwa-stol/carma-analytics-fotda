@@ -13,6 +13,7 @@ This was a useful demarcation for separating runs but the script might need to b
 
 import csv
 from time import time
+from matplotlib.ticker import AutoMinorLocator
 import matplotlib
 import matplotlib.pyplot as plt
 import datetime
@@ -122,9 +123,17 @@ def plot_run(scheduling_df, modified_spat_df, signal_group, vehicle_id, run):
 
                 ax.hlines(time1, convert_to_datetime(phase_x_min_location), convert_to_datetime(phase_x_max_location), color='red', linewidth=10)
 
-    myFmt_timestamp = mdates.DateFormatter('%H:%M:%S%d') # here you can format your datetick labels as desired
+    myFmt_timestamp = mdates.DateFormatter('%H:%M:%S.%d') # here you can format your datetick labels as desired
+
     plt.gca().xaxis.set_major_formatter(myFmt_timestamp)
     plt.gca().yaxis.set_major_formatter(myFmt_timestamp)
+    # Set minor tick interval for 5
+    plt.gca().yaxis.set_minor_locator(AutoMinorLocator(5))
+    plt.gca().xaxis.set_minor_locator(AutoMinorLocator(5))
+    # Rotate major tick labels on x axis 45 degreess for readability
+    plt.xticks(rotation=45, ha='right')
+
+
     ev_red_patch = mpatches.Patch(color='red', label='EV')
     dv_blue_patch = mpatches.Patch(color='blue', label='DV')
     plt.legend(handles=[ev_red_patch, dv_blue_patch], title="State", loc="upper left")
@@ -132,6 +141,13 @@ def plot_run(scheduling_df, modified_spat_df, signal_group, vehicle_id, run):
     ax.set_ylabel('Entering Times')
     plotTitle = "Signal Group " + str(signal_group) + " " + str(vehicle_id) + " Entering Time Run " + str(run)
     plt.title(plotTitle)
+    
+    # Setup grid
+    # Create grid lines for major ticks for both x and y axis
+    plt.grid()
+    # Create dashed grid lines for minor ticks for both x and y axis
+    plt.grid(b=True, which='minor', color='lightgrey', linestyle='--')
+
     plotName = "Signal_Group_" + str(signal_group) + "_" + vehicle_id + "_Entering_Time_Run_" + str(run) + "_plot.png"
     plt.savefig(f'{output_directory_path}/{plotName}')
 

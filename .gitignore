@@ -1,0 +1,6 @@
+# TSMO Data directory content
+tsmo/data/Plots/*
+tsmo/data/Raw_Log_Files/*
+tsmo/data/Intersection_Model/*
+tsmo/data/Parsed_Log_Output/*
+tsmo/data/*
