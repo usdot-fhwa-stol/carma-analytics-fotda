@@ -121,9 +121,11 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
 
                 plt.xticks(rotation=75)
                 axs=plt.gca()
-                xfmt = md.DateFormatter('%H:%M:%S') 
+                xfmt = md.DateFormatter('%H:%M:%S.%d') 
                 axs.xaxis.set_major_formatter(xfmt)
                 axs.xaxis.set_major_locator(md.SecondLocator(interval=3)) #add tick mark every 3 seconds
+                axs.xaxis.set_minor_locator(AutoMinorLocator(3))
+                axs.yaxis.set_minor_locator(AutoMinorLocator(10))
                 fig.autofmt_xdate()
 
                 min_datetime = dt.datetime.fromtimestamp(status_intent_subset_ev_copy['Timestamp(s)'].min())
@@ -134,6 +136,13 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
                 plt.xlim(min_datetime, max_datetime)
                 plt.xlabel('Time')
                 plt.ylabel('Distance Travelled (m)')
+
+                # Setup grid
+                # Create grid lines for major ticks for both x and y axis
+                plt.grid()
+                # Create dashed grid lines for minor ticks for both x and y axis
+                plt.grid(b=True, which='minor', color='lightgrey', linestyle='--')                
+                
                 fig.suptitle(vehicle_id + " Distance vs Time Signal Group " + str(signal_group) + " Run " + str(run))
                 ax1.legend(title='Veh Speed \n(m/s)', loc='center left', bbox_to_anchor=(1, 0.5))
                 plotName = vehicle_id + "_Distance_Vs_Time_Signal_Group_" + signal_group + "_run_" + str(run) + ".png"
