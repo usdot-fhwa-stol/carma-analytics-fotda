@@ -1,7 +1,7 @@
 """ This is a parsing script that can be used to extract start and end timestamps for a service's processing times. """
 
 ## How to use this script:
-""" Run with python3 service_log_parser.py logName"""
+""" Run with python3 scheduling_service_log_parser.py logName"""
 import sys
 from csv import writer
 import os
@@ -32,7 +32,7 @@ def logParser(logName, serviceName):
                 endSearchString = "Schedule iteration end time"
                 noVehicleString = "No vehicles to schedule"
 
-                csv_writer.writerow(["Scheduling_Start_Time(ms)", "Scheduling_End_Time(ms)"])
+                csv_writer.writerow(["Scheduling_Start_Time(ms)", "Scheduling_End_Time(ms)", "Processing_Time(ms)"])
 
                 #extract relevant elements from the log
                 for i in range(0, len(textList)):
@@ -45,8 +45,11 @@ def logParser(logName, serviceName):
                                     if j < len(textList) and endSearchString in textList[j]:
                                         startTime = textList[i].split(" ")[8].split("!")[0]
                                         endTime = textList[j].split(" ")[8].split("!")[0]
-                                        
-                                        csv_writer.writerow([startTime, endTime])
+                                        processingTime = int(endTime) - int(startTime)
+
+                                        csv_writer.writerow([startTime, endTime, processingTime])
+                                        #break this for loop bc we have found the matching end time
+                                        break
                     except:
                         print("Error extracting start/end times for line: " + str(textList[i]))
 
