@@ -39,9 +39,9 @@ def logParser(logName, serviceName):
                     try:
                         if startSearchString in textList[i]:
                             #Check if there are vehicles to schedule and find the scheduling end times
-                            if noVehicleString not in textList[i+1] and noVehicleString not in textList[i+1]:
+                            if noVehicleString not in textList[i+1]:
                                 #Look for the end time in the next 100 lines
-                                for j in range(i, i+100):
+                                for j in range(i+1, i+100):
                                     if j < len(textList) and endSearchString in textList[j]:
                                         startTime = textList[i].split(" ")[8].split("!")[0]
                                         endTime = textList[j].split(" ")[8].split("!")[0]
