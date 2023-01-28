@@ -17,7 +17,7 @@ def serviceLogParser(logname):
 
     for file in all_in_filenames:
         if logname in file:
-            fileName = file.split(".")[0]
+            fileName = file.split("_")[2]
             #Convert the text file into an array of lines
             with open(f'{input_directory_path}/{file}', encoding="utf8", errors='ignore') as textFile:
                 textList = []
@@ -25,7 +25,8 @@ def serviceLogParser(logname):
                     textList.append(line.strip())
 
             #write data of interest to csv which will be used to produce plots
-            with open(f'{output_directory_path}/{fileName}_parsed.csv', 'w', newline='') as write_obj:
+            print("Creating ", fileName + '_spat_processing_time.csv' )
+            with open(f'{output_directory_path}/{fileName}_spat_processing_time.csv', 'w', newline='') as write_obj:
                 csv_writer = writer(write_obj)
                 csv_writer.writerow(["Epoch_Time(ms)", "Processing_Time(ms)"])
 
