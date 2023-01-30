@@ -17,7 +17,7 @@ def logParser(logName, serviceName):
 
     for file in all_in_filenames:
         if logName in file:
-            fileName = file.split(".")[0]
+            fileName = file.split("_")[2].split(".")[0]
             #Convert the text file into an array of lines
             with open(f'{input_directory_path}/{file}', encoding="utf8", errors='ignore') as textFile:
                 textList = []
@@ -25,7 +25,7 @@ def logParser(logName, serviceName):
                     textList.append(line.strip())
 
             #write data of interest to csv which will be used to produce plots
-            with open(f'{output_directory_path}/{fileName}_parsed.csv', 'w', newline='') as write_obj:
+            with open(f'{output_directory_path}/{fileName}_scheduling_service_processing_time.csv', 'w', newline='') as write_obj:
                 csv_writer = writer(write_obj)
 
                 startSearchString = "Schedule iteration start time"
