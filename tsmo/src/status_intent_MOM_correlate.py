@@ -33,6 +33,8 @@ def plotter(mom_parsed, status_intent_parsed):
     #perform left merge on MOM data
     combined_df = status_intent_data.merge(mom_data, how='left', on='Timestamp(ms)', suffixes=('_SI', '_MOM'))
     combined_df['Processing_Time(ms)'] = combined_df['Create_Time(ms)_SI'] - combined_df['Create_Time(ms)_MOM']
+    combined_df.drop(['Vehicle_ID', 'Cur_ds(m)', 'Cur_Speed', 'Cur_Accel', 
+    'Cur_lane_id', 'Entry_lane_id', 'Link_lane_id', 'Dest_lane_id', 'Vehicle_state'], axis=1, inplace=True)
 
     combined_fileName = status_intent_parsed.split("_")[4] + "_" + status_intent_parsed.split("_")[5] + "_" + status_intent_parsed.split("_")[6]
     combined_df.to_csv(f'{output_directory_path}/{combined_fileName}_MOM_SI_correlate.csv', index=False)
