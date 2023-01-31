@@ -1,7 +1,8 @@
 """ This is an analysis script that can be used to correlate the mobility operations messages with
-the vehicle status and intent messages. to establish the time for a unique MOM to be associated with a 
-specific vehicle status and intent message, the difference in "CreateTime" between the status and intent
-message and the MOM is calculated. """
+the vehicle status and intent messages. This script requires the status and intent data and mobility operations
+message data to be parsed using their respective parser scripts. To establish the time for a unique MOM to be 
+associated with a specific vehicle status and intent message, the difference in "CreateTime" between the status 
+and intent message and the MOM is calculated. """
 
 ## How to use this script:
 """ Run with python3 status_intent_MOM_correlate.py parsedMOMLog parsedStatusIntentLog"""
