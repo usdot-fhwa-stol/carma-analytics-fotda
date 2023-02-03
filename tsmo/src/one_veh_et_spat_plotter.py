@@ -194,8 +194,6 @@ def process_runs(scheduling_log_name, modified_spat_log_name, signal_group):
                     for vehicle_id in vehicle_list:
                         scheduling_df_veh_subset = scheduling_df[scheduling_df['vehicle_id'] == vehicle_id]
                         plot_run(scheduling_df_veh_subset, modified_spat_df, signal_group, vehicle_id, run)
-                        break
-                    break
 
             print("Number of runs: ", run)
 
