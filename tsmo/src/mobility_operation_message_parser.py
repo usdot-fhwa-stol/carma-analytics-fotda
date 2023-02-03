@@ -45,7 +45,7 @@ def kafkaParser(logname):
                                     split_text = "{" + split_text
 
                                     full_json = json.loads(split_text)
-                                    timestamp = full_json['metadata']['timestamp']
+                                    timestamp = full_json['metadata']['timestamp'].lstrip("0")
                             
                                     csv_writer.writerow([create_time, timestamp])
                     except:
@@ -54,7 +54,7 @@ def kafkaParser(logname):
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print('Run with: "python3 desired_phase_plan_parser.py logname"')
+        print('Run with: "python3 mobility_operation_message_parser.py logname"')
     else:       
         logname = sys.argv[1]
         kafkaParser(logname)

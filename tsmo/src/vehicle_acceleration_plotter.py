@@ -55,11 +55,13 @@ def plotter(status_parsed, vehicle_id):
         xfmt = md.DateFormatter('%H:%M:%S') 
         axs.xaxis.set_major_formatter(xfmt)
         fig.autofmt_xdate()
-        plt.xlabel('Date-Time')
-        plt.ylabel('Acceleration (m/s^2)')
+        plt.xlabel('Date-Time', fontsize=18)
+        plt.ylabel('Acceleration (m/s^2)', fontsize=18)
+        plt.xticks(fontsize=15)
+        plt.yticks(fontsize=15)
         plt.ylim(-6, 6)
-        fig.suptitle(vehicle_id + " Acceleration vs Time Run " + str(run))
-        plt.legend()
+        fig.suptitle(vehicle_id + " Acceleration vs Time Run " + str(run), fontsize=18)
+        plt.legend(fontsize=18)
         plotName = vehicle_id + "_Acceleration_vs_Time_Run_" + str(run) + ".png"
         plt.savefig(f'{output_directory_path}/{plotName}')
 

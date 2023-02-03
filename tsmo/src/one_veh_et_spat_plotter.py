@@ -27,6 +27,7 @@ import matplotlib.dates as mdates
 import constants
 import os 
 import numpy as np 
+from matplotlib.lines import Line2D
 
 #Helper method to convert epoch timestamps, in milliseconds, to datetime objects
 def convert_to_datetime(x):
@@ -72,7 +73,7 @@ def plot_run(scheduling_df, modified_spat_df, signal_group, vehicle_id, run):
 
     #plot vehicle entering time vs time
     fig, ax = plt.subplots()
-    fig.set_size_inches(10, 10)
+    fig.set_size_inches(15, 15)
 
     ax.plot(df_ev['datetime'], df_ev['et_datetime'], color = 'red')
     ax.plot(df_dv['datetime'], df_dv['et_datetime'], color = 'blue')
@@ -133,15 +134,23 @@ def plot_run(scheduling_df, modified_spat_df, signal_group, vehicle_id, run):
     # Rotate major tick labels on x axis 45 degreess for readability
     plt.xticks(rotation=45, ha='right')
 
-
     ev_red_patch = mpatches.Patch(color='red', label='EV')
     dv_blue_patch = mpatches.Patch(color='blue', label='DV')
     plt.legend(handles=[ev_red_patch, dv_blue_patch], title="State", loc="upper left")
-    ax.set_xlabel('Time')
-    ax.set_ylabel('Entering Times')
+    ax.set_xlabel('Time', fontsize=18)
+    ax.set_ylabel('Entering Times', fontsize=18)
     plotTitle = "Signal Group " + str(signal_group) + " " + str(vehicle_id) + " Entering Time Run " + str(run)
-    plt.title(plotTitle)
+    plt.title(plotTitle, fontsize=18)
+    plt.xticks(fontsize=15)
+    plt.yticks(fontsize=15)
     
+    #create custom legend
+    custom_lines = [Line2D([0], [0], color="g", lw=5),
+                    Line2D([0], [0], color="yellow", lw=5),
+                    Line2D([0], [0], color="r", lw=5)]
+    ax.legend(custom_lines, ['Green\nPhase', 'Yellow\nPhase', 'Red\nPhase'], loc='upper right', bbox_to_anchor=(1.14, 1.02),
+    fontsize=15)
+
     # Setup grid
     # Create grid lines for major ticks for both x and y axis
     plt.grid()
@@ -185,6 +194,8 @@ def process_runs(scheduling_log_name, modified_spat_log_name, signal_group):
                     for vehicle_id in vehicle_list:
                         scheduling_df_veh_subset = scheduling_df[scheduling_df['vehicle_id'] == vehicle_id]
                         plot_run(scheduling_df_veh_subset, modified_spat_df, signal_group, vehicle_id, run)
+                        break
+                    break
 
             print("Number of runs: ", run)
 

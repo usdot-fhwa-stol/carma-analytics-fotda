@@ -59,25 +59,31 @@ def plotter(messageType, start, end):
     #plot the message frequencies vs time, as well as the max/min range value based on message type
     fig, ax1 = plt.subplots()
     fig.set_size_inches(10, 10)        
-    plt.scatter([i[0] for i in tenValueAverages], [i[1] for i in tenValueAverages], c="blue", marker="^", label=messageType)
+    plt.scatter([i[0] for i in tenValueAverages], [i[1] for i in tenValueAverages], c="blue", marker="^", label=messageType+" freq (hz)")
     # spat broadcast requirement is 10Hz +/- 5, MOM is 1Hz +/- 0.5
     if messageType == "spat":
         plt.axhline(y=5, color='r', linestyle='--', label="frequency lower bound")
         plt.axhline(y=15, color='r', linestyle='-', label="frequency upper bound")
     elif messageType == "scheduling_plan":
-        plt.axhline(y=0.5, color='r', linestyle='--', label="frequency lower bound")
-        plt.axhline(y=1.5, color='r', linestyle='-', label="frequency upper bound")
+        plt.axhline(y=4, color='r', linestyle='--', label="frequency lower bound")
+        plt.axhline(y=6, color='r', linestyle='-', label="frequency upper bound")
 
     plt.xticks(rotation=75)
     axs=plt.gca()
     xfmt = md.DateFormatter('%H:%M:%S') 
     axs.xaxis.set_major_formatter(xfmt)
     fig.autofmt_xdate()
-    plt.xlabel('Date-Time')
-    plt.ylabel('Frequency (Hz)')
+    plt.xlabel('Date-Time', fontsize=18)
+    plt.ylabel('Frequency (Hz)', fontsize=18)
     plt.xlim(min_time, max_time)
-    fig.suptitle(str(messageType).replace("_", " ") + " message frequency")
-    plt.legend()
+    if messageType == "spat":
+        plt.ylim(0, 20)
+    else:
+        plt.ylim(0, 10)
+    fig.suptitle(str(messageType).replace("_", " ") + " message frequency", fontsize=18)
+    plt.xticks(fontsize=15)
+    plt.yticks(fontsize=15)
+    plt.legend(fontsize=15)
     plotName = str(messageType) + "_message_frequency.png"
     plt.savefig(f'{output_directory_path}/{plotName}')
 

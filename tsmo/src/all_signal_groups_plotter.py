@@ -17,6 +17,7 @@ import os
 from matplotlib.ticker import (MultipleLocator, FormatStrFormatter, AutoMinorLocator)
 import datetime as dt
 import matplotlib.dates as md
+from matplotlib.lines import Line2D
 pd.options.mode.chained_assignment = None
 
 # This method will read the parsed spat data produced by the modified_spat_parser script. It then will
@@ -51,7 +52,7 @@ def plotter(spatParsedFile, desiredPhasePlanParsedFile):
         max_datetime = dt.datetime.fromtimestamp(max_time)
 
         fig, ax1 = plt.subplots()
-        fig.set_size_inches(10, 10)
+        fig.set_size_inches(14, 14)
 
         #Get unique create times and signal groups for the dpp run data
         create_times = dpp['Timestamp(ms)'].unique()
@@ -127,9 +128,19 @@ def plotter(spatParsedFile, desiredPhasePlanParsedFile):
         plt.ylim(0, 12)
         ax1.set_yticks([0,1,2,3,4,5,6,7,8,9,10,11,12])
         ax1.set_yticklabels(["", "DPP", "East", "", "", "South", "", "", "West", "", "", "North", ""])
-        plt.xlabel('Date-Time')
-        plt.ylabel('Signal Group')
-        fig.suptitle("Signal Group Event State vs Time Run " + str(run))
+        plt.xlabel('Date-Time', fontsize=18)
+        plt.ylabel('Signal Group', fontsize=18)
+        plt.xticks(fontsize=15)
+        plt.yticks(fontsize=15)
+
+        #create custom legend
+        custom_lines = [Line2D([0], [0], color="g", lw=4),
+                        Line2D([0], [0], color="yellow", lw=4),
+                        Line2D([0], [0], color="r", lw=4)]
+        ax1.legend(custom_lines, ['Green\nPhase', 'Yellow\nPhase', 'Red\nPhase'], loc='upper right', bbox_to_anchor=(1.14, 1.02),
+        fontsize=15)
+
+        fig.suptitle("Signal Group Event State vs Time Run " + str(run), fontsize=18)
         plotName = "Signal_Groups_Event_State_Vs_Time_Run_"+str(run)+".png"
         plt.savefig(f'{output_directory_path}/{plotName}')
 

@@ -134,8 +134,10 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
                 ax1.hlines(lanelet_length, min_datetime, max_datetime, color='orange', linewidth=2, label="stop\n bar")
 
                 plt.xlim(min_datetime, max_datetime)
-                plt.xlabel('Time')
-                plt.ylabel('Distance Travelled (m)')
+                plt.xlabel('Time', fontsize=18)
+                plt.ylabel('Distance Travelled (m)', fontsize=18)
+                plt.xticks(fontsize=15)
+                plt.yticks(fontsize=15)
 
                 # Setup grid
                 # Create grid lines for major ticks for both x and y axis
@@ -143,7 +145,7 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
                 # Create dashed grid lines for minor ticks for both x and y axis
                 plt.grid(b=True, which='minor', color='lightgrey', linestyle='--')                
                 
-                fig.suptitle(vehicle_id + " Distance vs Time Signal Group " + str(signal_group) + " Run " + str(run))
+                fig.suptitle(vehicle_id + " Distance vs Time Signal Group " + str(signal_group) + " Run " + str(run), fontsize=18)
                 ax1.legend(title='Veh Speed \n(m/s)', loc='center left', bbox_to_anchor=(1, 0.5))
                 plotName = vehicle_id + "_Distance_Vs_Time_Signal_Group_" + signal_group + "_run_" + str(run) + ".png"
                 plt.savefig(f'{output_directory_path}/{plotName}')
