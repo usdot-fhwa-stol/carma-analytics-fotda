@@ -84,7 +84,22 @@ def plotter(messageType, start, end):
     plt.xticks(fontsize=15)
     plt.yticks(fontsize=15)
     plt.legend(fontsize=15)
-    plotName = str(messageType) + "_message_frequency.png"
+
+    if messageType == "spat":
+        plotName = "Carma_Streets_Spat_Tx_Frequency.png"
+        fig.suptitle("Carma Streets Spat Tx Frequency", fontsize=18)
+    elif messageType == "scheduling_plan":
+        plotName = "Carma_Streets_MOM_Tx_Frequency.png"
+        fig.suptitle("Carma Streets MOM Tx Frequency", fontsize=18)
+    elif messageType == "bsm_in":
+        plotName = "Carma_Platform_BSM_Tx_Frequency.png"
+        fig.suptitle("Carma Platform BSM Tx Frequency", fontsize=18)
+    elif messageType == "mom_in":
+        plotName = "Carma_Platform_MOM_Tx_Frequency.png"
+        fig.suptitle("Carma Platform MOM Tx Frequency", fontsize=18)
+    elif messageType == "mpm_in":
+        plotName = "Carma_Platform_MPM_Tx_Frequency.png"
+        fig.suptitle("Carma Platform MPM Tx Frequency", fontsize=18)
     plt.savefig(f'{output_directory_path}/{plotName}')
 
 
