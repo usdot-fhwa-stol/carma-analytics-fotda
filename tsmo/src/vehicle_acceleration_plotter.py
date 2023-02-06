@@ -37,34 +37,37 @@ def plotter(status_parsed, vehicle_id):
     for status_intent_subset in status_intent_list:
         #Get subset of data for the specified vehicle id
         vehicle_subset = status_intent_subset[status_intent_subset['Vehicle_ID'] == vehicle_id]
-        vehicle_subset_copy = vehicle_subset.copy()
-        vehicle_subset_copy['Timestamp(s)'] = vehicle_subset_copy['Timestamp(ms)'] / 1000
 
-        #Convert epoch timestamps to date-time
-        dates=[dt.datetime.fromtimestamp(ts) for ts in vehicle_subset_copy["Timestamp(s)"]]
-            
-        #plot the vehicle accelartion vs time
-        fig, ax1 = plt.subplots()
-        fig.set_size_inches(10, 10)        
-        plt.scatter(dates, vehicle_subset_copy['Cur_Accel'], c="blue", marker="^")
-        # acceleration limits are 3/-3 m/s^2
-        plt.axhline(y=3, color='r', linestyle='--', label="accel lower bound")
-        plt.axhline(y=-3, color='r', linestyle='-', label="accel upper bound")
-        plt.xticks(rotation=75)
-        axs=plt.gca()
-        xfmt = md.DateFormatter('%H:%M:%S') 
-        axs.xaxis.set_major_formatter(xfmt)
-        fig.autofmt_xdate()
-        plt.xlabel('Date-Time', fontsize=18)
-        plt.ylabel('Acceleration (m/s^2)', fontsize=18)
-        plt.xticks(fontsize=15)
-        plt.yticks(fontsize=15)
-        plt.ylim(-6, 6)
-        fig.suptitle(vehicle_id + " Acceleration vs Time Run " + str(run), fontsize=18)
-        plt.legend(fontsize=18)
-        plotName = vehicle_id + "_Acceleration_vs_Time_Run_" + str(run) + ".png"
-        plt.savefig(f'{output_directory_path}/{plotName}')
+        if len(vehicle_subset) != 0:
+            vehicle_subset_copy = vehicle_subset.copy()
+            vehicle_subset_copy['Timestamp(s)'] = vehicle_subset_copy['Timestamp(ms)'] / 1000
 
+            #Convert epoch timestamps to date-time
+            dates=[dt.datetime.fromtimestamp(ts) for ts in vehicle_subset_copy["Timestamp(s)"]]
+                
+            #plot the vehicle accelartion vs time
+            fig, ax1 = plt.subplots()
+            fig.set_size_inches(10, 10)        
+            plt.scatter(dates, vehicle_subset_copy['Cur_Accel'], c="blue", marker="^")
+            # acceleration limits are 3/-3 m/s^2
+            plt.axhline(y=3, color='r', linestyle='--', label="accel lower bound")
+            plt.axhline(y=-3, color='r', linestyle='-', label="accel upper bound")
+            plt.xticks(rotation=75)
+            axs=plt.gca()
+            xfmt = md.DateFormatter('%H:%M:%S') 
+            axs.xaxis.set_major_formatter(xfmt)
+            fig.autofmt_xdate()
+            plt.xlabel('Date-Time', fontsize=18)
+            plt.ylabel('Acceleration (m/s^2)', fontsize=18)
+            plt.xticks(fontsize=15)
+            plt.yticks(fontsize=15)
+            plt.ylim(-6, 6)
+            fig.suptitle(vehicle_id + " Acceleration vs Time Run " + str(run), fontsize=18)
+            plt.legend(fontsize=18)
+            plotName = vehicle_id + "_Acceleration_vs_Time_Run_" + str(run) + ".png"
+            plt.savefig(f'{output_directory_path}/{plotName}')
+            fig.clf()
+            plt.close()
         run += 1
 
 

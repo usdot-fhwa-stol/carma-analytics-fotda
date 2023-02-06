@@ -158,7 +158,9 @@ def plotter(spatParsedFile, desiredPhasePlanParsedFile):
         fig.suptitle("Signal Group Event State vs Time Run " + str(run), fontsize=18)
         plotName = "Signal_Groups_Event_State_Vs_Time_Run_"+str(run)+".png"
         plt.savefig(f'{output_directory_path}/{plotName}')
-
+        fig.clf()
+        plt.close()
+        
 if __name__ == '__main__':
     if len(sys.argv) < 3:
         print('Run with: "python3 all_signal_groups_plotter.py spatParsedFile desiredPhasePlanParsedFile"')
