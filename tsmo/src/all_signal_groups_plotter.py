@@ -68,6 +68,21 @@ def plotter(spatParsedFile, desiredPhasePlanParsedFile):
                     time1 = dt.datetime.fromtimestamp(group_start_time / 1000)
                     time2 = dt.datetime.fromtimestamp(group_end_time / 1000)
                     ax1.hlines(1, time1, time2, color='green', linewidth=10)
+
+                    #add text box with signal group number in middle of the green box
+                    text_time = (group_end_time + group_start_time) / 2
+                    text_time_dt = dt.datetime.fromtimestamp(text_time / 1000)
+                    
+                    label = ""
+                    if group == 2:
+                        label = "East"
+                    elif group == 5:
+                        label = "South"
+                    elif group == 8:
+                        label = "West"
+                    elif group == 11:
+                        label = "North"
+                    plt.text(text_time_dt, 0.95, label, fontweight='bold', fontsize=16, ha='center')
                 except:
                     continue            
 

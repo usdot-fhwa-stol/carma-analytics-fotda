@@ -15,7 +15,7 @@ import re
 #parser method to extract necessary fields from raw text file
 def kafkaParser(logname):
     input_directory_path = f'{constants.DATA_DIR}/{constants.RAW_LOG_DIR}'
-    output_directory_path = f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}'
+    output_directory_path = f'{constants.DATA_DIR}/{constants.TIMESTAMP_DIR}'
     all_in_filenames = os.listdir(input_directory_path)
 
     for file in all_in_filenames:
@@ -27,8 +27,14 @@ def kafkaParser(logname):
                 for line in textFile:
                     textList.append(line.strip().replace("\n", ""))
 
+            outputFileName = ""
+            if "scheduling_plan" in fileName:
+                outputFileName = "Streets_mom"
+            elif "modified_spat" in fileName:
+                outputFileName = "Streets_spat"
+                
             #write data of interest to csv which will be used to produce plots
-            with open(f'{output_directory_path}/{fileName}_timestamps.csv', 'w', newline='') as write_obj:
+            with open(f'{output_directory_path}/{outputFileName}_timestamps.csv', 'w', newline='') as write_obj:
                 csv_writer = writer(write_obj)
                 csv_writer.writerow(["Message_Count", "Timestamp(ms)"])
 

@@ -37,94 +37,70 @@ def averageCalc(df, window, messageType):
 
 #Plots the frequency values versus datetime for the specific message type using the start and end timestamps provided
 #by the user
-def plotter(messageType, start, end):
-    input_directory_path = f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}'
+def plotter():
+    input_directory_path = f'{constants.DATA_DIR}/{constants.TIMESTAMP_DIR}'
     output_directory_path = f'{constants.DATA_DIR}/{constants.PLOT_DIR}'
     
     all_in_filenames = os.listdir(input_directory_path)
     #find the parsed file with the message type of interest
     for filename in all_in_filenames:
-        if messageType in filename and "timestamps" in filename:
+        try:
+            messageType = filename.split(".")[0].split("_timestamps")[0]
+
             data = pd.read_csv(f'{input_directory_path}/{filename}')
-    
-    #bin the data using the start and end time
-    start_end_data = data[(data['Timestamp(ms)'] >= int(start))&(data['Timestamp(ms)'] <= int(end))]
-    
-    min_time = dt.datetime.fromtimestamp(start_end_data['Timestamp(ms)'].iloc[0] / 1000)
-    max_time = dt.datetime.fromtimestamp(start_end_data['Timestamp(ms)'].iloc[-1] / 1000)
 
-    #Get the array of frequencies and datetimes for the message type, using a bin size of 10 messages
-    tenValueAverages = averageCalc(data, 10, messageType)           
+            start = data['Timestamp(ms)'].iloc[0]
+            end = data['Timestamp(ms)'].iloc[-1]
 
-    #plot the message frequencies vs time, as well as the max/min range value based on message type
-    fig, ax1 = plt.subplots()
-    fig.set_size_inches(10, 10)        
-    plt.scatter([i[0] for i in tenValueAverages], [i[1] for i in tenValueAverages], c="blue", marker="^", label=messageType+" freq (hz)")
-    # spat broadcast requirement is 10Hz +/- 5, MOM is 1Hz +/- 0.5
-    if messageType == "spat":
-        plt.axhline(y=5, color='r', linestyle='--', label="frequency lower bound")
-        plt.axhline(y=15, color='r', linestyle='-', label="frequency upper bound")
-    elif messageType == "scheduling_plan":
-        plt.axhline(y=4, color='r', linestyle='--', label="frequency lower bound")
-        plt.axhline(y=6, color='r', linestyle='-', label="frequency upper bound")
+            #bin the data using the start and end time
+            start_end_data = data[(data['Timestamp(ms)'] >= int(start))&(data['Timestamp(ms)'] <= int(end))]
+            
+            min_time = dt.datetime.fromtimestamp(start_end_data['Timestamp(ms)'].iloc[0] / 1000)
+            max_time = dt.datetime.fromtimestamp(start_end_data['Timestamp(ms)'].iloc[-1] / 1000)
 
-    plt.xticks(rotation=75)
-    axs=plt.gca()
-    xfmt = md.DateFormatter('%H:%M:%S') 
-    axs.xaxis.set_major_formatter(xfmt)
-    fig.autofmt_xdate()
-    plt.xlabel('Date-Time', fontsize=18)
-    plt.ylabel('Frequency (Hz)', fontsize=18)
-    plt.xlim(min_time, max_time)
-    if messageType == "spat":
-        plt.ylim(0, 20)
-    else:
-        plt.ylim(0, 10)
-    fig.suptitle(str(messageType).replace("_", " ") + " message frequency", fontsize=18)
-    plt.xticks(fontsize=15)
-    plt.yticks(fontsize=15)
-    plt.legend(fontsize=15)
+            #Get the array of frequencies and datetimes for the message type, using a bin size of 10 messages
+            tenValueAverages = averageCalc(data, 10, messageType)           
 
-    if messageType == "spat":
-        plotName = "Carma_Streets_Spat_Tx_Frequency.png"
-        fig.suptitle("Carma Streets Spat Tx Frequency", fontsize=18)
-    elif messageType == "scheduling_plan":
-        plotName = "Carma_Streets_MOM_Tx_Frequency.png"
-        fig.suptitle("Carma Streets MOM Tx Frequency", fontsize=18)
-    elif messageType == "bsm_in":
-        plotName = "Carma_Platform_BSM_Tx_Frequency.png"
-        fig.suptitle("Carma Platform BSM Tx Frequency", fontsize=18)
-    elif messageType == "mom_in":
-        plotName = "Carma_Platform_MOM_Tx_Frequency.png"
-        fig.suptitle("Carma Platform MOM Tx Frequency", fontsize=18)
-    elif messageType == "mpm_in":
-        plotName = "Carma_Platform_MPM_Tx_Frequency.png"
-        fig.suptitle("Carma Platform MPM Tx Frequency", fontsize=18)
-    plt.savefig(f'{output_directory_path}/{plotName}')
+            #plot the message frequencies vs time, as well as the max/min range value based on message type
+            fig, ax1 = plt.subplots()
+            fig.set_size_inches(10, 10)        
+            plt.scatter([i[0] for i in tenValueAverages], [i[1] for i in tenValueAverages], c="blue", marker="^", label="Freq (hz)")
+            # Add horizontal lines for differing freq requirements based on message type
+            if "Streets_mom" in filename:
+                plt.axhline(y=2, color='r', linestyle='--', label="frequency lower bound")
+                plt.axhline(y=8, color='r', linestyle='-', label="frequency upper bound")
+            elif "Streets_spat" in filename :
+                plt.axhline(y=5, color='r', linestyle='--', label="frequency lower bound")
+                plt.axhline(y=15, color='r', linestyle='-', label="frequency upper bound")
+            else:
+                plt.axhline(y=7, color='r', linestyle='--', label="frequency lower bound")
+                plt.axhline(y=13, color='r', linestyle='-', label="frequency upper bound")
+
+            plt.xticks(rotation=75)
+            axs=plt.gca()
+            xfmt = md.DateFormatter('%H:%M:%S') 
+            axs.xaxis.set_major_formatter(xfmt)
+            fig.autofmt_xdate()
+            plt.xlabel('Date-Time', fontsize=18)
+            plt.ylabel('Frequency (Hz)', fontsize=18)
+            plt.xlim(min_time, max_time)
+            plt.ylim(0, 20)
+            fig.suptitle(str(messageType).replace("_", " ") + " message frequency", fontsize=18)
+            plt.xticks(fontsize=15)
+            plt.yticks(fontsize=15)
+            plt.legend(fontsize=15)
+            plotName = filename.split(".")[0].split("_timestamps")[0]
+            fig.suptitle(plotName.replace("_", " ") + " Frequency", fontsize=18)
+            plt.savefig(f'{output_directory_path}/{plotName}')
+            fig.clf()
+            plt.close()
+        except:
+            print("Error producing freq plot for " + str(filename))
+            continue
 
 
 if __name__ == '__main__':
-    if len(sys.argv) < 4:
-        print('Run with: "python3 frequency_plotter.py messageType(MOM, SPAT, BSM_in, MOM_in, MPM_in) startTime(epoch milliseconds) endTime(epoch milliseconds)"')
-    else:  
-        message = sys.argv[1] 
-        start = sys.argv[2]
-        end = sys.argv[3]
-
-        #map user input to the file naming convention used in the kafka logs and then call the plotter method
-        messageType = ""
-        if message == "MOM":
-            messageType = "scheduling_plan"
-        elif message == "SPAT":
-            messageType = "spat"
-        elif message == "BSM_in":
-            messageType = "bsm_in"
-        elif message == "MOM_in":
-            messageType = "mom_in"
-        elif message == "MPM_in":
-            messageType = "mpm_in"
-        else:
-            print("Please input a message type from the available options (MOM, SPAT, BSM_in, MOM_in, MPM_in)")
-            exit()
-
-        plotter(messageType, start, end)  
+    if len(sys.argv) < 1:
+        print('Run with: "python3 frequency_plotter.py"')
+    else:        
+        plotter()  

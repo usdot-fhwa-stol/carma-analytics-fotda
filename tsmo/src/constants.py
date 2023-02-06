@@ -4,6 +4,7 @@ RAW_PCAP_DIR = 'Raw_PCAP_Files'
 TSHARK_DIR = 'Tshark_Files'
 INTERSECTION_MODEL_DIR = 'Intersection_Model'
 PARSED_OUTPUT_DIR = 'Parsed_Log_Output'
+TIMESTAMP_DIR = 'Timestamp_Files'
 PLOT_DIR = 'Plots'
 BSM_IDENTIFIER = "0014"
 MOM_IDENTIFIER = "00f3"

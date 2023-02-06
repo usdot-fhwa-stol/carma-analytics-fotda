@@ -1,7 +1,7 @@
 """This script is used to extract the timestamp and payload for every packet sent by the Carma platform OBU. The raw data
 is in the form of a pcap file and is extracted using the Wireshark command line tool "tshark". """
 ## How to use this script:
-""" Run with python3 platform_obu_pcap_parser.py pcapFileName"""
+""" Run with python3 platform_obu_pcap_parser.py"""
 import sys
 import os
 import constants
@@ -11,14 +11,13 @@ import sys
 import shutil
 
 #This function utilizes tshark to extract each packet's timestamp and full hex payload to a csv
-def convert_pcap_to_csv(pcapFile):
+def convert_pcap_to_csv():
     pcap_directory_path = f'{constants.DATA_DIR}/{constants.RAW_PCAP_DIR}'
     tshark_directory_path = f'{constants.DATA_DIR}/{constants.TSHARK_DIR}'
 
     all_in_files = os.listdir(pcap_directory_path)
 
     for file in all_in_files:
-        if pcapFile in file:
             abs_filename = file.split(".")[0] # gets the name of file by removing pcap suffix
             status = os.system(f'tshark -r {pcap_directory_path}/{file} \
                                 --disable-protocol wsmp \
@@ -82,41 +81,38 @@ def get_payload_mpm(row):
 
 #This function will read the tshark file and create separate files containing the timestamps and hex payloads of each desired
 #message type.
-def payloadHelper(pcapFile):
+def payloadHelper():
     tshark_directory_path = f'{constants.DATA_DIR}/{constants.TSHARK_DIR}'
-    output_directory_path = f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}'
+    output_directory_path = f'{constants.DATA_DIR}/{constants.TIMESTAMP_DIR}'
 
-    for filename in os.listdir(tshark_directory_path):
-        searchName = pcapFile.split(".")[0]
-        if searchName in filename:
-            abs_filename = filename.split('.csv')[0]
+    for filename in os.listdir(tshark_directory_path):        
+        abs_filename = filename.split('.csv')[0]
+        output_filename = abs_filename.split("_")[1] + "_" + abs_filename.split("_")[2] + "_" + abs_filename.split("_")[3] 
+        
+        #read the tshark file and create a file containing timestamps and payloads
+        df_tshark_output = pd.read_csv(f'{tshark_directory_path}/{filename}')
+        df_data_bsm = {'Timestamp(ms)': (df_tshark_output.iloc[:,0]*1000), 'payload': df_tshark_output.apply(lambda row: get_payload_bsm(row), axis=1)}
+        df_data_mom = {'Timestamp(ms)': (df_tshark_output.iloc[:,0]*1000), 'payload': df_tshark_output.apply(lambda row: get_payload_mom(row), axis=1)}
+        df_data_mpm = {'Timestamp(ms)': (df_tshark_output.iloc[:,0]*1000), 'payload': df_tshark_output.apply(lambda row: get_payload_mpm(row), axis=1)}
 
-            #read the tshark file and create a file containing timestamps and payloads
-            df_tshark_output = pd.read_csv(f'{tshark_directory_path}/{filename}')
-            df_data_bsm = {'Timestamp(ms)': (df_tshark_output.iloc[:,0]*1000), 'payload': df_tshark_output.apply(lambda row: get_payload_bsm(row), axis=1)}
-            df_data_mom = {'Timestamp(ms)': (df_tshark_output.iloc[:,0]*1000), 'payload': df_tshark_output.apply(lambda row: get_payload_mom(row), axis=1)}
-            df_data_mpm = {'Timestamp(ms)': (df_tshark_output.iloc[:,0]*1000), 'payload': df_tshark_output.apply(lambda row: get_payload_mpm(row), axis=1)}
+        payload_bsm = pd.DataFrame(data=df_data_bsm)
+        payload_mom = pd.DataFrame(data=df_data_mom)
+        payload_mpm = pd.DataFrame(data=df_data_mpm)
 
-            payload_bsm = pd.DataFrame(data=df_data_bsm)
-            payload_mom = pd.DataFrame(data=df_data_mom)
-            payload_mpm = pd.DataFrame(data=df_data_mpm)
-
-            # dropping empty rows
-            payload_bsm = payload_bsm[payload_bsm["payload"] != ""]
-            payload_mom = payload_mom[payload_mom["payload"] != ""]
-            payload_mpm = payload_mpm[payload_mpm["payload"] != ""]
-            
-            payload_bsm.to_csv(f'{output_directory_path}/{abs_filename}_payload_bsm_in_timestamps.csv', index=False)
-            payload_mom.to_csv(f'{output_directory_path}/{abs_filename}_payload_mom_in_timestamps.csv', index=False)
-            payload_mpm.to_csv(f'{output_directory_path}/{abs_filename}_payload_mpm_in_timestamps.csv', index=False)
+        # dropping empty rows
+        payload_bsm = payload_bsm[payload_bsm["payload"] != ""]
+        payload_mom = payload_mom[payload_mom["payload"] != ""]
+        payload_mpm = payload_mpm[payload_mpm["payload"] != ""]
+        
+        payload_bsm.to_csv(f'{output_directory_path}/{output_filename}_bsm_timestamps.csv', index=False)
+        payload_mom.to_csv(f'{output_directory_path}/{output_filename}_mom_timestamps.csv', index=False)
+        payload_mpm.to_csv(f'{output_directory_path}/{output_filename}_mpm_timestamps.csv', index=False)
 
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print('Run with python3 platform_obu_pcap_parser.py pcapFileName')
+    if len(sys.argv) < 1:
+        print('Run with python3 platform_obu_pcap_parser.py')
     else:
-        pcapFile = sys.argv[1]
-
-        convert_pcap_to_csv(pcapFile)
-        payloadHelper(pcapFile)
+        convert_pcap_to_csv()
+        payloadHelper()
         
