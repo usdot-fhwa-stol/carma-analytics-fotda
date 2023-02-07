@@ -115,8 +115,8 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
                 elif vehicle_id == "DOT-45245":
                     sns.scatterplot(data=status_intent_subset_ev_copy, x=dates, y=lanelet_length - (status_intent_subset_ev_copy['Cur_ds(m)']-constants.DOT_45245_FRONT_BUMPER_DIST), 
                     hue=status_intent_subset_ev['Cur_Speed'], hue_order=status_intent_subset_ev_copy['Cur_Speed'], palette='viridis', ax=ax1)
-                elif vehicle_id == "DOT-45254":
-                    sns.scatterplot(data=status_intent_subset_ev_copy, x=dates, y=lanelet_length - (status_intent_subset_ev_copy['Cur_ds(m)']-constants.DOT_45254_FRONT_BUMPER_DIST), 
+                elif vehicle_id == "DOT-45243":
+                    sns.scatterplot(data=status_intent_subset_ev_copy, x=dates, y=lanelet_length - (status_intent_subset_ev_copy['Cur_ds(m)']-constants.DOT_45243_FRONT_BUMPER_DIST), 
                     hue=status_intent_subset_ev['Cur_Speed'], hue_order=status_intent_subset_ev_copy['Cur_Speed'], palette='viridis', ax=ax1)
 
                 plt.xticks(rotation=75)
@@ -149,6 +149,8 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
                 ax1.legend(title='Veh Speed \n(m/s)', loc='center left', bbox_to_anchor=(1, 0.5))
                 plotName = vehicle_id + "_Distance_Vs_Time_Signal_Group_" + signal_group + "_run_" + str(run) + ".png"
                 plt.savefig(f'{output_directory_path}/{plotName}')
+                fig.clf()
+                plt.close()
             else:
                 print("No valid entry lane id for run " + str(run))
         else:

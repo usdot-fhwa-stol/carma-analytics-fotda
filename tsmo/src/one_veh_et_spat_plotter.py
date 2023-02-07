@@ -159,6 +159,8 @@ def plot_run(scheduling_df, modified_spat_df, signal_group, vehicle_id, run):
 
     plotName = "Signal_Group_" + str(signal_group) + "_" + vehicle_id + "_Entering_Time_Run_" + str(run) + "_plot.png"
     plt.savefig(f'{output_directory_path}/{plotName}')
+    fig.clf()
+    plt.close()
 
 #This function will first separate the data in the scheduling log csv file into separate dataframes for each run 
 #and for each vehicle in the run. It then hands the separated data frames to the plot_run function along with the 
@@ -193,7 +195,14 @@ def process_runs(scheduling_log_name, modified_spat_log_name, signal_group):
 
                     for vehicle_id in vehicle_list:
                         scheduling_df_veh_subset = scheduling_df[scheduling_df['vehicle_id'] == vehicle_id]
-                        plot_run(scheduling_df_veh_subset, modified_spat_df, signal_group, vehicle_id, run)
+                        #Use plotter function if signal group and vehicle id match from verification testing
+                        if int(signal_group) == 2 and vehicle_id == "DOT-45244":
+                            plot_run(scheduling_df_veh_subset, modified_spat_df, signal_group, vehicle_id, run)
+                        elif int(signal_group) == 8 and vehicle_id == "DOT-45245":
+                            plot_run(scheduling_df_veh_subset, modified_spat_df, signal_group, vehicle_id, run)
+                        elif int(signal_group) == 5 and vehicle_id == "DOT-45243":
+                            plot_run(scheduling_df_veh_subset, modified_spat_df, signal_group, vehicle_id, run)
+
 
             print("Number of runs: ", run)
 

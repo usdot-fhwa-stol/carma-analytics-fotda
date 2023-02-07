@@ -66,10 +66,10 @@ def plotter():
             fig.set_size_inches(10, 10)        
             plt.scatter([i[0] for i in tenValueAverages], [i[1] for i in tenValueAverages], c="blue", marker="^", label="Freq (hz)")
             # Add horizontal lines for differing freq requirements based on message type
-            if "Streets_mom" in filename:
+            if "rsu_out_mom" in filename:
                 plt.axhline(y=2, color='r', linestyle='--', label="frequency lower bound")
                 plt.axhline(y=8, color='r', linestyle='-', label="frequency upper bound")
-            elif "Streets_spat" in filename :
+            elif "rsu_out_spat" in filename :
                 plt.axhline(y=5, color='r', linestyle='--', label="frequency lower bound")
                 plt.axhline(y=15, color='r', linestyle='-', label="frequency upper bound")
             else:
