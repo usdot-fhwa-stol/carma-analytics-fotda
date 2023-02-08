@@ -30,10 +30,6 @@ def serviceLogParser(logname):
                 csv_writer = writer(write_obj)
                 csv_writer.writerow(["Epoch_Time(ms)", "Processing_Time(ms)"])
 
-                #Need to get time since epoch of first day of year to use with moy and timestamp
-                #Our local timezone GMT-5 actually needs to be implemented as GMT+5 with pytz library
-                #documentation: https://stackoverflow.com/questions/54842491/printing-datetime-as-pytz-timezoneetc-gmt-5-yields-incorrect-result
-                
                 #extract relevant elements from the json
                 for i in range(0, len(textList)):
                     try:
@@ -48,7 +44,7 @@ def serviceLogParser(logname):
                             processing_time = res[1]
                             csv_writer.writerow([timestamp, processing_time])
                             if processing_time > 10 : 
-                                print("Warning Spat processing time is ", processing_time, ". If value exceeds 50 ms, this would be off conern. Any value above 10 ms should be noted as it is significantly larger than values normally observed.")
+                                print("Warning Spat processing time is ", processing_time, " at time ", date_time, ". If value exceeds 50 ms, this would be off conern. Any value above 10 ms should be noted as it is significantly larger than values normally observed.")
 
                                 
      
@@ -59,9 +55,6 @@ def serviceLogParser(logname):
                 csv_writer = writer(write_obj)
                 csv_writer.writerow(["DPP_Received_Time(ms)", "Command_Queue_Update_Time(ms)", "Processing_Time(ms)"])
 
-                #Need to get time since epoch of first day of year to use with moy and timestamp
-                #Our local timezone GMT-5 actually needs to be implemented as GMT+5 with pytz library
-                #documentation: https://stackoverflow.com/questions/54842491/printing-datetime-as-pytz-timezoneetc-gmt-5-yields-incorrect-result
                 
                 #extract relevant elements from the json
                 for i in range(0, len(textList)):
