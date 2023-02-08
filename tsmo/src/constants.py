@@ -6,6 +6,7 @@ INTERSECTION_MODEL_DIR = 'Intersection_Model'
 PARSED_OUTPUT_DIR = 'Parsed_Log_Output'
 TIMESTAMP_DIR = 'Timestamp_Files'
 PLOT_DIR = 'Plots'
+METRIC_DIR = 'Metrics'
 BSM_IDENTIFIER = "0014"
 MOM_IDENTIFIER = "00f3"
 MPM_IDENTIFIER = "00f2"

@@ -50,8 +50,8 @@ def plotter(status_parsed, vehicle_id):
             fig.set_size_inches(10, 10)        
             plt.scatter(dates, vehicle_subset_copy['Cur_Accel'], c="blue", marker="^")
             # acceleration limits are 3/-3 m/s^2
-            plt.axhline(y=3, color='r', linestyle='--', label="accel lower bound")
-            plt.axhline(y=-3, color='r', linestyle='-', label="accel upper bound")
+            plt.axhline(y=3, color='r', linestyle='--', label="accel upper bound")
+            plt.axhline(y=-3, color='r', linestyle='-', label="accel lower bound")
             plt.xticks(rotation=75)
             axs=plt.gca()
             xfmt = md.DateFormatter('%H:%M:%S') 

@@ -77,11 +77,11 @@ def plotter(spatParsedFile, desiredPhasePlanParsedFile):
                     if group == 2:
                         label = "East"
                     elif group == 5:
-                        label = "South"
+                        label = "North"
                     elif group == 8:
                         label = "West"
                     elif group == 11:
-                        label = "North"
+                        label = "South"
                     plt.text(text_time_dt, 0.95, label, fontweight='bold', fontsize=16, ha='center')
                 except:
                     continue            
@@ -142,7 +142,7 @@ def plotter(spatParsedFile, desiredPhasePlanParsedFile):
         plt.xlim(min_datetime, max_datetime)
         plt.ylim(0, 12)
         ax1.set_yticks([0,1,2,3,4,5,6,7,8,9,10,11,12])
-        ax1.set_yticklabels(["", "DPP", "East", "", "", "South", "", "", "West", "", "", "North", ""])
+        ax1.set_yticklabels(["", "DPP", "East", "", "", "North", "", "", "West", "", "", "South", ""])
         plt.xlabel('Date-Time', fontsize=18)
         plt.ylabel('Signal Group', fontsize=18)
         plt.xticks(fontsize=15)
