@@ -42,13 +42,13 @@ def rowHelper(row):
     if substrings_to_parse[0] in str(row[1]):
         bsm_index = row[1].find(substrings_to_parse[0])
     #check for mom
-    elif substrings_to_parse[1] in str(row[1]):
+    if substrings_to_parse[1] in str(row[1]):
         mom_index = row[1].find(substrings_to_parse[1])
     #check for mpm
-    elif substrings_to_parse[2] in str(row[1]):
+    if substrings_to_parse[2] in str(row[1]):
         mpm_index = row[1].find(substrings_to_parse[2])
     #check for spat
-    elif substrings_to_parse[3] in str(row[1]):
+    if substrings_to_parse[3] in str(row[1]):
         spat_index = row[1].find(substrings_to_parse[3])
 
     return [bsm_index, mom_index, mpm_index, spat_index]
@@ -87,6 +87,7 @@ def get_payload_mpm(row):
 #It then compares those indices to each other and if the SPAT index is the smallest, it returns the SPAT payload.
 def get_payload_spat(row):
     indices = rowHelper(row)
+
     spat = ""
     if indices[3] < indices[0] and indices[3] < indices[1] and indices[3] < indices[2]:
         spat = row[1][indices[3]:]
@@ -140,6 +141,6 @@ if __name__ == '__main__':
     if len(sys.argv) < 1:
         print('Run with python3 pcap_parser.py')
     else:
-        convert_pcap_to_csv()
+        #convert_pcap_to_csv()
         payloadHelper()
         
