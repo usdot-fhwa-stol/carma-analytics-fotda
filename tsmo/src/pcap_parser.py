@@ -141,6 +141,6 @@ if __name__ == '__main__':
     if len(sys.argv) < 1:
         print('Run with python3 pcap_parser.py')
     else:
-        #convert_pcap_to_csv()
+        convert_pcap_to_csv()
         payloadHelper()
         
