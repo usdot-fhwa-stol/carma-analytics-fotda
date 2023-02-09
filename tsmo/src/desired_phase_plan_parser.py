@@ -43,7 +43,7 @@ def kafkaParser(logname):
                         dpp_data = dpp_message_json['desired_phase_plan']
 
                         for signal_group in dpp_data:
-                            group = signal_group['signal_groups'][0]#.replace("[", "").replace("]", "")
+                            group = str(signal_group['signal_groups']).replace("[", "").replace("]", "")
                             start_time = signal_group['start_time']
                             end_time = signal_group['end_time']
                             
