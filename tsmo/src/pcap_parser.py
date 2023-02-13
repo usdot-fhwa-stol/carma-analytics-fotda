@@ -125,15 +125,19 @@ def payloadHelper():
         elif "obu" in filename:
             df_data_bsm = {'Timestamp(ms)': (df_tshark_output.iloc[:,0]*1000), 'payload': df_tshark_output.apply(lambda row: get_payload_bsm(row), axis=1)}
             df_data_mpm = {'Timestamp(ms)': (df_tshark_output.iloc[:,0]*1000), 'payload': df_tshark_output.apply(lambda row: get_payload_mpm(row), axis=1)}
+            df_data_mom = {'Timestamp(ms)': (df_tshark_output.iloc[:,0]*1000), 'payload': df_tshark_output.apply(lambda row: get_payload_mom(row), axis=1)}
 
             payload_bsm = pd.DataFrame(data=df_data_bsm)
             payload_mpm = pd.DataFrame(data=df_data_mpm)
+            payload_mom = pd.DataFrame(data=df_data_mom)
 
             payload_bsm = payload_bsm[payload_bsm["payload"] != ""]
             payload_mpm = payload_mpm[payload_mpm["payload"] != ""]
+            payload_mom = payload_mom[payload_mom["payload"] != ""]
 
             payload_bsm.to_csv(f'{output_directory_path}/{abs_filename}_bsm_timestamps.csv', index=False)
             payload_mpm.to_csv(f'{output_directory_path}/{abs_filename}_mpm_timestamps.csv', index=False)
+            payload_mom.to_csv(f'{output_directory_path}/{abs_filename}_mom_timestamps.csv', index=False)
 
 
 

@@ -58,48 +58,50 @@ def plotter(spatParsedFile, desiredPhasePlanParsedFile):
         times = dpp['Timestamp(ms)'].unique()
         dpp_groups = dpp['Signal_Group'].unique()
 
-        if run == 54:
-            break
-        print(dpp)
-
-        #Iterate through each unique create time
+        #Iterate through each unique timestamp which gives a new set of signal groups and associated start/end times
         for time in times:
             timeDict = {}
-
+            
+            #Create subset of dpp run data for this specific time
             time_subset = dpp[dpp['Timestamp(ms)'] == int(time)]
+            #Convert the signal groups in this subset to a list
             groupsArr = time_subset['Signal_Group'].tolist()
+
+            #Iterate through all of the signal groups in the list
             for i in groupsArr:
+                #Use a splitter if there are multiple groups in a single entry
                 splitter = i.split(",")
                 
+                #Get the start and end time for this group
                 group_time_subset = time_subset[time_subset['Signal_Group'] == i]
                 start_time = group_time_subset['Start_Time(ms)'].iloc[0]
                 end_time = group_time_subset['End_Time(ms)'].iloc[0]
 
+                #Add the group, start time, and end time to a dictionary with the group as the key
                 for j in range(0, len(splitter)):
                     group = splitter[j].replace(" ", "")
                     timeDict[group] = start_time, end_time
                 
-        print(timeDict)
-
+        #Create 2d list of start and end times to use when creating the dpp labels
         start_end_vals = [[]]
 
+        #Iterate through each group in the dictionary
         for key in timeDict:
             group = key
             group_start_time = timeDict[key][0]
             group_end_time = timeDict[key][1]
 
-            print(group, group_start_time, group_end_time)
-           
+            #Convert the start and end times to datetime, and draw a green bar           
             time1 = dt.datetime.fromtimestamp(group_start_time / 1000)
             time2 = dt.datetime.fromtimestamp(group_end_time / 1000)
             ax1.hlines(1, time1, time2, color='green', linewidth=10)
 
-            #add text box with signal group number in middle of the green box
+            #Use the start and end time to place the text box
             text_time = (group_end_time + group_start_time) / 2
-            text_time_dt = dt.datetime.fromtimestamp(text_time / 1000)
 
+            #Check if this specific start and end time is already in the start/end time array
+            #If it is, we add some space as a buffer, so that the text isn't overlapping a previously created label
             if [group_start_time, group_end_time] in start_end_vals:
-                print("This exists ", group_start_time, group_end_time)            
                 label = "                   "
             else:
                 label = ""
@@ -112,84 +114,82 @@ def plotter(spatParsedFile, desiredPhasePlanParsedFile):
                 label += "West"
             elif int(group) == 11:
                 label += "South"
-            if run == 53:
-                print(label)
-            plt.text(text_time_dt, 0.95, label, fontweight='bold', fontsize=16, ha='center')
-                    
-            start_end_vals.append([group_start_time, group_end_time])
 
-        print(start_end_vals)
-            
+            text_time_dt = dt.datetime.fromtimestamp(text_time / 1000)
+            plt.text(text_time_dt, 0.95, label, fontweight='bold', fontsize=16, ha='center')
+
+            #Add the start/end time to the 2d array                    
+            start_end_vals.append([group_start_time, group_end_time])          
             
 
         #Iterate through every signal group in the parsed file
-        # for group in signal_groups:
-        #     #Excluding unused signal group 10 data 
-        #     if group != 10:
-        #         df = modified_spat_data.copy()
-        #         group_subset = df[(df['Signal_Group'] == group)&(df['Epoch_Time(s)'] >= min_time)&(df['Epoch_Time(s)'] <= max_time)]
-        #         dates=[dt.datetime.fromtimestamp(ts) for ts in group_subset["Epoch_Time(s)"]]               
+        for group in signal_groups:
+            #Excluding unused signal group 10 data 
+            if group != 10:
+                df = modified_spat_data.copy()
+                group_subset = df[(df['Signal_Group'] == group)&(df['Epoch_Time(s)'] >= min_time)&(df['Epoch_Time(s)'] <= max_time)]
+                dates=[dt.datetime.fromtimestamp(ts) for ts in group_subset["Epoch_Time(s)"]]               
 
-        #         #iterate through group data and plot based on current and next state
-        #         for i in range(0, len(group_subset)-1):
-        #             #red state
-        #             if (group_subset['Event_State'].iloc[i] == 3)&(group_subset['Event_State'].iloc[i+1] == 3):
-        #                 time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
-        #                 time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
-        #                 ax1.hlines(group, time1, time2, color='red', linewidth=10)
-        #             #green state
-        #             elif (group_subset['Event_State'].iloc[i] == 6)&(group_subset['Event_State'].iloc[i+1] == 6):
-        #                 time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
-        #                 time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
-        #                 ax1.hlines(group, time1, time2, color='green', linewidth=10)
-        #             #yellow state
-        #             elif (group_subset['Event_State'].iloc[i] == 8)&(group_subset['Event_State'].iloc[i+1] == 8):
-        #                 time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
-        #                 time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
-        #                 ax1.hlines(group, time1, time2, color='yellow', linewidth=10)
-        #             #change in state from red to green, draw green
-        #             elif (group_subset['Event_State'].iloc[i] == 3)&(group_subset['Event_State'].iloc[i+1] == 6):
-        #                 time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
-        #                 time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
-        #                 ax1.hlines(group, time1, time2, color='green', linewidth=10)
-        #             #change in state from green to yellow, draw yellow
-        #             elif (group_subset['Event_State'].iloc[i] == 6)&(group_subset['Event_State'].iloc[i+1] == 8):
-        #                 time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
-        #                 time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
-        #                 ax1.hlines(group, time1, time2, color='yellow', linewidth=10)
-        #                 #change in state from yellow to red, draw red
-        #             elif (group_subset['Event_State'].iloc[i] == 8)&(group_subset['Event_State'].iloc[i+1] == 3):
-        #                 time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
-        #                 time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
-        #                 ax1.hlines(group, time1, time2, color='red', linewidth=10)
+                #iterate through group data and plot based on current and next state
+                for i in range(0, len(group_subset)-1):
+                    #red state
+                    if (group_subset['Event_State'].iloc[i] == 3)&(group_subset['Event_State'].iloc[i+1] == 3):
+                        time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
+                        time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
+                        ax1.hlines(group, time1, time2, color='red', linewidth=10)
+                    #green state
+                    elif (group_subset['Event_State'].iloc[i] == 6)&(group_subset['Event_State'].iloc[i+1] == 6):
+                        time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
+                        time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
+                        ax1.hlines(group, time1, time2, color='green', linewidth=10)
+                    #yellow state
+                    elif (group_subset['Event_State'].iloc[i] == 8)&(group_subset['Event_State'].iloc[i+1] == 8):
+                        time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
+                        time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
+                        ax1.hlines(group, time1, time2, color='yellow', linewidth=10)
+                    #change in state from red to green, draw green
+                    elif (group_subset['Event_State'].iloc[i] == 3)&(group_subset['Event_State'].iloc[i+1] == 6):
+                        time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
+                        time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
+                        ax1.hlines(group, time1, time2, color='green', linewidth=10)
+                    #change in state from green to yellow, draw yellow
+                    elif (group_subset['Event_State'].iloc[i] == 6)&(group_subset['Event_State'].iloc[i+1] == 8):
+                        time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
+                        time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
+                        ax1.hlines(group, time1, time2, color='yellow', linewidth=10)
+                        #change in state from yellow to red, draw red
+                    elif (group_subset['Event_State'].iloc[i] == 8)&(group_subset['Event_State'].iloc[i+1] == 3):
+                        time1 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i])
+                        time2 = dt.datetime.fromtimestamp(group_subset['Epoch_Time(s)'].iloc[i+1])
+                        ax1.hlines(group, time1, time2, color='red', linewidth=10)
    
-        # myFmt_timestamp = md.DateFormatter('%H:%M:%S.%d')
-        # plt.gca().xaxis.set_major_formatter(myFmt_timestamp)
-        # # Set minor tick interval for 5
-        # plt.gca().xaxis.set_minor_locator(AutoMinorLocator(10))
-        # # Rotate major tick labels on x axis 45 degreess for readability
-        # plt.xticks(rotation=45, ha='right')
+        myFmt_timestamp = md.DateFormatter('%H:%M:%S.%d')
+        plt.gca().xaxis.set_major_formatter(myFmt_timestamp)
+        # Set minor tick interval for 5
+        plt.gca().xaxis.set_minor_locator(AutoMinorLocator(10))
+        # Rotate major tick labels on x axis 45 degreess for readability
+        plt.xticks(rotation=45, ha='right')
 
-        # fig.autofmt_xdate()
-        # # Create grid lines for major ticks for both x and y axis
-        # plt.grid()
-        # # Create dashed grid lines for minor ticks for both x and y axis
-        # plt.grid(b=True, which='minor', color='lightgrey', linestyle='--')
-        # plt.xlim(min_datetime, max_datetime)
-        # plt.ylim(0, 12)
-        # ax1.set_yticks([0,1,2,3,4,5,6,7,8,9,10,11,12])
-        # ax1.set_yticklabels(["", "DPP", "East", "", "", "North", "", "", "West", "", "", "South", ""])
-        # plt.xlabel('Date-Time', fontsize=18)
-        # plt.ylabel('Signal Group', fontsize=18)
-        # plt.xticks(fontsize=15)
-        # plt.yticks(fontsize=15)
+        fig.autofmt_xdate()
+        # Create grid lines for major ticks for both x and y axis
+        plt.grid()
+        # Create dashed grid lines for minor ticks for both x and y axis
+        plt.grid(b=True, which='minor', color='lightgrey', linestyle='--')
+        plt.xlim(min_datetime, max_datetime)
+        plt.ylim(0, 12)
+        ax1.set_yticks([0,1,2,3,4,5,6,7,8,9,10,11,12])
+        ax1.set_yticklabels(["", "DPP", "East", "", "", "North", "", "", "West", "", "", "South", ""])
+        plt.xlabel('Date-Time', fontsize=18)
+        plt.ylabel('Signal Group', fontsize=18)
+        plt.xticks(fontsize=15)
+        plt.yticks(fontsize=15)
 
-        # #create custom legend
-        # custom_lines = [Line2D([0], [0], color="g", lw=4),
-        #                 Line2D([0], [0], color="yellow", lw=4),
-        #                 Line2D([0], [0], color="r", lw=4)]
-        # ax1.legend(custom_lines, ['Green\nPhase', 'Yellow\nPhase', 'Red\nPhase'], loc='upper right', bbox_to_anchor=(1.14, 1.02),
-        # fontsize=15)
+        #create custom legend
+        custom_lines = [Line2D([0], [0], color="g", lw=4),
+                        Line2D([0], [0], color="yellow", lw=4),
+                        Line2D([0], [0], color="r", lw=4)]
+        ax1.legend(custom_lines, ['Green\nPhase', 'Yellow\nPhase', 'Red\nPhase'], loc='upper right', bbox_to_anchor=(1.14, 1.02),
+        fontsize=15)
 
         fig.suptitle("Signal Group Event State vs Time Run " + str(run), fontsize=18)
         plotName = "Signal_Groups_Event_State_Vs_Time_Run_"+str(run)+".png"
