@@ -18,6 +18,7 @@ from matplotlib.ticker import (MultipleLocator, FormatStrFormatter, AutoMinorLoc
 import matplotlib.dates as md
 import datetime as dt
 import seaborn as sns 
+from matplotlib.lines import Line2D
 
 #This function will plot spat signal state data, as well as the vehicle trajectory data, for each run in the
 #status and intent kafka log.
@@ -68,7 +69,7 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
                 plot_spat_location = lanelet_length + 10
 
                 fig, ax1 = plt.subplots()
-                fig.set_size_inches(10, 10)         
+                fig.set_size_inches(15, 15)         
 
                 #iterate through spat kafka data and draw a horizontal line based on signal state
                 #syntax for drawing horizontal lines: ax.hlines(y, xmin, xmax)
@@ -77,32 +78,32 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
                     if (spat_subset['Event_State'].iloc[i] == 3)&(spat_subset['Event_State'].iloc[i+1] == 3):
                         time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
                         time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
-                        ax1.hlines(plot_spat_location, time1, time2, color='red', linewidth=10)
+                        ax1.hlines(plot_spat_location, time1, time2, color='red', linewidth=20)
                     #green state
                     elif (spat_subset['Event_State'].iloc[i] == 6)&(spat_subset['Event_State'].iloc[i+1] == 6):
                         time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
                         time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
-                        ax1.hlines(plot_spat_location, time1, time2, color='green', linewidth=10)
+                        ax1.hlines(plot_spat_location, time1, time2, color='green', linewidth=20)
                     #yellow state
                     elif (spat_subset['Event_State'].iloc[i] == 8)&(spat_subset['Event_State'].iloc[i+1] == 8):
                         time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
                         time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
-                        ax1.hlines(plot_spat_location, time1, time2, color='yellow', linewidth=10)
+                        ax1.hlines(plot_spat_location, time1, time2, color='yellow', linewidth=20)
                     #change in state from red to green, draw green
                     elif (spat_subset['Event_State'].iloc[i] == 3)&(spat_subset['Event_State'].iloc[i+1] == 6):
                         time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
                         time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
-                        ax1.hlines(plot_spat_location, time1, time2, color='green', linewidth=10)
+                        ax1.hlines(plot_spat_location, time1, time2, color='green', linewidth=20)
                     #change in state from green to yellow, draw yellow
                     elif (spat_subset['Event_State'].iloc[i] == 6)&(spat_subset['Event_State'].iloc[i+1] == 8):
                         time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
                         time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
-                        ax1.hlines(plot_spat_location, time1, time2, color='yellow', linewidth=10)
+                        ax1.hlines(plot_spat_location, time1, time2, color='yellow', linewidth=20)
                         #change in state from yellow to red, draw red
                     elif (spat_subset['Event_State'].iloc[i] == 8)&(spat_subset['Event_State'].iloc[i+1] == 3):
                         time1 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i])
                         time2 = dt.datetime.fromtimestamp(spat_subset['Epoch_Time(s)'].iloc[i+1])
-                        ax1.hlines(plot_spat_location, time1, time2, color='red', linewidth=10)
+                        ax1.hlines(plot_spat_location, time1, time2, color='red', linewidth=20)
 
                 #convert epoch times to datetime 
                 dates=[dt.datetime.fromtimestamp(ts) for ts in status_intent_subset_ev_copy["Timestamp(s)"]]
@@ -111,13 +112,13 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
                 #need to take the vehicle's distance from the rear axle to the front bumper into account
                 if vehicle_id == "DOT-45244":
                     sns.scatterplot(data=status_intent_subset_ev_copy, x=dates, y=lanelet_length - (status_intent_subset_ev_copy['Cur_ds(m)']-constants.DOT_45244_FRONT_BUMPER_DIST), 
-                    hue=status_intent_subset_ev['Cur_Speed'], hue_order=status_intent_subset_ev_copy['Cur_Speed'], palette='viridis', ax=ax1)
+                    hue=status_intent_subset_ev['Cur_Speed'], hue_order=status_intent_subset_ev_copy['Cur_Speed'], palette='gist_gray_r', ax=ax1)
                 elif vehicle_id == "DOT-45245":
                     sns.scatterplot(data=status_intent_subset_ev_copy, x=dates, y=lanelet_length - (status_intent_subset_ev_copy['Cur_ds(m)']-constants.DOT_45245_FRONT_BUMPER_DIST), 
-                    hue=status_intent_subset_ev['Cur_Speed'], hue_order=status_intent_subset_ev_copy['Cur_Speed'], palette='viridis', ax=ax1)
+                    hue=status_intent_subset_ev['Cur_Speed'], hue_order=status_intent_subset_ev_copy['Cur_Speed'], palette='gist_gray_r', ax=ax1)
                 elif vehicle_id == "DOT-45243":
                     sns.scatterplot(data=status_intent_subset_ev_copy, x=dates, y=lanelet_length - (status_intent_subset_ev_copy['Cur_ds(m)']-constants.DOT_45243_FRONT_BUMPER_DIST), 
-                    hue=status_intent_subset_ev['Cur_Speed'], hue_order=status_intent_subset_ev_copy['Cur_Speed'], palette='viridis', ax=ax1)
+                    hue=status_intent_subset_ev['Cur_Speed'], hue_order=status_intent_subset_ev_copy['Cur_Speed'], palette='gist_gray_r', ax=ax1)
 
                 plt.xticks(rotation=75)
                 axs=plt.gca()
@@ -145,8 +146,18 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
                 # Create dashed grid lines for minor ticks for both x and y axis
                 plt.grid(b=True, which='minor', color='lightgrey', linestyle='--')                
                 
+                #create custom legend
+                custom_lines = [Line2D([0], [0], color="g", lw=4),
+                        Line2D([0], [0], color="yellow", lw=4),
+                        Line2D([0], [0], color="r", lw=4)]
+                first_legend = plt.legend(custom_lines, ['Green\nInterval', 'Yellow\nInterval', 'Red\nInterval'], loc='upper right', bbox_to_anchor=(1.143, 1.02), fontsize=15)
+                plt.gca().add_artist(first_legend)
+
                 fig.suptitle(vehicle_id + " Distance vs Time Signal Group " + str(signal_group) + " Run " + str(run), fontsize=18)
-                ax1.legend(title='Veh Speed \n(m/s)', loc='center left', bbox_to_anchor=(1, 0.5))
+                second_legend = plt.legend(title='Veh Speed \n(m/s)', loc='center left', bbox_to_anchor=(1, 0.5), fontsize=15, title_fontsize=15)
+                plt.gca().add_artist(second_legend)
+
+                # ax1.legend(title='Veh Speed \n(m/s)', loc='center left', bbox_to_anchor=(1, 0.5))
                 plotName = vehicle_id + "_Distance_Vs_Time_Signal_Group_" + signal_group + "_run_" + str(run) + ".png"
                 plt.savefig(f'{output_directory_path}/{plotName}')
                 fig.clf()

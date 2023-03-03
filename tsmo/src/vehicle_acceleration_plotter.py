@@ -57,7 +57,7 @@ def plotter(status_parsed, vehicle_id):
             xfmt = md.DateFormatter('%H:%M:%S') 
             axs.xaxis.set_major_formatter(xfmt)
             fig.autofmt_xdate()
-            plt.xlabel('Date-Time', fontsize=18)
+            plt.xlabel('Time', fontsize=18)
             plt.ylabel('Acceleration (m/s^2)', fontsize=18)
             plt.xticks(fontsize=15)
             plt.yticks(fontsize=15)
