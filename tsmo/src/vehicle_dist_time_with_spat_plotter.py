@@ -55,6 +55,10 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
             min_epoch_time = status_intent_subset_ev_copy['Timestamp(ms)'].min()
             max_epoch_time = status_intent_subset_ev_copy['Timestamp(ms)'].max() + 5000 #add extra 5 seconds of data for better visualization
 
+            if run == 54:
+                min_epoch_time = 1675442162.8*1000
+                max_epoch_time = 1675442209.8*1000
+
             #get subset of spat data using min and max times for the run and the desired signal group
             spat_subset = spat_data[(spat_data['Epoch_Time(ms)'] > min_epoch_time)&(spat_data['Epoch_Time(ms)'] <= max_epoch_time)&(spat_data['Signal_Group'].astype(int) == int(signal_group))]             
 
@@ -120,17 +124,22 @@ def plotter(spat_parsed, status_intent_parsed, vehicle_id, signal_group):
                     sns.scatterplot(data=status_intent_subset_ev_copy, x=dates, y=lanelet_length - (status_intent_subset_ev_copy['Cur_ds(m)']-constants.DOT_45243_FRONT_BUMPER_DIST), 
                     hue=status_intent_subset_ev['Cur_Speed'], hue_order=status_intent_subset_ev_copy['Cur_Speed'], palette='gist_gray_r', ax=ax1)
 
-                plt.xticks(rotation=75)
+                plt.xticks(rotation=30)
                 axs=plt.gca()
                 xfmt = md.DateFormatter('%H:%M:%S.%d') 
                 axs.xaxis.set_major_formatter(xfmt)
-                axs.xaxis.set_major_locator(md.SecondLocator(interval=3)) #add tick mark every 3 seconds
+                axs.xaxis.set_major_locator(md.SecondLocator(interval=5)) #add tick mark every 3 seconds
                 axs.xaxis.set_minor_locator(AutoMinorLocator(3))
                 axs.yaxis.set_minor_locator(AutoMinorLocator(10))
                 fig.autofmt_xdate()
 
                 min_datetime = dt.datetime.fromtimestamp(status_intent_subset_ev_copy['Timestamp(s)'].min())
                 max_datetime = dt.datetime.fromtimestamp(status_intent_subset_ev_copy['Timestamp(s)'].max()+5) #add extra 5 seconds of data
+                
+                if run == 54:
+                    min_datetime = dt.datetime.fromtimestamp(1675442162.8)
+                    max_datetime = dt.datetime.fromtimestamp(1675442209.8)
+                
                 #plot horizontal line at stop bar location
                 ax1.hlines(lanelet_length, min_datetime, max_datetime, color='orange', linewidth=2, label="stop\n bar")
 

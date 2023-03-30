@@ -48,6 +48,10 @@ def plotter(spatParsedFile, desiredPhasePlanParsedFile):
         min_time = (dpp['Start_Time(ms)'].min() - 5000) / 1000
         max_time = (dpp['End_Time(ms)'].max() + 5000) / 1000
 
+        if run == 54:
+            print("RUN 54 min: " + str(min_time))
+            print("RUN 54 max: " + str(max_time))
+
         min_datetime = dt.datetime.fromtimestamp(min_time)
         max_datetime = dt.datetime.fromtimestamp(max_time)
 
@@ -56,7 +60,7 @@ def plotter(spatParsedFile, desiredPhasePlanParsedFile):
 
         #Get unique create times and signal groups for the dpp run data
         times = dpp['Timestamp(ms)'].unique()
-        dpp_groups = dpp['Signal_Group'].unique()
+        # dpp_groups = dpp['Signal_Group'].unique()
 
         #Iterate through each unique timestamp which gives a new set of signal groups and associated start/end times
         for time in times:
@@ -128,7 +132,6 @@ def plotter(spatParsedFile, desiredPhasePlanParsedFile):
             if group != 10:
                 df = modified_spat_data.copy()
                 group_subset = df[(df['Signal_Group'] == group)&(df['Epoch_Time(s)'] >= min_time)&(df['Epoch_Time(s)'] <= max_time)]
-                dates=[dt.datetime.fromtimestamp(ts) for ts in group_subset["Epoch_Time(s)"]]               
 
                 #iterate through group data and plot based on current and next state
                 for i in range(0, len(group_subset)-1):
