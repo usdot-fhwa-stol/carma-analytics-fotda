@@ -11,7 +11,14 @@ from datetime import datetime, timezone
 import pytz
 
 
-
+# Script to parse vehicle ros bags and produce a csv file with columns:
+# - "Message Created (ms)"
+# - "Message Received by CARMA-Platform ROS (ms)"
+# - "Message Latency (ms)" 
+# for Mobility Operation messages that contain vehicle schedule information
+# and SPaT messages. Total end-to-end communication latency is approximated
+# as the difference between a given messages timestamp and the time it was 
+# received by the relevant ros topic.
 
 
 def messageLatencyRosBagParser(logname, vehicle_static_id):
