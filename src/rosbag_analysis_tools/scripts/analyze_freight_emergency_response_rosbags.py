@@ -183,8 +183,9 @@ def check_cmv_bsm_related(bag, time_start_engagement, bag_file_name, opposing_di
 
             start_time = msgs_list[start_idx + 1][2]
             start_idx = start_idx + 1
-            duration = 0
-        end_time = t
+        
+        if (duration < window_duration_to_check):
+            end_time = t
 
         duration = (end_time - start_time).to_sec()
         print(f'DEBUG idx: {idx}, start_idx: {start_idx}, num_messages: {num_messages}, duration: {duration:.2f}, and from {start_time.to_sec():.1f} to {end_time.to_sec():.1f}')
@@ -629,7 +630,6 @@ def check_cmv_lane_change_related(bag, bag_file, time_test_start_engagement, tim
     first_lanelet = 0
     second_lanelet = 0
     fer_22 = False
-    fer_14 = True #TODO
 
     route_state = '/guidance/route_state'
     route_state_msgs = list(bag.read_messages(topics=[route_state] , start_time = time_test_start_engagement))
@@ -640,7 +640,8 @@ def check_cmv_lane_change_related(bag, bag_file, time_test_start_engagement, tim
 
         for topic, msg, t in bag.read_messages(topics=[route_state] , start_time = time_test_start_engagement): #TODO
             current_lane = ''
-            
+            #print(f'FER-22 (DEBUG); print: {msg.lanelet_id}')
+
             if msg.lanelet_id in rightmost_lanes:
                 current_lane = 'RIGHT'
             elif msg.lanelet_id in middle_lanes:
@@ -859,6 +860,8 @@ def check_cmv_lane_change_related(bag, bag_file, time_test_start_engagement, tim
     
     if (fer_14):
         maneuver_topic_name = '/guidance/final_maneuver_plan'
+        mnvrs_size = len(list(bag.read_messages(topics=[maneuver_topic_name] , start_time = detected_lanechange_needed)))
+
         for topic, msg, t in bag.read_messages(topics=[maneuver_topic_name] , start_time = detected_lanechange_needed):#TODO
             for maneuver in msg.maneuvers:
                 if (maneuver.type is 1 and
@@ -938,7 +941,8 @@ def check_cmv_lane_change_related(bag, bag_file, time_test_start_engagement, tim
 
     # Calculate the average acceleration across the full acceleration section
     print(f'FER-30(2) (DEBUG): Duration between start and end of acceleration: {(time_end_accel-time_begin_acceleration_after_decel).to_sec():.2f})')
-    if (speed_start_accel_ms is speed_end_accel_ms):
+    if (speed_start_accel_ms is speed_end_accel_ms or
+        abs(time_end_accel - time_begin_acceleration_after_decel).to_sec() < 0.0001): #division by zero case
         total_average_accel = 0.0
     else:
         total_average_accel = (speed_start_accel_ms - speed_end_accel_ms) / (time_end_accel - time_begin_acceleration_after_decel).to_sec()
@@ -1109,78 +1113,183 @@ def main():
 
     # Create list of White
     white_truck_bag_files = [
-                                "WT_8.4.1_R1.bag",
-                                "WT_8.4.2_R1.bag",
-                                "WT_8.4.3_R1.bag",
-                                "WT_8.4.4_R1.bag",
-                                "WT_8.5.3_R1.bag",
-                                "WT_8.6.10_R1.bag",
-                                "WT_8.6.1_R1.bag",
-                                "WT_8.6.1_R2.bag",
-                                "WT_8.6.1_R3.bag",
-                                "WT_8.6.1_R4.bag",
-                                "WT_8.6.1_R5.bag",
-                                "WT_8.6.2_R1.bag",
-                                "WT_8.6.2_R2.bag",
-                                "WT_8.6.2_R3.bag",
-                                "WT_8.6.2_R4.bag",
-                                "WT_8.6.2_R5.bag",
-                                "WT_8.6.3_R1.bag",
-                                "WT_8.6.3_R2.bag",
-                                "WT_8.6.3_R3.bag",
-                                "WT_8.6.3_R4.bag",
-                                "WT_8.6.4_R1.bag",
-                                "WT_8.6.4_R2.bag",
-                                "WT_8.6.4_R3.bag",
-                                "WT_8.6.4_R4.bag",
-                                "WT_8.6.4_R5.bag",
-                                "WT_8.6.4_R6.bag",
-                                "WT_8.6.4_R7.bag",
-                                "WT_8.6.6_R1.bag",
-                                "WT_8.6.6_R2.bag",
-                                "WT_8.6.6_R3.bag",
-                                "WT_8.6.6_R4.bag",
-                                "WT_8.6.6_R5.bag",
-                                "WT_8.6.6_R6.bag",
-                                "WT_8.6.7_R1.bag",
-                                "WT_8.6.7_R2.bag",
-                                "WT_8.6.7_R3.bag",
-                                "WT_8.6.7_R4.bag"
+                               "WT_8.4.1_R1.bag",
+"WT_8.4.2_R1.bag",
+"WT_8.4.3_R1.bag",
+"WT_8.4.4_R1.bag",
+"WT_8.5.3_R1.bag",
+"WT_8.5.4_R1.bag",
+"WT_8.5.4_R2.bag",
+"WT_8.5.4_R3.bag",
+"WT_8.6.10_R1.bag",
+"WT_8.6.1_R1.bag",
+"WT_8.6.1_R2.bag",
+"WT_8.6.1_R3.bag",
+"WT_8.6.1_R4.bag",
+"WT_8.6.1_R5.bag",
+"WT_8.6.2_R1.bag",
+"WT_8.6.2_R2.bag",
+"WT_8.6.2_R3.bag",
+"WT_8.6.2_R4.bag",
+"WT_8.6.2_R5.bag",
+"WT_8.6.3_R1.bag",
+"WT_8.6.3_R2.bag",
+"WT_8.6.3_R3.bag",
+"WT_8.6.3_R4.bag",
+"WT_8.6.4_R1.bag",
+"WT_8.6.4_R2.bag",
+"WT_8.6.4_R3.bag",
+"WT_8.6.4_R4.bag",
+"WT_8.6.4_R5.bag",
+"WT_8.6.4_R6.bag",
+"WT_8.6.4_R7.bag",
+"WT_8.6.6_R1.bag",
+"WT_8.6.6_R2.bag",
+"WT_8.6.6_R3.bag",
+"WT_8.6.6_R4.bag",
+"WT_8.6.6_R5.bag",
+"WT_8.6.6_R6.bag",
+"WT_8.6.7_R1.bag",
+"WT_8.6.7_R2.bag",
+"WT_8.6.7_R3.bag",
+"WT_8.6.7_R4.bag"
+
                                 ]
      
 
     # Create list of Silver
-    silver_truck_bag_files = []
+    silver_truck_bag_files = [
+        "ST_8.4.1_R1.bag",
+"ST_8.4.1_R2.bag",
+"ST_8.4.1_R3.bag",
+"ST_8.4.1_R4.bag",
+"ST_8.5.3_R1.bag",
+"ST_8.5.3_R2.bag",
+"ST_8.5.3_R3.bag",
+"ST_8.5.5_R1.bag",
+"ST_8.6.11_R1.bag",
+"ST_8.6.11_R2.bag",
+"ST_8.6.11_R3.bag",
+"ST_8.6.11_R4.bag",
+"ST_8.6.11_R5.bag",
+"ST_8.6.11_R6.bag",
+"ST_8.6.12_no_hazard_lights.bag",
+"ST_8.6.12_R1.bag",
+"ST_8.6.12_R2.bag",
+"ST_8.6.12_R3.bag",
+"ST_8.6.12_R4.bag",
+"ST_8.6.12_R5.bag",
+"ST_8.6.12_R6.bag",
+"ST_8.6.12_R7.bag",
+"ST_8.6.12_R8.bag",
+"ST_8.6.1_R6.bag",
+"ST_8.6.1_R7.bag",
+"ST_8.6.2_R6.bag",
+"ST_8.6.2_R7.bag",
+"ST_8.6.4_R8.bag",
+"ST_8.6.4_R9.bag",
+"ST_8.6.5_R3.bag",
+"ST_8.6.5_R4.bag",
+"ST_8.6.5_R5.bag",
+"ST_8.6.5_R6.bag",
+"ST_8.6.6_R7.bag"
+
+    ]
     
     # Create list of CMV
-    cmv_bag_files = white_truck_bag_files + silver_truck_bag_files
+    cmv_bag_files = white_truck_bag_files #todo
 
-    # Bags where ERV should NOT be detected by CMV, like opposing lane
-    cmv_should_not_detect_erv_files = []
+    # Bags where ERV should NOT be detected by CMV, like opposing lane or basic travel tests
+    cmv_should_not_detect_erv_files = [
+        "ST_8.6.5_R3.bag",
+"ST_8.6.5_R4.bag",
+"ST_8.6.5_R5.bag",
+"ST_8.6.5_R6.bag",
+"ST_8.4.1_R1.bag",
+"ST_8.4.1_R2.bag",
+"ST_8.4.1_R3.bag",
+"ST_8.4.1_R4.bag",
+"WT_8.4.1_R1.bag",
+"WT_8.4.2_R1.bag",
+"WT_8.4.3_R1.bag",
+"WT_8.4.4_R1.bag",
+"WT_8.5.3_R1.bag",
+"WT_8.5.4_R1.bag",
+"WT_8.5.4_R2.bag",
+"WT_8.5.4_R3.bag",
+"ST_8.5.3_R1.bag",
+"ST_8.5.3_R2.bag",
+"ST_8.5.3_R3.bag",
+"ST_8.5.5_R1.bag"
+    ]
 
     # Bags where ERV should NOT lanechange such as when not lanechange is possible
-    cmv_should_not_lanechange_files = []
+    cmv_should_not_lanechange_files = ["WT_8.6.3_R1.bag",
+"WT_8.6.3_R2.bag",
+"WT_8.6.3_R3.bag",
+"WT_8.6.3_R4.bag",
+"WT_8.6.4_R1.bag",
+"WT_8.6.4_R2.bag",
+"WT_8.6.4_R3.bag",
+"WT_8.6.4_R4.bag",
+"WT_8.6.4_R5.bag",
+"WT_8.6.4_R6.bag",
+"WT_8.6.4_R7.bag",
+"ST_8.6.6_R7.bag",
+"WT_8.6.6_R1.bag",
+"WT_8.6.6_R2.bag",
+"WT_8.6.6_R3.bag",
+"WT_8.6.6_R4.bag",
+"WT_8.6.6_R5.bag",
+"WT_8.6.6_R6.bag",
+"WT_8.6.7_R1.bag",
+"WT_8.6.7_R2.bag",
+"WT_8.6.7_R3.bag",
+"WT_8.6.7_R4.bag",
+"ST_8.6.12_no_hazard_lights.bag",
+"ST_8.6.12_R1.bag",
+"ST_8.6.12_R2.bag",
+"ST_8.6.12_R3.bag",
+"ST_8.6.12_R4.bag",
+"ST_8.6.12_R5.bag",
+"ST_8.6.12_R6.bag",
+"ST_8.6.12_R7.bag",
+"ST_8.6.12_R8.bag"
+]
     
     # Bags where ERV should be detected by CMV
     cmv_should_lanechange_files = list(set(cmv_bag_files) - set(cmv_should_not_lanechange_files) -  set(cmv_should_not_detect_erv_files))
 
     # Create list of ERV
-    erv_bag_files = ["TA_8.6.10_R1.bag"
+    erv_bag_files = ["TA_8.6.10_R1.bag",
 "TA_8.6.11_R1.bag",
 "TA_8.6.11_R2.bag",
 "TA_8.6.11_R3.bag",
 "TA_8.6.11_R4.bag",
 "TA_8.6.11_R5.bag",
 "TA_8.6.11_R6.bag",
+"TA_8.6.12_R1.bag",
+"TA_8.6.12_R2.bag",
+"TA_8.6.12_R3.bag",
+"TA_8.6.12_R4.bag",
+"TA_8.6.12_R5.bag",
+"TA_8.6.12_R6.bag",
+"TA_8.6.12_R7.bag",
+"TA_8.6.12_R8.bag",
 "TA_8.6.1_R1.bag",
 "TA_8.6.1_R2.bag",
 "TA_8.6.1_R3.bag",
 "TA_8.6.1_R4.bag",
 "TA_8.6.1_R5.bag",
+"TA_8.6.1_R6.bag",
+"TA_8.6.1_R7.bag",
+"TA_8.6.2_R1.bag",
 "TA_8.6.2_R2.bag",
 "TA_8.6.2_R3.bag",
 "TA_8.6.2_R4.bag",
 "TA_8.6.2_R5.bag",
+"TA_8.6.2_R6.bag",
+"TA_8.6.2_R7.bag",
 "TA_8.6.3_R1.bag",
 "TA_8.6.3_R2.bag",
 "TA_8.6.3_R3.bag",
@@ -1196,14 +1305,23 @@ def main():
 "TA_8.6.4_R5.bag",
 "TA_8.6.4_R6.bag",
 "TA_8.6.4_R7.bag",
+"TA_8.6.4_R8.bag",
+"TA_8.6.4_R9.bag",
 "TA_8.6.5_R1.bag",
 "TA_8.6.5_R2.bag",
+"TA_8.6.5_R3.bag",
+"TA_8.6.5_R4.bag",
+"TA_8.6.5_R5.bag",
+"TA_8.6.5_R6.bag",
 "TA_8.6.6_R1.bag",
 "TA_8.6.6_R2.bag",
+"TA_8.6.6_R3.bag",
 "TA_8.6.6_R4.bag",
 "TA_8.6.6_R5.bag",
 "TA_8.6.6_R6.bag",
+"TA_8.6.6_R7.bag",
 "TA_8.6.7_R1.bag",
+"TA_8.6.7_R2.bag",
 "TA_8.6.7_R3.bag",
 "TA_8.6.7_R4.bag",
 "TA_8.6.9_R1.bag",
@@ -1211,7 +1329,6 @@ def main():
 "TA_8.6.9_R3.bag",
 "TA_8.6.9_R4.bag",
 "TA_8.6.9_R5.bag"
-
                     ]
     
 
@@ -1298,8 +1415,8 @@ def main():
 
         if (bag_file in cmv_bag_files):
             time_first_erv_detected = get_time_first_erv_detected(bag)
-            fer_4_result, fer_5_result, fer_8_result, fer_9_result, fer_10_result, fer_11_result, fer_12_result = check_cmv_bsm_related(bag, time_test_start_engagement, bag_file, set(cmv_should_not_detect_erv_files))
             fer_2_result, fer_3_result = check_steady_state_before_first_received_message(bag, time_test_start_engagement, time_first_erv_detected, original_speed_limit)
+            fer_4_result, fer_5_result, fer_8_result, fer_9_result, fer_10_result, fer_11_result, fer_12_result = check_cmv_bsm_related(bag, time_test_start_engagement, bag_file, set(cmv_should_not_detect_erv_files))
 
         if (bag_file in cmv_should_lanechange_files):
             fer_14_result, fer_15_result, fer_16_result, fer_22_result, fer_23_result, fer_26_result, fer_27_result, fer_28_result, fer_29_result, fer_30_result = check_cmv_lane_change_related(bag, bag_file, time_test_start_engagement, time_test_end_engagement, original_speed_limit)
@@ -1307,8 +1424,8 @@ def main():
         if (bag_file in cmv_should_not_lanechange_files):
             fer_32_result, fer_33_result, fer_35_result = check_cmv_hazard_related(bag, time_test_start_engagement, time_test_end_engagement, original_speed_limit)
 
-        if bag_file in erv_bag_files:
-            fer_1_result, fer_6_result, fer_7_result, fer_34_result = check_erv_metrics(bag)
+        #if bag_file in erv_bag_files:
+        #    fer_1_result, fer_6_result, fer_7_result, fer_34_result = check_erv_metrics(bag)
         
     return
 
