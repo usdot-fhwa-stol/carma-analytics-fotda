@@ -385,6 +385,11 @@ def main():
                          "twist_filter", 
                          "twist_gate"]
 
+        # NOTE: Currently, service callback trace logs only contain the source node's base class (rather than the node's descriptive name).
+        #       An example of this is that trace logs will output several separate "PlanManeuvers Service Callback" analyses (1 for each activated Strategic Plugin), all
+        #       attributed to PluginBaseNode. This can make it challenging to analyze service callbacks, but typically a user can detect which node is responsible
+        #       for each service callback based on context from the analysis (for example, stop_and_wait_plugin will typically be called more frequently near
+        #       the end of a trace log).
         planning_service_callbacks = ["PlanManeuvers", 
                                       "PlanTrajectory"]
 
