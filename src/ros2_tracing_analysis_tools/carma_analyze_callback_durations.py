@@ -328,8 +328,10 @@ def main():
 
     # TODO for user: All trace sessions should be stored in a central directory. Add one or more trace sessions to
     #      the 'trace_sessions' list, and set 'trace_sessions_directory' to the central directory that they're stored in.
-    trace_sessions = ["my-black-pacifica-tracing-session-test-1"]
-    trace_session_directory = "/opt/carma/logs/" 
+    trace_sessions = ["example-trace-directory-1",
+                      "example-trace-directory-2",
+                      "example-trace-directory-3"]
+    trace_session_directory = "/example-directory-containing-trace-sessions" 
 
     session_num = 1
     for trace_session in trace_sessions:
