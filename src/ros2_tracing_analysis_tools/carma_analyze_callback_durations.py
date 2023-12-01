@@ -73,21 +73,22 @@ def get_timestamp_carma_engaged(data_util, callback_symbols, verbose=False):
     :param verbose: Flag indicating whether debug information should be printed to terminal.
 
     :return: Timestamp that CARMA Platform was engaged.
-             NOTE: This is roughly the timestamp of the first service call to a strategic plugin's 'PlanManeuvers' service.
+             NOTE: This is roughly the timestamp of the first service call to the Guidance node's 'SetGuidanceActive' service.
     '''
 
     # Initialize variables
     timestamp_carma_engaged = 0.0
     first = True
 
-    # Find the earliest "PlanManeuvers" Strategic Plugin service callback from the Trace Session
+    # Find the earliest "SetGuidanceActive" service callback from the Trace Session. This timestamp will be used to 
+    #      approximate the timestamp that CARMA Platform was engaged.
     for obj, symbol in callback_symbols.items():
         owner_info = data_util.get_callback_owner_info(obj)
         if owner_info is None:
             owner_info = '[unknown]'
         
         # Create dataframe of durations for this callback
-        if ("PlanManeuvers" in owner_info) or ("PlanManeuvers" in symbol):
+        if ("SetGuidanceActive" in owner_info) or ("SetGuidanceActive" in symbol):
             duration_df = data_util.get_callback_durations(obj)
         
             if first:
