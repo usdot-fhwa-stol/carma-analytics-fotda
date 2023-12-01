@@ -64,6 +64,15 @@ import os
 # NOTE: Search for all 'TODO for user' statements in this script to find parameters that can be customized
 #       by the user prior to running this analysis script.
 
+# ----------------------------------------
+# SCRIPT OUTPUTS
+# ----------------------------------------
+# For each trace session analyzed by this script, a new folder will be created (in the same directory as
+# this script) containing the analysis results for that trace session. Within that results folder, there will
+# be one .csv file containing a summary of the callback duration statistics for each analyzed callback.
+# Additionally, two plots (each stored as a separate .png file) will be generated for each callback: one containing
+# a line chart of callback durations vs. time, and one containing a histogram of the callback durations. 
+
 def get_timestamp_carma_engaged(data_util, callback_symbols, verbose=False):
     '''
     Obtain the timestamp that CARMA Platform was engaged for a given trace session.
