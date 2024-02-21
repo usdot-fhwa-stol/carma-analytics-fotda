@@ -1,0 +1,16 @@
+DATA_DIR = '../data'
+RAW_LOG_DIR = 'Raw_Log_Files'
+RAW_PCAP_DIR = 'Raw_PCAP_Files'
+TSHARK_DIR = 'Tshark_Files'
+INTERSECTION_MODEL_DIR = 'Intersection_Model'
+PARSED_OUTPUT_DIR = 'Parsed_Log_Output'
+TIMESTAMP_DIR = 'Timestamp_Files'
+PLOT_DIR = 'Plots'
+METRIC_DIR = 'Metrics'
+BSM_IDENTIFIER = "0014"
+MOM_IDENTIFIER = "00f3"
+MPM_IDENTIFIER = "00f2"
+SPAT_IDENTIFIER = "0013"
+DOT_45244_FRONT_BUMPER_DIST = 4 #Blue lexus distance (meters) from rear axle to front bumper from carma.urdf in vehicle calibration repo
+DOT_45245_FRONT_BUMPER_DIST = 4.235 #Black pacifica distance (meters) from rear axle to front bumper from carma.urdf in vehicle calibration repo
+DOT_45243_FRONT_BUMPER_DIST = 4 #Ford fusion distance (meters) from rear axle to front bumper from carma.urdf in vehicle calibration repo

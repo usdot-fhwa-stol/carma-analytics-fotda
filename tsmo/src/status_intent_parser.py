@@ -1,0 +1,68 @@
+import sys
+from csv import writer
+import os
+import constants
+import json
+import pandas as pd
+import shutil
+import re
+
+#parser method to extract necessary fields from raw text file
+def kafkaParser(logname):
+    input_directory_path = f'{constants.DATA_DIR}/{constants.RAW_LOG_DIR}'
+    output_directory_path = f'{constants.DATA_DIR}/{constants.PARSED_OUTPUT_DIR}'
+    all_in_filenames = os.listdir(input_directory_path)
+
+    for file in all_in_filenames:
+        if logname in file:
+            fileName = file.split(".")[0]
+            #Convert the text file into an array of lines
+            with open(f'{input_directory_path}/{file}', encoding="utf8", errors='ignore') as textFile:
+                textList = []
+                for line in textFile:
+                    textList.append(line.strip())
+
+            #write data of interest to csv which will be used to produce plots
+            with open(f'{output_directory_path}/{fileName}_parsed.csv', 'w', newline='') as write_obj:
+                csv_writer = writer(write_obj)
+                csv_writer.writerow(["Create_Time(ms)", "Timestamp(ms)", "Vehicle_ID", "Cur_ds(m)", "Cur_Speed", "Cur_Accel", "Cur_lane_id", "Entry_lane_id", "Link_lane_id", "Dest_lane_id", "Vehicle_state"])
+
+                #extract relevant elements from the json
+                for i in range(0, len(textList)):
+                    try:
+                        #get the create time stamped by kafka
+                        create_index = textList[i].find("CreateTime")
+                        if (create_index != -1):
+                            create_time = re.sub("[^0-9]", "", textList[i].split(":")[1])      
+
+                        json_beg_index = textList[i].find("{")
+                        status_intent_message = textList[i][json_beg_index:]
+                        status_intent_message_json = json.loads(status_intent_message)
+
+                        timestamp = status_intent_message_json['metadata']['timestamp']
+                        veh_id = status_intent_message_json['payload']['v_id']
+                        cur_ds = status_intent_message_json['payload']['cur_ds']
+                        cur_speed = status_intent_message_json['payload']['cur_speed']
+                        cur_accel = status_intent_message_json['payload']['cur_accel']
+                        cur_lane_id = status_intent_message_json['payload']['cur_lane_id']
+                        entry_lane_id = status_intent_message_json['payload']['entry_lane_id']
+                        link_lane_id = status_intent_message_json['payload']['link_lane_id']
+                        dest_lane_id = status_intent_message_json['payload']['dest_lane_id']
+
+                        #check state of vehicle using cur_lane_id
+                        state = "EV"                        
+                        if cur_lane_id == link_lane_id:
+                            state = "DV" 
+                        if cur_lane_id == dest_lane_id:
+                            state = "LV"
+                        csv_writer.writerow([create_time, timestamp, veh_id, cur_ds, cur_speed, cur_accel, cur_lane_id, entry_lane_id, link_lane_id, dest_lane_id, state])
+                    except:
+                        print("Error extracting json info for line: " + str(textList[i]))
+
+
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print('Run with: "python3 status_intent_parser.py logname"')
+    else:       
+        logname = sys.argv[1]
+        kafkaParser(logname)
