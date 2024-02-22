@@ -5,7 +5,7 @@ from enum import Enum
 from KafkaLogMessage import KafkaLogMessage, KafkaLogMessageType
 
 
-def parse_kafka_logs(inputfile, message_type):
+def parse_kafka_logs(inputfile: Path, message_type: KafkaLogMessageType)-> list:
     """Parse Kafka Topic Logs into a list of KafkaLogMessages
 
     Args:
@@ -15,10 +15,9 @@ def parse_kafka_logs(inputfile, message_type):
     Returns:
         [KafkaLogsMessage]: list of KafkaLogMessages parsed from input file
     """
-    inputfile_path = Path(inputfile)
-    if inputfile_path.is_file():
+    if inputfile.is_file():
         #Convert the text file into an array of lines
-        with open(inputfile_path, encoding="utf8", errors='ignore') as textFile:
+        with open(inputfile, encoding="utf8", errors='ignore') as textFile:
             textList = []
             for line in textFile:
                 textList.append(line.strip())

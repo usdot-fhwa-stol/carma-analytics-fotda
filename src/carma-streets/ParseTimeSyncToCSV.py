@@ -6,7 +6,7 @@ import ParseKafkaLog
 from KafkaLogMessage import KafkaLogMessage, KafkaLogMessageType
 
 
-def parse_timesync_log(inputfile, outputfile):
+def parse_timesync_log(inputfile: Path, outputfile: Path):
     """Function to parse timesync Kafka Topic log file and generate csv data of all time sync messages
 
     Args:
@@ -14,10 +14,9 @@ def parse_timesync_log(inputfile, outputfile):
         outputfile (String): File name (excluding file extension) of desired csv file
     """
     timesync_msgs = ParseKafkaLog.parse_kafka_logs(inputfile, KafkaLogMessageType.TimeSync)
-    outputfile_path = Path(outputfile)
-    if not outputfile_path.exists():
+    if not outputfile.exists():
         #write data of interest to csv which will be used to produce plots
-        with open(outputfile_path, 'w', newline='') as write_obj:
+        with open(outputfile, 'w', newline='') as write_obj:
             csv_writer = writer(write_obj)
             csv_writer.writerow(["Wall Time(ms)", "Simulation Time(ms)", "Sequence Number"])
             skipped_messages = 0
@@ -33,13 +32,3 @@ def parse_timesync_log(inputfile, outputfile):
                 print(f"WARNING: Skipped {skipped_messages} due to errors. Please inspect logs")
     else :
         print(f"Output file {outputfile} already exists! Aborting process")
-def main():
-    parser = argparse.ArgumentParser(description='Parse Time Sync data from Kafka logs and generate csv output')
-    parser.add_argument('--inputfile', help='Input file', type=str)  # Required argument
-    parser.add_argument('--outputfile', help='Output file', type=str)  # Required argument
-    args = parser.parse_args()
-    parse_timesync_log(args.inputfile, args.outputfile)
-
-
-if __name__ == '__main__':
-    main()
