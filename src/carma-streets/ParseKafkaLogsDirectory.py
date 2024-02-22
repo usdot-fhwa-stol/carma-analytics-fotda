@@ -4,6 +4,7 @@ from enum import Enum
 import argparse
 import ParseKafkaLog
 import ParseTimeSyncToCSV
+import ParseSPATToCSV
 from KafkaLogMessage import KafkaLogMessage, KafkaLogMessageType
 
 
@@ -22,6 +23,10 @@ def parse_message_types(kafkaLogDir, csvDir):
             if not kafka_topic_log.name.find(KafkaLogMessageType.TimeSync.value) == -1 :
                 print(f"Found TimeSync Kafka topic log {kafka_topic_log}. Parsing log to csv ...")
                 ParseTimeSyncToCSV.parse_timesync_log(kafka_topic_log, Path(f"{csvDir}/{KafkaLogMessageType.TimeSync.value}.csv"))
+            elif not kafka_topic_log.name.find(KafkaLogMessageType.SPAT.value) == -1:
+                print(f"Found SPAT Kafka topic log {kafka_topic_log}. Parsing log to csv ...")
+                ParseSPATToCSV.parseSpatToCsv(kafka_topic_log, Path(f"{csvDir}/{KafkaLogMessageType.SPAT.value}.csv"))
+
     else:
         print("Please ensure that Kafka Logs Directory exists and CSV Logs directory does not exist")
 
