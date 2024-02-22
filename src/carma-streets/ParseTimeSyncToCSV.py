@@ -10,8 +10,8 @@ def parse_timesync_log(inputfile: Path, outputfile: Path):
     """Function to parse timesync Kafka Topic log file and generate csv data of all time sync messages
 
     Args:
-        inputfile (String): Path to Kafka Topic log file
-        outputfile (String): File name (excluding file extension) of desired csv file
+        inputfile (Path): Path to Kafka Topic log file
+        outputfile (Path): File name (excluding file extension) of desired csv file
     """
     timesync_msgs = ParseKafkaLog.parse_kafka_logs(inputfile, KafkaLogMessageType.TimeSync)
     if not outputfile.exists():

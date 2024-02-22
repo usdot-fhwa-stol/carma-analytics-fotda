@@ -9,7 +9,7 @@ def parse_kafka_logs(inputfile: Path, message_type: KafkaLogMessageType)-> list:
     """Parse Kafka Topic Logs into a list of KafkaLogMessages
 
     Args:
-        inputfile (String): Path to an inputfile
+        inputfile (Path): Path to an inputfile
         message_type (KafkaLogMessageType): Type of KafkaLogMessage to parse from input file
 
     Returns:
