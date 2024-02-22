@@ -1,0 +1,43 @@
+#!/usr/bin/python3
+
+from argparse import ArgumentParser
+from pathlib import Path
+import sys
+
+from matplotlib import pyplot as plt
+import pandas as pd
+
+if sys.stdin.isatty():
+    parser = ArgumentParser(
+        prog="plot_rtf",
+        description="Plot MOSAIC realtime factor (RTF) from a comma-separate values (CSV) file",
+    )
+
+    parser.add_argument("filepath", type=Path)
+
+    cli_args = parser.parse_args()
+
+    if not cli_args.filepath.exists():
+        print(f"fatal: '{cli_args.filepath}' does not exist")
+        sys.exit(1)
+
+    if not cli_args.filepath.is_file():
+        print(f"fatal: '{cli_args.filepath}' is not a file")
+        sys.exit(1)
+
+    df = pd.read_csv(cli_args.filepath, names=["sim_time_ns", "rtf"])
+
+else:
+    df = pd.read_csv(sys.stdin, names=["sim_time_ns", "rtf"])
+
+_, ax = plt.subplots()
+
+ax.plot(df["sim_time_ns"] / 1e9, df["rtf"], label="Instantaneous")
+ax.axhline(y=df["rtf"].mean(), linestyle="dotted", color="k", label="Mean")
+
+ax.set_title("Real Time Factor v. Simulation Time")
+ax.set_ylabel("Real Time Factor (RTF) [%]")
+ax.set_xlabel("Simulation Time [s]")
+ax.legend(loc="lower right")
+
+plt.show()

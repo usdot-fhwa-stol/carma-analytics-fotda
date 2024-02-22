@@ -1,0 +1,5 @@
+#!/bin/sh
+
+sed -e "s/\r/\n/g" \
+    | grep -Po "(?<=Simulating: ).*(?=ns)|(?<=RTF:).*(?=, ETC)" \
+    | paste -s -d',\n'
