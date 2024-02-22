@@ -7,16 +7,23 @@ import sys
 from matplotlib import pyplot as plt
 import pandas as pd
 
-if sys.stdin.isatty():
-    parser = ArgumentParser(
-        prog="plot_rtf",
-        description="Plot MOSAIC realtime factor (RTF) from a comma-separate values (CSV) file",
-    )
+parser = ArgumentParser(
+    prog="plot_rtf",
+    description="Plot MOSAIC realtime factor (RTF) from a comma-separate values (CSV) file",
+)
 
+parser.add_argument(
+    "--min-required",
+    type=float,
+    help="Minimum required RTF value. This will add a line in the generated plot",
+)
+
+if sys.stdin.isatty():
     parser.add_argument("filepath", type=Path)
 
-    cli_args = parser.parse_args()
+cli_args = parser.parse_args()
 
+if sys.stdin.isatty():
     if not cli_args.filepath.exists():
         print(f"fatal: '{cli_args.filepath}' does not exist")
         sys.exit(1)
@@ -34,6 +41,14 @@ _, ax = plt.subplots()
 
 ax.plot(df["sim_time_ns"] / 1e9, df["rtf"], label="Instantaneous")
 ax.axhline(y=df["rtf"].mean(), linestyle="dotted", color="k", label="Mean")
+
+if cli_args.min_required is not None:
+    ax.axhline(
+        y=cli_args.min_required,
+        linestyle="dashed",
+        color="tab:red",
+        label="Min Required",
+    )
 
 ax.set_title("Real Time Factor v. Simulation Time")
 ax.set_ylabel("Real Time Factor (RTF) [%]")

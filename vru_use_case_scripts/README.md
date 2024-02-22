@@ -29,7 +29,8 @@ docker logs carma-simulation 2>&1 | ./extract_rtf_data | ./plot_rtf_data
 
 ## `plot_rtf_data`
 
-This script takes in CSV-formatted RTF data from standard input or a file and plots the results.
+This script takes in CSV-formatted RTF data from standard input or a file and plots the results. This script
+has an optional `--min-required` argument that will plot a horizontal line at the level specified.
 
 ### Usage examples
 
@@ -39,8 +40,16 @@ Plot the RTF data from a file:
 ./plot_rtf_data rtf_data.csv
 ```
 
+```console
+./plot_rtf_data --min-required 0.50 rtf_data.csv
+```
+
 Plot the RTF data from standard input (_e.g._, through a pipe):
 
 ```console
 docker logs carma-simulation 2>&1 | ./extract_rtf_data | ./plot_rtf_data
+```
+
+```console
+docker logs carma-simulation 2>&1 | ./extract_rtf_data | ./plot_rtf_data --min-required 0.35
 ```
