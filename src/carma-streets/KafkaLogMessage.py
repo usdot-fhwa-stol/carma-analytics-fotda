@@ -1,12 +1,15 @@
 import json
 from enum import Enum
-
 class KafkaLogMessage:
+    """Class used to store data for each Kafka Log Message
+    """
     def __init__(self, created, json_message, msg_type):
         self.created = created
         self.json_message = json_message
         self.msg_type = msg_type
-class KafkaLogMessageType:
+class KafkaLogMessageType(Enum):
+    """Enumeration used for indentifying the type of KafkaLogMessage
+    """
     TimeSync="time_sync"
     DesiredPhasePlan="desired_phase_plan"
     SPAT="spat"
