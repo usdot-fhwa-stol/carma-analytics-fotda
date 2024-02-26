@@ -6,13 +6,13 @@ Documentation for data collection for **CARMA Streets** can be found [here](http
 ## Parsing Kafka logs to CSV 
 Using the scripts in this package we should be able to ingest all Kafka Topic Logs and produces CSV data from the resulting messages for data analysis. The `ParseKafkaLogsDirectory.py` is intended for use with to collected Kafka logs using the `collect_kafka_losg.py` script. It will search a provided directory for a log file for each supported Kafka Message type and output a CSV file containing the message data.
 ```
-Usage: ParseKafkaLogsDirectory.py [-h] [--kafkaLogDir KAFKALOGDIR] [--csvDir CSVDIR]
+usage: ParseKafkaLogsDirectory.py [-h] [--kafka-log-dir KAFKA_LOG_DIR] [--csv-dir CSV_DIR]
 
 Parse Time Sync data from Kafka logs and generate csv output
 
 options:
   -h, --help            show this help message and exit
-  --kafkaLogDir KAFKALOGDIR
+  --kafka-log-dir KAFKA_LOG_DIR
                         Directory containing Kafka Log files.
-  --csvDir CSVDIR       Output Directory to write csv files to.
+  --csv-dir CSV_DIR     Output Directory to write csv files to.
 ```
