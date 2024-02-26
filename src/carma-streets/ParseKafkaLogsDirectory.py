@@ -12,14 +12,14 @@ def parse_message_types(kafka_log_dir, csv_dir):
     """Parse all Kafka Topic Logs in a provided directory and output csv message data.
 
     Args:
-        kafkaLogDir (Path): String path to directory kafka logs directory.
-        csvDir (Path): _description_
+        kafka_log_dir (Path): String path to directory kafka logs directory.
+        csv_dir (Path): _description_
     """
-    kafkaLogDir_path = Path(kafka_log_dir)
-    csvDir_path = Path(csv_dir)
-    if kafkaLogDir_path.is_dir() and not csvDir_path.is_dir():
-        csvDir_path.mkdir(exist_ok=False)
-        for kafka_topic_log in kafkaLogDir_path.glob("*.log"):
+    kafka_log_dir_path = Path(kafka_log_dir)
+    csv_dir_path = Path(csv_dir)
+    if kafka_log_dir_path.is_dir() and not csv_dir_path.is_dir():
+        csv_dir_path.mkdir(exist_ok=False)
+        for kafka_topic_log in kafka_log_dir_path.glob("*.log"):
             if KafkaLogMessageType.TimeSync.value in kafka_topic_log.name :
                 print(f"Found TimeSync Kafka topic log {kafka_topic_log}. Parsing log to csv ...")
                 ParseTimeSyncToCSV.parse_timesync_to_csv(kafka_topic_log, Path(f"{csv_dir}/{KafkaLogMessageType.TimeSync.value}.csv"))
