@@ -4,8 +4,15 @@ This directory contains scripts to help with data analysis for VRU use-cases.
 
 ## `extract_rtf_data`
 
-This script takes in a Docker container log output and extracts realtime factor (RTF) data, outputting the results
-in comma-separated values (CSV) format.
+This script takes in a Docker container log output and extracts realtime factor (RTF) data, outputting the results as
+comma-separated values (CSV) with the following format:
+
+```text
+<sim_time_nanoseconds>,<rtf_value>
+<sim_time_nanoseconds>,<rtf_value>
+...
+<sim_time_nanoseconds>,<rtf_value>
+```
 
 ### Usage examples
 
