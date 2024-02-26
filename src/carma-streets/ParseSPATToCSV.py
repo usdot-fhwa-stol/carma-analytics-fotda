@@ -6,14 +6,14 @@ import ParseKafkaLog
 from KafkaLogMessage import KafkaLogMessage, KafkaLogMessageType
 
 
-def parseSpatToCsv(inputfile: Path, outputfile: Path):
+def parse_spat_to_csv(inputfile: Path, outputfile: Path):
     """Function to parse SPAT Kafka Topic log file and generate csv data of all time sync messages
 
     Args:
         inputfile (Path): Path to Kafka Topic log file
         outputfile (Path): File name (excluding file extension) of desired csv file
     """
-    spat_msgs = ParseKafkaLog.parse_kafka_logs(inputfile, KafkaLogMessageType.TimeSync)
+    spat_msgs = ParseKafkaLog.parse_kafka_logs(inputfile, KafkaLogMessageType.SPAT)
     if not outputfile.exists():
         #write data of interest to csv which will be used to produce plots
         with open(outputfile, 'w', newline='') as write_obj:

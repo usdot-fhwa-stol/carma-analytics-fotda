@@ -6,7 +6,7 @@ import ParseKafkaLog
 from KafkaLogMessage import KafkaLogMessage, KafkaLogMessageType
 
 
-def parse_timesync_log(inputfile: Path, outputfile: Path):
+def parse_timesync_to_csv(inputfile: Path, outputfile: Path):
     """Function to parse timesync Kafka Topic log file and generate csv data of all time sync messages
 
     Args:

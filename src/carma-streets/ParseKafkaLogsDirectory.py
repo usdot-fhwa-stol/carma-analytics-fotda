@@ -22,10 +22,10 @@ def parse_message_types(kafka_log_dir, csv_dir):
         for kafka_topic_log in kafkaLogDir_path.glob("*.log"):
             if KafkaLogMessageType.TimeSync.value in kafka_topic_log.name :
                 print(f"Found TimeSync Kafka topic log {kafka_topic_log}. Parsing log to csv ...")
-                ParseTimeSyncToCSV.parse_timesync_log(kafka_topic_log, Path(f"{csv_dir}/{KafkaLogMessageType.TimeSync.value}.csv"))
+                ParseTimeSyncToCSV.parse_timesync_to_csv(kafka_topic_log, Path(f"{csv_dir}/{KafkaLogMessageType.TimeSync.value}.csv"))
             elif KafkaLogMessageType.SPAT.value in kafka_topic_log.name:
                 print(f"Found SPAT Kafka topic log {kafka_topic_log}. Parsing log to csv ...")
-                ParseSPATToCSV.parseSpatToCsv(kafka_topic_log, Path(f"{csv_dir}/{KafkaLogMessageType.SPAT.value}.csv"))
+                ParseSPATToCSV.parse_spat_to_csv(kafka_topic_log, Path(f"{csv_dir}/{KafkaLogMessageType.SPAT.value}.csv"))
 
     else:
         print("Please ensure that Kafka Logs Directory exists and CSV Logs directory does not exist")
