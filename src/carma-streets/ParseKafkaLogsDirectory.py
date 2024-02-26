@@ -34,9 +34,8 @@ def parse_message_types(kafka_log_dir, csv_dir):
 def main():
     parser = argparse.ArgumentParser(description='Parse Time Sync data from Kafka logs and generate csv output')
     parser.add_argument('--kafka-log-dir', help='Directory containing Kafka Log files.', type=str)  # Required argument
-    parser.add_argument('--csv-dir', help='Output Directory to write csv files to.', type=str)  # Required argument
-    ## TODO
-    #parser.add_argument('--messageTypes', help='Output Directory to write csv files to.', type=str)  # Required argument
+    parser.add_argument('--csv-dir', help='Directory to write csv files to.', type=str)  # Required argument
+
 
     args = parser.parse_args()
     parse_message_types(args.kafka_log_dir, args.csv_dir)
