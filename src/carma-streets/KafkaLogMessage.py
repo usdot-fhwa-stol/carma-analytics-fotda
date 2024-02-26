@@ -1,6 +1,7 @@
 import json
 from dataclasses import dataclass
 from enum import Enum
+
 class KafkaLogMessageType(Enum):
     """Enumeration used for indentifying the type of KafkaLogMessage
     """
@@ -15,6 +16,7 @@ class KafkaLogMessageType(Enum):
     SDSM="sdsm"
     DetectedObject="detected_object"
     VehicleStatusIntent="vehicle_status_intent"
+
 @dataclass
 class KafkaLogMessage:
     """Class used to store data for each Kafka Log Message

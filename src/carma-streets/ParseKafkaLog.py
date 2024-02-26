@@ -18,20 +18,18 @@ def parse_kafka_logs(input_file_path: Path, message_type: KafkaLogMessageType)->
     if input_file_path.is_file():
         #Convert the text file into an array of lines
         with open(input_file_path, encoding="utf8", errors='ignore') as log_file:
-            textList = []
-            for line in log_file:
-                textList.append(line.strip())
             msgs = []
             skipped_messages = 0
-            for i in range(0, len(textList)):
+            for line in log_file:
                 try:
+                    line = line.strip()
                     #get the create time stamped by kafka
-                    create_index = textList[i].find("CreateTime")
+                    create_index = line.find("CreateTime")
                     if (create_index != -1):
-                        create_time = re.sub("[^0-9]", "", textList[i].split(":")[1])      
+                        create_time = re.sub("[^0-9]", "", line.split(":")[1])      
 
-                    json_beg_index = textList[i].find("{")
-                    kafka_message = textList[i][json_beg_index:]
+                    json_beg_index = line.find("{")
+                    kafka_message = line[json_beg_index:]
                     kafka_json = json.loads(kafka_message)
                     msgs.append(KafkaLogMessage(create_time, kafka_json, message_type))
                 except json.JSONDecodeError as e:
