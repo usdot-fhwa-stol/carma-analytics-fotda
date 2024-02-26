@@ -1,7 +1,5 @@
 from csv import writer
 from pathlib import Path
-from enum import Enum
-import argparse
 import ParseKafkaLog
 from KafkaLogMessage import KafkaLogMessage, KafkaLogMessageType
 
