@@ -1,5 +1,7 @@
 #!/bin/sh
 
+echo "sim_time_ns,rtf"
+
 sed -e "s/\r/\n/g" \
     | grep -Po "(?<=Simulating: ).*(?=ns)|(?<=RTF:).*(?=, ETC)" \
     | paste -s -d',\n'

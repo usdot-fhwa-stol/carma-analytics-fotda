@@ -23,6 +23,7 @@ if sys.stdin.isatty():
 
 cli_args = parser.parse_args()
 
+csv_source = None
 if sys.stdin.isatty():
     if not cli_args.filepath.exists():
         print(f"fatal: '{cli_args.filepath}' does not exist")
@@ -32,10 +33,27 @@ if sys.stdin.isatty():
         print(f"fatal: '{cli_args.filepath}' is not a file")
         sys.exit(1)
 
-    df = pd.read_csv(cli_args.filepath, names=["sim_time_ns", "rtf"])
+    csv_source = cli_args.filepath
 
 else:
-    df = pd.read_csv(sys.stdin, names=["sim_time_ns", "rtf"])
+    csv_source = sys.stdin
+
+if not csv_source:
+    print("plot_rtf_data: no csv data source")
+    sys.exit(1)
+
+try:
+    df = pd.read_csv(
+        csv_source,
+        dtype={"sim_time_ns": int, "rtf": float},
+    )
+except ValueError:
+    print("plot_rtf_data: malformed csv data")
+    sys.exit(1)
+
+if list(df.columns) != ["sim_time_ns", "rtf"]:
+    print("plot_rtf_data: missing or incorrect csv header")
+    sys.exit(1)
 
 _, ax = plt.subplots()
 
