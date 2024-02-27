@@ -29,11 +29,7 @@ class KafkaLogMessage:
     created: int
     json_message: dict
     msg_type: KafkaLogMessageType
-    def __init__(self, created, json_message, msg_type):
-        self.created = created
-        self.json_message = json_message
-        self.msg_type = msg_type
-
+    
 def parse_kafka_logs_as_type(input_file_path: Path, message_type: KafkaLogMessageType)-> list:
     """Parse Kafka Topic Logs into a list of KafkaLogMessages of the type provided.
 
@@ -78,31 +74,30 @@ def parse_spat_to_csv(inputfile: Path, outputfile: Path):
         outputfile (Path): File name (excluding file extension) of desired csv file
     """
     spat_msgs = parse_kafka_logs_as_type(inputfile, KafkaLogMessageType.SPAT)
-    if not outputfile.exists():
-        #write data of interest to csv which will be used to produce plots
-        with open(outputfile, 'w', newline='') as write_obj:
-            csv_writer = writer(write_obj)
-            csv_writer.writerow(['Created Time(ms)', 'Intersection Name', 'Intersection ID', 'Minute of the Year',
-                 'Millisecond of the Minute', 'Intersection State'])            
-            skipped_messages = 0
-            #extract relevant elements from the json
-            for msg in spat_msgs:
-                try:
-                    csv_writer.writerow([
-                        msg.created, 
-                        msg.json_message['intersections'][0]['name'],
-                        msg.json_message['intersections'][0]['id'],
-                        msg.json_message['intersections'][0]['moy'],
-                        msg.json_message['intersections'][0]['time_stamp'],
-                        msg.json_message['intersections'][0]['states']])
-                except Exception as e:
-                    print(f'Error {e} occurred while writing csv entry for kafka message {msg.json_message}. Skipping message.')
-            if skipped_messages == 0 :
-                print('Finished writing all entries successfully')
-            else:
-                print(f'WARNING: Skipped {skipped_messages} due to errors. Please inspect logs')
-    else :
-        print(f'Output file {outputfile} already exists! Aborting process')
+    if  outputfile.exists():
+        print(f'Output file {outputfile} already exists. Overwritting file.')
+    #write data of interest to csv which will be used to produce plots
+    with open(outputfile, 'w', newline='') as write_obj:
+        csv_writer = writer(write_obj)
+        csv_writer.writerow(['Created Time(ms)', 'Intersection Name', 'Intersection ID', 'Minute of the Year',
+                'Millisecond of the Minute', 'Intersection State'])            
+        skipped_messages = 0
+        #extract relevant elements from the json
+        for msg in spat_msgs:
+            try:
+                csv_writer.writerow([
+                    msg.created, 
+                    msg.json_message['intersections'][0]['name'],
+                    msg.json_message['intersections'][0]['id'],
+                    msg.json_message['intersections'][0]['moy'],
+                    msg.json_message['intersections'][0]['time_stamp'],
+                    msg.json_message['intersections'][0]['states']])
+            except Exception as e:
+                print(f'Error {e} occurred while writing csv entry for kafka message {msg.json_message}. Skipping message.')
+        if skipped_messages == 0 :
+            print('Finished writing all entries successfully')
+        else:
+            print(f'WARNING: Skipped {skipped_messages} due to errors. Please inspect logs')
 
 def parse_timesync_to_csv(inputfile: Path, outputfile: Path):
     """Function to parse timesync Kafka Topic log file and generate csv data of all time sync messages
@@ -112,25 +107,24 @@ def parse_timesync_to_csv(inputfile: Path, outputfile: Path):
         outputfile (Path): File name (excluding file extension) of desired csv file
     """
     timesync_msgs = parse_kafka_logs_as_type(inputfile, KafkaLogMessageType.TimeSync)
-    if not outputfile.exists():
-        #write data of interest to csv which will be used to produce plots
-        with open(outputfile, 'w', newline='') as write_obj:
-            csv_writer = writer(write_obj)
-            csv_writer.writerow(['Created Time(ms)', 'Epoch Time(ms)', 'Sequence Number'])
-            skipped_messages = 0
-            #extract relevant elements from the json
-            for msg in timesync_msgs:
-                try:
-                    csv_writer.writerow([msg.created, msg.json_message['timestep'], msg.json_message['seq']])
-                except Exception as e:
-                    print(f'Error {e} occurred while writing csv entry for kafka message {msg.json_message}. Skipping message.')
-            if skipped_messages == 0 :
-                print('Finished writing all entries successfully')
-            else:
-                print(f'WARNING: Skipped {skipped_messages} due to errors. Please inspect logs')
-    else :
-        print(f'Output file {outputfile} already exists! Aborting process')
-
+    if  outputfile.exists():
+        print(f'Output file {outputfile} already exists. Overwritting file.')
+    #write data of interest to csv which will be used to produce plots
+    with open(outputfile, 'w', newline='') as write_obj:
+        csv_writer = writer(write_obj)
+        csv_writer.writerow(['Created Time(ms)', 'Epoch Time(ms)', 'Sequence Number'])
+        skipped_messages = 0
+        #extract relevant elements from the json
+        for msg in timesync_msgs:
+            try:
+                csv_writer.writerow([msg.created, msg.json_message['timestep'], msg.json_message['seq']])
+            except Exception as e:
+                print(f'Error {e} occurred while writing csv entry for kafka message {msg.json_message}. Skipping message.')
+        if skipped_messages == 0 :
+            print('Finished writing all entries successfully')
+        else:
+            print(f'WARNING: Skipped {skipped_messages} due to errors. Please inspect logs')
+   
 def parse_message_types(kafka_log_dir, csv_dir):
     """Parse all Kafka Topic Logs in a provided directory and output csv message data.
 
