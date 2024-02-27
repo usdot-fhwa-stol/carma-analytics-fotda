@@ -152,10 +152,8 @@ def parse_message_types(kafka_log_dir, csv_dir):
    
 def main():
     parser = argparse.ArgumentParser(description='Script to parse Kafka Topic log files into CSV data')
-    parser.add_argument('--kafka-log-dir', help='Directory containing Kafka Log files.', type=str)  # Required argument
-    parser.add_argument('--csv-dir', help='Directory to write csv files to.', type=str)  # Required argument
-
-
+    parser.add_argument('--kafka-log-dir', help='Directory containing Kafka Log files.', type=str, required=True) 
+    parser.add_argument('--csv-dir', help='Directory to write csv files to.', type=str, required=True)  
     args = parser.parse_args()
     parse_message_types(args.kafka_log_dir, args.csv_dir)
 
