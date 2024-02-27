@@ -26,7 +26,7 @@ class KafkaLogMessageType(Enum):
 class KafkaLogMessage:
     """Class used to store data for each Kafka Log Message
     """
-    created: int
+    created_time: int
     json_message: dict
     msg_type: KafkaLogMessageType
     
@@ -86,7 +86,7 @@ def parse_spat_to_csv(inputfile: Path, outputfile: Path):
         for msg in spat_msgs:
             try:
                 csv_writer.writerow([
-                    msg.created, 
+                    msg.created_time, 
                     msg.json_message['intersections'][0]['name'],
                     msg.json_message['intersections'][0]['id'],
                     msg.json_message['intersections'][0]['moy'],
@@ -117,7 +117,7 @@ def parse_timesync_to_csv(inputfile: Path, outputfile: Path):
         #extract relevant elements from the json
         for msg in timesync_msgs:
             try:
-                csv_writer.writerow([msg.created, msg.json_message['timestep'], msg.json_message['seq']])
+                csv_writer.writerow([msg.created_time, msg.json_message['timestep'], msg.json_message['seq']])
             except Exception as e:
                 print(f'Error {e} occurred while writing csv entry for kafka message {msg.json_message}. Skipping message.')
         if skipped_messages == 0 :
