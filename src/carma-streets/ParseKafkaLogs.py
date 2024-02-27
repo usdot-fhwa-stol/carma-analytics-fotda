@@ -77,7 +77,7 @@ def parse_spat_to_csv(inputfile: Path, outputfile: Path):
         inputfile (Path): Path to Kafka Topic log file
         outputfile (Path): File name (excluding file extension) of desired csv file
     """
-    spat_msgs = parse_kafka_logs(inputfile, KafkaLogMessageType.SPAT)
+    spat_msgs = parse_kafka_logs_as_type(inputfile, KafkaLogMessageType.SPAT)
     if not outputfile.exists():
         #write data of interest to csv which will be used to produce plots
         with open(outputfile, 'w', newline='') as write_obj:
@@ -111,7 +111,7 @@ def parse_timesync_to_csv(inputfile: Path, outputfile: Path):
         inputfile (Path): Path to Kafka Topic log file
         outputfile (Path): File name (excluding file extension) of desired csv file
     """
-    timesync_msgs = parse_kafka_logs(inputfile, KafkaLogMessageType.TimeSync)
+    timesync_msgs = parse_kafka_logs_as_type(inputfile, KafkaLogMessageType.TimeSync)
     if not outputfile.exists():
         #write data of interest to csv which will be used to produce plots
         with open(outputfile, 'w', newline='') as write_obj:
