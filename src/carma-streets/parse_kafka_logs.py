@@ -125,7 +125,7 @@ def parse_timesync_to_csv(inputfile: Path, outputfile: Path):
         else:
             print(f'WARNING: Skipped {skipped_messages} due to errors. Please inspect logs')
    
-def parse_message_types(kafka_log_dir, csv_dir):
+def parse_kafka_log_dir(kafka_log_dir, csv_dir):
     """Parse all Kafka Topic Logs in a provided directory and output csv message data.
 
     Args:
@@ -141,13 +141,13 @@ def parse_message_types(kafka_log_dir, csv_dir):
         for kafka_topic_log in kafka_log_dir_path.glob('*.log'):
             if KafkaLogMessageType.TimeSync.value in kafka_topic_log.name :
                 print(f'Found TimeSync Kafka topic log {kafka_topic_log}. Parsing log to csv ...')
-                parse_timesync_to_csv(kafka_topic_log, Path(f'{csv_dir}/{KafkaLogMessageType.TimeSync.value}.csv'))
+                parse_timesync_to_csv(kafka_topic_log, csv_dir_path/f'{KafkaLogMessageType.TimeSync.value}.csv')
             elif KafkaLogMessageType.SPAT.value in kafka_topic_log.name:
                 print(f'Found SPAT Kafka topic log {kafka_topic_log}. Parsing log to csv ...')
-                parse_spat_to_csv(kafka_topic_log, Path(f'{csv_dir}/{KafkaLogMessageType.SPAT.value}.csv'))
+                parse_spat_to_csv(kafka_topic_log, csv_dir_path/f'{KafkaLogMessageType.SPAT.value}.csv')
 
     else:
-        print('Please ensure that Kafka Logs Directory exists and CSV Logs directory does not exist')
+        print('ERROR:Please ensure that Kafka Logs Directory exists.')
 
    
 def main():
@@ -155,7 +155,7 @@ def main():
     parser.add_argument('--kafka-log-dir', help='Directory containing Kafka Log files.', type=str, required=True) 
     parser.add_argument('--csv-dir', help='Directory to write csv files to.', type=str, required=True)  
     args = parser.parse_args()
-    parse_message_types(args.kafka_log_dir, args.csv_dir)
+    parse_kafka_log_dir(args.kafka_log_dir, args.csv_dir)
 
 
 if __name__ == '__main__':
