@@ -60,3 +60,20 @@ docker logs carma-simulation 2>&1 | ./extract_rtf_data | ./plot_rtf_data
 ```console
 docker logs carma-simulation 2>&1 | ./extract_rtf_data | ./plot_rtf_data --min-required 0.35
 ```
+
+## `plot_sdsm_position_error`
+
+This script takes in two V2XHub log messages (one for detected objects and another for SDSMs) and plots the position
+difference between entries in the two logs. For each detected object and for each timestamp, the script searches in
+the SDSM log file for a corresponding entry. It then calculates the distance between the two entires. Finally, the
+script plots the results for each object for the duration of the simulation.
+
+### Usage examples
+
+Plot the data:
+
+```console
+./plot_sdsm_position_error \
+  --sdsm-log <path_to_logs_dir>/v2xhub_sdsm_sub.log \
+  --detection-log <path_to_logs_dir>/v2xhub_sim_sensor_detected_object.log
+```
