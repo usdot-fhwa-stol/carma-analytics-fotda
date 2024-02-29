@@ -6,6 +6,8 @@ from dataclasses import dataclass
 import argparse
 from csv import writer
 import datetime
+import pytz
+
 
 
 class KafkaLogMessageType(Enum):
@@ -84,18 +86,29 @@ def parse_spat_to_csv(inputfile: Path, outputfile: Path):
     #write data of interest to csv which will be used to produce plots
     with open(outputfile, 'w', newline='') as write_obj:
         csv_writer = writer(write_obj)
-        csv_writer.writerow(['Created Time(ms)', 'Intersection Name', 'Intersection ID', 'Minute of the Year',
-                'Millisecond of the Minute', 'Intersection State'])            
+        csv_writer.writerow(['Created Time(ms)', 'Intersection Name', 'Intersection ID', 'Timestamp(ms)', 'Intersection State'])            
         skipped_messages = 0
+        #Need to get time since epoch of first day of year to use with moy and timestamp
+        #Our local timezone GMT-5 actually needs to be implemented as GMT+5 with pytz library
+        #documentation: https://stackoverflow.com/questions/54842491/printing-datetime-as-pytz-timezoneetc-gmt-5-yields-incorrect-result
+        
+        #Get year of test data from the first kafka create timestamp
+                           
+        test_year = str(datetime.datetime.fromtimestamp(int(spat_msgs[0].created_time)/1000)).split("-")[0]
+
+        naive = datetime.datetime(int(test_year), 1, 1, 0, 0, 0)
+        utc = pytz.utc
+        gmt5 = pytz.timezone('Etc/GMT+5')
+        first_day_epoch = utc.localize(naive).astimezone(gmt5).timestamp()*1000
         #extract relevant elements from the json
         for msg in spat_msgs:
             try:
+                timestamp = msg.json_message['intersections'][0]['moy']*60*1000 + msg.json_message['intersections'][0]['time_stamp'] + first_day_epoch
                 csv_writer.writerow([
                     msg.created_time, 
                     msg.json_message['intersections'][0]['name'],
                     msg.json_message['intersections'][0]['id'],
-                    msg.json_message['intersections'][0]['moy'],
-                    msg.json_message['intersections'][0]['time_stamp'],
+                    timestamp,
                     msg.json_message['intersections'][0]['states']])
             except Exception as e:
                 print(f'Error {e} occurred while writing csv entry for kafka message {msg.json_message}. Skipping message.')
@@ -117,7 +130,7 @@ def parse_timesync_to_csv(inputfile: Path, outputfile: Path):
     #write data of interest to csv which will be used to produce plots
     with open(outputfile, 'w', newline='') as write_obj:
         csv_writer = writer(write_obj)
-        csv_writer.writerow(['Created Time(ms)', 'Epoch Time(ms)', 'Sequence Number'])
+        csv_writer.writerow(['Created Time(ms)', 'Timestamp(ms)', 'Sequence Number'])
         skipped_messages = 0
         #extract relevant elements from the json
         for msg in timesync_msgs:
@@ -144,7 +157,7 @@ def parse_map_to_csv(inputfile: Path, outputfile: Path):
     #write data of interest to csv which will be used to produce plots
     with open(outputfile, 'w', newline='') as write_obj:
         csv_writer = writer(write_obj)
-        csv_writer.writerow(['Created Time(ms)', 'Epoch Time(ms)', 'Map Data'])
+        csv_writer.writerow(['Created Time(ms)', 'Timestamp(ms)', 'Map Data'])
         skipped_messages = 0
         #extract relevant elements from the json
         for msg in map_msgs:
@@ -170,7 +183,7 @@ def parse_sdsm_to_csv(inputfile: Path, outputfile: Path):
     #write data of interest to csv which will be used to produce plots
     with open(outputfile, 'w', newline='') as write_obj:
         csv_writer = writer(write_obj)
-        csv_writer.writerow(['Created Time(ms)', 'Epoch Time(ms)', 'Objects'])
+        csv_writer.writerow(['Created Time(ms)', 'Timestamp(ms)', 'Objects'])
         skipped_messages = 0
         #extract relevant elements from the json
         for msg in sdsm_msgs:
