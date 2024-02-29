@@ -36,7 +36,9 @@ def parse_positions_from_sdsm_log(file_path: Path):
             # but the message does not provide the detection source's position.
             position_offset = np.array(list(common_data["pos"].values())[:2]) / 10.0
 
-            sdsm_data.append([timestamp, id_, *position_offset])
+            sdsm_data.append(
+                [timestamp - common_data["measurement_time"], id_, *position_offset]
+            )
 
     return pd.DataFrame(sdsm_data, columns=["timestamp", "object_id", "x", "y"])
 
@@ -123,7 +125,7 @@ def calc_position_distances(detections_df: pd.DataFrame, sdsm_df: pd.DataFrame):
         for _, detection_row in filter_df_for_object_id(
             detections_df, detection_id
         ).iterrows():
-            timestamp = detection_row["timestamp"] + 100
+            timestamp = detection_row["timestamp"]
             sdsm_row = filter_df_for_timestamp(sdsm_df_object_id, timestamp)
 
             if sdsm_row.empty:
