@@ -1,0 +1,171 @@
+#!/usr/bin/python3
+
+import json
+import sys
+
+from matplotlib import pyplot as plt
+import numpy as np
+import pandas as pd
+from pyproj import CRS, Transformer, Proj
+
+
+def get_timestamp(line: str):
+    timestamp_start = line.find('"timestamp":') + len('"timestamp":')
+    timestamp_end = line.find("}", timestamp_start)
+
+    return int(line[timestamp_start:timestamp_end])
+
+
+def get_object_id(line: str):
+    id_start = line.find('"objectId":') + len('"objectId":')
+    id_end = line.find(",", id_start)
+
+    return line[id_start:id_end]
+
+
+def get_object_position(line: str):
+    position_start = line.find('"position":') + len('"position":')
+    position_end = line.find("}", position_start) + 1
+
+    position = np.asarray(list(json.loads(line[position_start:position_end]).values()))
+    # position[0] *= -1
+    # position[1] *= -1
+    position[0], position[1] = position[1], position[0]
+
+    return position
+
+
+detection_data = [
+    [get_timestamp(line), get_object_id(line), *get_object_position(line)]
+    for line in open("/tmp/kafka_logs/v2xhub_sim_sensor_detected_object.log")
+]
+
+
+detections_df = pd.DataFrame(
+    detection_data, columns=["timestamp", "object_id", "x", "y", "z"]
+)
+
+
+def get_sdsm_time_in_ms(ddate_time_json: dict):
+    return ddate_time_json["minute"] * 60 * 1000 + ddate_time_json["second"]
+
+
+def get_json_payload(line: str):
+    json_start = line.find("{")
+    json_end = line.rfind("}") + 1
+
+    return line[json_start:json_end]
+
+
+DECI_UDEG_TO_DEG = 1 / 10_000_000
+
+sdsm_data = []
+for line in open("/tmp/kafka_logs/v2xhub_sdsm_sub.log"):
+    sdsm = json.loads(get_json_payload(line))
+    time_stamp = get_sdsm_time_in_ms(sdsm["sdsm_time_stamp"])
+    projection = Proj(
+        "+proj=tmerc +lat_0=0 +lon_0=0 +k=1 +x_0=0 +y_0=0 +datum=WGS84 +units=m +vunits=m +no_defs"
+    )
+    longitude = sdsm["ref_pos"]["long"] * DECI_UDEG_TO_DEG
+    latitude = sdsm["ref_pos"]["lat"] * DECI_UDEG_TO_DEG
+    position_reference = np.array(projection(longitude, latitude))
+
+    for detected_object in sdsm["objects"]:
+        object_data = detected_object["detected_object_data"]
+        common_data = object_data["detected_object_common_data"]
+
+        id_ = common_data["object_id"]
+        position_offset = np.array(list(common_data["pos"].values())[:2]) / 10.0
+
+        # The detection messages' position entries are offsets from the detection source,
+        # but the message does not provide the detection source's position.
+
+        # object_position = position_reference + position_offset
+        object_position = position_offset
+
+        sdsm_data.append([time_stamp, id_, *object_position])
+
+sdsm_df = pd.DataFrame(sdsm_data, columns=["timestamp", "object_id", "x", "y"])
+
+detections_207 = detections_df.loc[detections_df["object_id"] == "207"]
+detections_223 = detections_df.loc[detections_df["object_id"] == "223"]
+
+sdsm_207 = sdsm_df.loc[sdsm_df["object_id"] == 207]
+sdsm_223 = sdsm_df.loc[sdsm_df["object_id"] == 223]
+
+
+def entries_at_time_stamp(df: pd.DataFrame, id_: int, time_stamp: int):
+    return df.loc[(df["object_id"] == id_) & (df["timestamp"] == time_stamp)]
+
+times_207 = []
+distances_207 = []
+for index, detection_row in detections_207.iterrows():
+    sdsm_row = entries_at_time_stamp(sdsm_df, 207, detection_row["timestamp"] + 100)
+
+    if sdsm_row.empty:
+        # print(f"No SDSM for time stamp {detection_row['timestamp']}")
+        continue
+
+    if len(sdsm_row) > 1:
+        print(f"fatal: Multiple SDSMs for time stamp {detected_object['timestamp']}")
+        sys.exit(1)
+
+    detection_position = np.array([detection_row["x"], detection_row["y"]])
+    sdsm_position = np.array([sdsm_row.iloc[0]["x"], sdsm_row.iloc[0]["y"]])
+
+    times_207.append(detection_row["timestamp"] / 1_000)
+    distances_207.append(np.linalg.norm(detection_position - sdsm_position))
+    # print(distances)
+
+    # print(f"{detection_position}, {sdsm_position}")
+
+    # print(row["timestamp"])
+
+# print(detections_207)
+# print(detections_df)
+
+plt.scatter(detections_207["x"], detections_207["y"], marker="+", label="detection")
+plt.scatter(sdsm_207["x"], sdsm_207["y"], marker="x", label="sdsm")
+plt.legend()
+plt.show()
+
+times_223 = []
+distances_223 = []
+for index, detection_row in detections_223.iterrows():
+    sdsm_row = entries_at_time_stamp(sdsm_df, 223, detection_row["timestamp"] + 100)
+
+    if sdsm_row.empty:
+        # print(f"No SDSM for time stamp {detection_row['timestamp']}")
+        continue
+
+    if len(sdsm_row) > 1:
+        print(f"fatal: Multiple SDSMs for time stamp {detected_object['timestamp']}")
+        sys.exit(1)
+
+    detection_position = np.array([detection_row["x"], detection_row["y"]])
+    sdsm_position = np.array([sdsm_row.iloc[0]["x"], sdsm_row.iloc[0]["y"]])
+
+    times_223.append(detection_row["timestamp"] / 1_000)
+    distances_223.append(np.linalg.norm(detection_position - sdsm_position))
+
+fig, (ax_207, ax_223) = plt.subplots(1, 2)
+
+fig.suptitle("SDSM-to-Detection Distance v. Simulation Time")
+
+ax_207.set_title("207")
+ax_207.plot(times_207, distances_207, marker="+", linewidth=0)
+ax_207.axhline(y=1.0, linestyle="dashed", color="tab:red", label="Max Required")
+
+ax_207.set_ylabel("Euclidean Distance [m]")
+ax_207.set_xlabel("Simulation Time [s]")
+ax_207.legend(loc="best")
+
+ax_223.set_title("223")
+ax_223.plot(times_223, distances_223, marker="x", linewidth=0)
+ax_223.axhline(y=1.0, linestyle="dashed", color="tab:red", label="Max Required")
+
+ax_223.set_ylabel("Euclidean Distance [m]")
+ax_223.set_xlabel("Simulation Time [s]")
+ax_223.legend(loc="best")
+
+plt.show()
