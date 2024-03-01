@@ -183,7 +183,9 @@ def parse_sdsm_to_csv(inputfile: Path, outputfile: Path):
     #write data of interest to csv which will be used to produce plots
     with open(outputfile, 'w', newline='') as write_obj:
         csv_writer = writer(write_obj)
-        csv_writer.writerow(['Created Time(ms)', 'Timestamp(ms)', 'Objects'])
+        csv_writer.writerow(['Created Time(ms)', 'Timestamp(ms)',
+             'Message Count', 'Source ID', 'Equipement Type', 'Reference Position Longitude', 
+             'Reference Position Latitude', 'Reference Position Elevation','Objects'])
         skipped_messages = 0
         #extract relevant elements from the json
         for msg in sdsm_msgs:
@@ -195,7 +197,16 @@ def parse_sdsm_to_csv(inputfile: Path, outputfile: Path):
                     msg.json_message['sdsm_time_stamp']['minute'], \
                     msg.json_message['sdsm_time_stamp']['second']//1000, \
                     msg.json_message['sdsm_time_stamp']['second']%1000).timestamp()*1000
-                csv_writer.writerow([msg.created_time, epoch_time, msg.json_message['objects']])
+                csv_writer.writerow([
+                    msg.created_time, 
+                    epoch_time, 
+                    msg.json_message['msg_cnt'],
+                    msg.json_message['source_id'],
+                    msg.json_message['equipment_type'],
+                    msg.json_message['ref_pos']['long'], 
+                    msg.json_message['ref_pos']['lat'], 
+                    msg.json_message['ref_pos']['elevation'], 
+                    msg.json_message['objects']])
             except Exception as e:
                 print(f'Error {e.msgs} occurred while writing csv entry for kafka message {msg.json_message}. Skipping message.')
         if skipped_messages == 0 :
