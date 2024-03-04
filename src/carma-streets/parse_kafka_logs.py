@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import argparse
 from csv import writer
 import datetime
-import pytz
+from zoneinfo import ZoneInfo
 
 
 
@@ -32,7 +32,17 @@ class KafkaLogMessage:
     created_time: int
     json_message: dict
     msg_type: KafkaLogMessageType
-    
+def get_create_time(line: str) -> int:
+    """Read CreateTime from line in Kafka Log file.
+
+    Args:
+        line (str): line in Kafka log file
+
+    Returns:
+        int: timestamp
+    """
+    return re.sub('[^0-9]', '', line.split(':')[1])
+
 def parse_kafka_logs_as_type(input_file_path: Path, message_type: KafkaLogMessageType)-> list:
     """Parse Kafka Topic Logs into a list of KafkaLogMessages of the type provided.
 
@@ -49,29 +59,41 @@ def parse_kafka_logs_as_type(input_file_path: Path, message_type: KafkaLogMessag
             msgs = []
             skipped_messages = 0
             kafka_message = str()
-            for line_number, line in enumerate(log_file):
-                try:
-                    line = line.strip()
-                    #get the create time stamped by kafka
-                    create_index = line.find('CreateTime')
-                    if (create_index != -1):
-                        if kafka_message:
+            for line in log_file:
+                line = line.strip()
+                if 'CreateTime' in line:
+                    if kafka_message:
+                        try:
                             kafka_json = json.loads(kafka_message)
                             kafka_message = ''
                             msgs.append(KafkaLogMessage(create_time, kafka_json, message_type))
-                        create_time = re.sub('[^0-9]', '', line.split(':')[1])      
-                        json_beg_index = line.find('{')
-                        kafka_message += line[json_beg_index:]
-                    else:
-                        kafka_message += line
-                except json.JSONDecodeError as e:
-                    print(f'Error {e.msg} extracting json info for message: {kafka_message}. Skipping message.')
-                    skipped_messages += 1
+                        except json.JSONDecodeError as e:
+                            print(f'Error {e.msg} extracting json info for message: {kafka_message}. Skipping message.')
+                            skipped_messages += 1
+                            kafka_message = ''
+                    create_time = get_create_time(line)      
+                    json_beg_index = line.find('{')
+                    kafka_message += line[json_beg_index:]
+                else:
+                    kafka_message += line
+                
             if skipped_messages > 0 :
                 print(f'WARNING: Skipped {skipped_messages} due to JSON decoding errors. Please inspect logs.')
             else:
                 print(f'Successfully extracted all {len(msgs)} messages from inputfile.')
             return msgs
+def get_spat_timestamp(json_data: dict,test_year: int):
+    """Function to extract timestamp data from SPAT message
+
+    Args:
+        json_data (dict): SPAT JSON data
+        test_year (int): Test year data is within
+
+    Returns:
+        int: epoch timestamp in milliseconds
+    """
+    first_day_epoch = datetime.datetime(int(test_year), 1, 1, 0, 0, 0, tzinfo=ZoneInfo("America/New_York")).timestamp()*1000
+    return json_data['intersections'][0]['moy']*60*1000 + json_data['intersections'][0]['time_stamp'] + first_day_epoch
 
 def parse_spat_to_csv(inputfile: Path, outputfile: Path):
     """Function to parse SPAT Kafka Topic log file and generate csv data of all time sync messages
@@ -84,31 +106,24 @@ def parse_spat_to_csv(inputfile: Path, outputfile: Path):
     if  outputfile.exists():
         print(f'Output file {outputfile} already exists. Overwritting file.')
     #write data of interest to csv which will be used to produce plots
-    with open(outputfile, 'w', newline='') as write_obj:
-        csv_writer = writer(write_obj)
+    with open(outputfile, 'w', newline='') as file:
+        csv_writer = writer(file)
         csv_writer.writerow(['Created Time(ms)', 'Intersection Name', 'Intersection ID', 'Timestamp(ms)', 'Intersection State'])            
         skipped_messages = 0
         #Need to get time since epoch of first day of year to use with moy and timestamp
         #Our local timezone GMT-5 actually needs to be implemented as GMT+5 with pytz library
         #documentation: https://stackoverflow.com/questions/54842491/printing-datetime-as-pytz-timezoneetc-gmt-5-yields-incorrect-result
         
-        #Get year of test data from the first kafka create timestamp
-                           
+        #Get the epoch ms time of the first data of the relavent year              
         test_year = str(datetime.datetime.fromtimestamp(int(spat_msgs[0].created_time)/1000)).split("-")[0]
-
-        naive = datetime.datetime(int(test_year), 1, 1, 0, 0, 0)
-        utc = pytz.utc
-        gmt5 = pytz.timezone('Etc/GMT+5')
-        first_day_epoch = utc.localize(naive).astimezone(gmt5).timestamp()*1000
         #extract relevant elements from the json
         for msg in spat_msgs:
             try:
-                timestamp = msg.json_message['intersections'][0]['moy']*60*1000 + msg.json_message['intersections'][0]['time_stamp'] + first_day_epoch
                 csv_writer.writerow([
                     msg.created_time, 
                     msg.json_message['intersections'][0]['name'],
                     msg.json_message['intersections'][0]['id'],
-                    timestamp,
+                    get_spat_timestamp(msg.json_message, test_year),
                     msg.json_message['intersections'][0]['states']])
             except Exception as e:
                 print(f'Error {e} occurred while writing csv entry for kafka message {msg.json_message}. Skipping message.')
@@ -128,8 +143,8 @@ def parse_timesync_to_csv(inputfile: Path, outputfile: Path):
     if  outputfile.exists():
         print(f'Output file {outputfile} already exists. Overwritting file.')
     #write data of interest to csv which will be used to produce plots
-    with open(outputfile, 'w', newline='') as write_obj:
-        csv_writer = writer(write_obj)
+    with open(outputfile, 'w', newline='') as file:
+        csv_writer = writer(file)
         csv_writer.writerow(['Created Time(ms)', 'Timestamp(ms)', 'Sequence Number'])
         skipped_messages = 0
         #extract relevant elements from the json
@@ -155,8 +170,8 @@ def parse_map_to_csv(inputfile: Path, outputfile: Path):
     if  outputfile.exists():
         print(f'Output file {outputfile} already exists. Overwritting file.')
     #write data of interest to csv which will be used to produce plots
-    with open(outputfile, 'w', newline='') as write_obj:
-        csv_writer = writer(write_obj)
+    with open(outputfile, 'w', newline='') as file:
+        csv_writer = writer(file)
         csv_writer.writerow(['Created Time(ms)', 'Timestamp(ms)', 'Map Data'])
         skipped_messages = 0
         #extract relevant elements from the json
@@ -169,6 +184,24 @@ def parse_map_to_csv(inputfile: Path, outputfile: Path):
             print('Finished writing all entries successfully')
         else:
             print(f'WARNING: Skipped {skipped_messages} due to errors. Please inspect logs')
+
+def get_sdsm_timestamp(json_data: dict) -> int :
+    """Get SDSM timestamp in milliseconds from json SDSM date time
+
+    Args:
+        json_data (dict): The sdsm_time_stamp part of the SDSM JSON
+
+    Returns:
+        int: epoch millisecond timestamp
+    """
+    return datetime.datetime( json_data['year'], \
+                    json_data['month'], \
+                    json_data['day'], \
+                    json_data['hour'], \
+                    json_data['minute'], \
+                    json_data['second']//1000, \
+                    json_data['second']%1000).timestamp()*1000
+
 def parse_sdsm_to_csv(inputfile: Path, outputfile: Path):
     """Function to parse SDSM Kafka Topic log file and generate csv data of all time sync messages
 
@@ -181,8 +214,8 @@ def parse_sdsm_to_csv(inputfile: Path, outputfile: Path):
     if  outputfile.exists():
         print(f'Output file {outputfile} already exists. Overwritting file.')
     #write data of interest to csv which will be used to produce plots
-    with open(outputfile, 'w', newline='') as write_obj:
-        csv_writer = writer(write_obj)
+    with open(outputfile, 'w', newline='') as file:
+        csv_writer = writer(file)
         csv_writer.writerow(['Created Time(ms)', 'Timestamp(ms)',
              'Message Count', 'Source ID', 'Equipement Type', 'Reference Position Longitude', 
              'Reference Position Latitude', 'Reference Position Elevation','Objects'])
@@ -190,16 +223,9 @@ def parse_sdsm_to_csv(inputfile: Path, outputfile: Path):
         #extract relevant elements from the json
         for msg in sdsm_msgs:
             try:
-                epoch_time = datetime.datetime( msg.json_message['sdsm_time_stamp']['year'], \
-                    msg.json_message['sdsm_time_stamp']['month'], \
-                    msg.json_message['sdsm_time_stamp']['day'], \
-                    msg.json_message['sdsm_time_stamp']['hour'], \
-                    msg.json_message['sdsm_time_stamp']['minute'], \
-                    msg.json_message['sdsm_time_stamp']['second']//1000, \
-                    msg.json_message['sdsm_time_stamp']['second']%1000).timestamp()*1000
                 csv_writer.writerow([
                     msg.created_time, 
-                    epoch_time, 
+                    get_sdsm_timestamp(msg.json_message['sdsm_time_stamp']), 
                     msg.json_message['msg_cnt'],
                     msg.json_message['source_id'],
                     msg.json_message['equipment_type'],
