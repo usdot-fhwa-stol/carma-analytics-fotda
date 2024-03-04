@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import argparse
 from csv import writer
 import datetime
-from zoneinfo import ZoneInfo
+from dateutil import tz
 
 
 
@@ -92,7 +92,7 @@ def get_spat_timestamp(json_data: dict,test_year: int):
     Returns:
         int: epoch timestamp in milliseconds
     """
-    first_day_epoch = datetime.datetime(int(test_year), 1, 1, 0, 0, 0, tzinfo=ZoneInfo("America/New_York")).timestamp()*1000
+    first_day_epoch = datetime.datetime(int(test_year), 1, 1, 0, 0, 0, tzinfo=tz.gettz('America/New_York')).timestamp()*1000
     return json_data['intersections'][0]['moy']*60*1000 + json_data['intersections'][0]['time_stamp'] + first_day_epoch
 
 def parse_spat_to_csv(inputfile: Path, outputfile: Path):
