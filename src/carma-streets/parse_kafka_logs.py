@@ -123,7 +123,7 @@ def parse_spat_to_csv(inputfile: Path, outputfile: Path):
                     msg.created_time, 
                     msg.json_message['intersections'][0]['name'],
                     msg.json_message['intersections'][0]['id'],
-                    get_spat_timestamp(msg.json_message, test_year),
+                    get_spat_timestamp(msg.json_message, 1970),
                     msg.json_message['intersections'][0]['states']])
             except Exception as e:
                 print(f'Error {e} occurred while writing csv entry for kafka message {msg.json_message}. Skipping message.')
@@ -200,7 +200,7 @@ def get_sdsm_timestamp(json_data: dict) -> int :
                     json_data['hour'], \
                     json_data['minute'], \
                     json_data['second']//1000, \
-                    json_data['second']%1000).timestamp()*1000
+                    (json_data['second']%1000) * 1000).timestamp()*1000
 
 def parse_sdsm_to_csv(inputfile: Path, outputfile: Path):
     """Function to parse SDSM Kafka Topic log file and generate csv data of all time sync messages
