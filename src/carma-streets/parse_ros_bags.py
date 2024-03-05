@@ -10,10 +10,8 @@ from pathlib import Path
 def get_time_offset(ros_bag_file):
     time_offset = 0
     with rosbag.Bag(ros_bag_file, 'r') as bag:
-        _, msg, t = bag.read_messages(topics=['/sim_clock'])[0]
+        _, msg, t = next(bag.read_messages(topics=['/sim_clock']))
         time_offset = (t.secs * 1000 + t.nsecs // 1000000) - (msg.clock.secs * 1000 + msg.clock.nsecs // 1000000)
-        # for _, msg, t in bag.read_messages(topics=['/sim_clock']):
-        #     time_offset = (t.secs * 1000 + t.nsecs // 1000000) - (msg.clock.secs * 1000 + msg.clock.nsecs // 1000000)
     return time_offset
 
 
@@ -29,11 +27,12 @@ def get_detected_objects(ros_bag_file, outputfile, time_offset):
     if outputfile.exists():
         print(f'Output file {outputfile} already exists. Overwriting file.')
     with open(outputfile, 'w', newline='') as file:
+        # check for duplicate
         writer = csv.writer(file)
         writer.writerow(['Timestamp (ms)', 'ObjID', 'Positionx',  'Positiony']) 
         for message in messages:
             timestamp_ms = message.header.stamp.secs * 1000 + message.header.stamp.nsecs // 1000000 - time_offset
-            writer.writerow([timestamp_ms, message.id % 1000, message.pose.pose.position.x, message.pose.pose.position.y]) 
+            writer.writerow([timestamp_ms, message.id, message.pose.pose.position.x, message.pose.pose.position.y]) 
 
     print(f"Sorted data from topic '{detected_obj_topic_name}' saved to '{outputfile}'")
     print(f"Calculated sim time offset: '{time_offset}'")
