@@ -7,7 +7,14 @@ from matplotlib import pyplot as plt
 from matplotlib import axes
 import pandas as pd
 
-def plot_message_frequencies(csv_dir: str, plots_dir: str, simulation: bool):
+def plot_message_frequencies(csv_dir: str, plots_dir: str, simulation: bool = False):
+    """Function to plot all message frequencies in a single figure
+
+    Args:
+        csv_dir (str): directory that holds CSV message data.
+        plots_dir (str): directory where create figure will be saved
+        simulation (bool,optional): bool flag to indicate whether data was collected in simulation. Defaults to False.
+    """
     csv_dir_path = Path(csv_dir)
     plots_dir_path = Path(plots_dir)
     if csv_dir_path.is_dir():
@@ -46,6 +53,16 @@ def plot_message_frequencies(csv_dir: str, plots_dir: str, simulation: bool):
             fig.savefig(f'{plots_dir}/message_frequencies.png')
         
 def plot_message_frequency( axes: axes.Axes, time: list, frequency: list , message_name: str, target_frequency: int = 10, absolute_error: int = 2) :
+    """Generate subplots for each message frequency
+
+    Args:
+        axes (axes.Axes): Subplot of message frequency
+        time (list): Time data (s)
+        frequency (list): Frequency data (Hz)
+        message_name (str): Message Name
+        target_frequency (int, optional): Target frequency. Defaults to 10.
+        absolute_error (int, optional): Acceptable deviation from target frequency. Defaults to 2.
+    """
     axes.scatter(time,frequency, c="blue", marker="^", label="Freq (hz)")
     # Add horizontal lines for differing freq requirements based on message type
     axes.axhline(y=target_frequency-absolute_error, color='r', linestyle='--', label="frequency lower bound")
@@ -77,7 +94,7 @@ def main():
     parser = argparse.ArgumentParser(description='Script to plot message frequency from CARMA Streets message csv data.')
     parser.add_argument('--csv-dir', help='Directory to read csv data from.', type=str, required=True)  
     parser.add_argument('--plots-dir', help='Directory to save generated plots.', type=str, required=True) 
-    parser.add_argument('--simulation', help='Flag indicating data is from simulation', action='store_true')
+    parser.add_argument('--simulation', help='Flag indicating data is from simulation', action='store_true', default=False)
 
     args = parser.parse_args()
     plot_message_frequencies(args.csv_dir, args.plots_dir, args.simulation)
