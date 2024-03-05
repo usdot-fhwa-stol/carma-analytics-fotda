@@ -125,7 +125,7 @@ def parse_timesync_to_csv(inputfile: Path, outputfile: Path):
         else:
             print(f'WARNING: Skipped {skipped_messages} due to errors. Please inspect logs')
 
-def parse_detectedobject_to_csv(inputfile: Path, outputfile: Path):
+def parse_detected_objects_to_csv(inputfile: Path, outputfile: Path):
     """Function to parse timesync Kafka Topic log file and generate csv data of all time sync messages
 
     Args:
@@ -143,7 +143,7 @@ def parse_detectedobject_to_csv(inputfile: Path, outputfile: Path):
     with open(outputfile, 'w', newline='') as write_obj:
         csv_writer = writer(write_obj)
         csv_writer.writerow(['Timestamp (ms)', 'Type', 'ObjID', 'Positionx', 'Positiony'])
-        skipped_messages = 0
+        skipped_messages_count = 0
         #extract relevant elements from the json
         for msg in detectedobject_msgs:
             try:
@@ -151,13 +151,16 @@ def parse_detectedobject_to_csv(inputfile: Path, outputfile: Path):
                 csv_writer.writerow([msg.json_message['timestamp'], msg.json_message['type'], msg.json_message['objectId'],  
                                     msg.json_message['position']['x']+intersection_lidar_x_offset, msg.json_message['position']['y']+intersection_lidar_y_offset])
             except Exception as e:
-                print(f'Error {e} occurred while writing csv entry for kafka message {msg.json_message}. Skipping message.')
-        if skipped_messages == 0 :
+                print(
+                    f"Skipping message for object at {msg.json_message['objectId']} "
+                    f"at timestamp {msg.json_message['timestamp']}: "
+                    f"error while writing csv entry: {e}"
+                )
+        if skipped_messages_count == 0 :
             print('Finished writing all entries successfully')
         else:
-            print(f'WARNING: Skipped {skipped_messages} due to errors. Please inspect logs')
-
-
+            print(f'WARNING: Skipped {skipped_messages_count} due to errors. Please inspect logs')
+   
 def parse_kafka_log_dir(kafka_log_dir, csv_dir):
     """Parse all Kafka Topic Logs in a provided directory and output csv message data.
 
@@ -180,11 +183,12 @@ def parse_kafka_log_dir(kafka_log_dir, csv_dir):
                 parse_spat_to_csv(kafka_topic_log, csv_dir_path/f'{KafkaLogMessageType.SPAT.value}.csv')
             elif KafkaLogMessageType.DetectedObject.value in kafka_topic_log.name:
                 print(f'Found DetectedObject Kafka topic log {kafka_topic_log}. Parsing log to csv ...')
-                parse_detectedobject_to_csv(kafka_topic_log, csv_dir_path/f'{KafkaLogMessageType.DetectedObject.value}.csv')
+                parse_detected_objects_to_csv(kafka_topic_log, csv_dir_path/f'{KafkaLogMessageType.DetectedObject.value}.csv')
 
     else:
         print('ERROR:Please ensure that Kafka Logs Directory exists.')
 
+   
 def main():
     parser = argparse.ArgumentParser(description='Script to parse Kafka Topic log files into CSV data')
     parser.add_argument('--kafka-log-dir', help='Directory containing Kafka Log files.', type=str, required=True) 

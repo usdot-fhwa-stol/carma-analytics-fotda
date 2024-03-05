@@ -6,19 +6,15 @@ import argparse
 from pathlib import Path
 
 
-
-def parse_ros_bag_file(ros_bag_file, csv_dir):
-    ros_bag_file_path = Path(ros_bag_file)
-    csv_dir_path = Path(csv_dir)
-
 # calculate the offset between ros ckock and the sim clock
 def get_time_offset(ros_bag_file):
-    sim_time_topic_name = '/sim_clock'
     time_offset = 0
     with rosbag.Bag(ros_bag_file, 'r') as bag:
-        for _, msg, t in bag.read_messages(topics=[sim_time_topic_name]):
-            time_offset = (t.secs * 1000 + t.nsecs // 1000000) - (msg.clock.secs * 1000 + msg.clock.nsecs // 1000000)
-            return time_offset
+        _, msg, t = bag.read_messages(topics=['/sim_clock'])[0]
+        time_offset = (t.secs * 1000 + t.nsecs // 1000000) - (msg.clock.secs * 1000 + msg.clock.nsecs // 1000000)
+        # for _, msg, t in bag.read_messages(topics=['/sim_clock']):
+        #     time_offset = (t.secs * 1000 + t.nsecs // 1000000) - (msg.clock.secs * 1000 + msg.clock.nsecs // 1000000)
+    return time_offset
 
 
 
@@ -44,13 +40,14 @@ def get_detected_objects(ros_bag_file, outputfile, time_offset):
 
 def main():
     parser = argparse.ArgumentParser(description='Script to parse ROS Bags into CSV data')
-    parser.add_argument('--ros-bag-file', help='Directory containing ROS Bags.', type=str, required=True) 
-    parser.add_argument('--csv-dir', help='Directory to write csv files to.', type=str, required=True)  
+    parser.add_argument('--ros-bag-file', help='ROS Bags File.', type=str, required=True) 
+    # parser.add_argument('--csv-dir', help='Directory to write csv files to.', type=str, required=True)
+    parser.add_argument('--csv-dir', help='Directory to write csv file to.', type=Path, required=True)  
     args = parser.parse_args()
     
     time_offset = get_time_offset(args.ros_bag_file)
-    csv_dir_path = Path(args.csv_dir)
-    get_detected_objects(args.ros_bag_file, csv_dir_path/'vehicle_detected_objects.csv', time_offset)
+    # csv_dir_path = Path(args.csv_dir)
+    get_detected_objects(args.ros_bag_file, args.csv_dir/'vehicle_detected_objects.csv', time_offset)
 
 
 if __name__ == '__main__':

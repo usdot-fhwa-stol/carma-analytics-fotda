@@ -1,12 +1,10 @@
 import pandas as pd
 import argparse
 import matplotlib.pyplot as plt
-import os
+from pathlib import Path
 
-# Mege infrastructure and vehcile detected objects into one csv file
-# Plot x, y and x error and y error and save the images
-def process_detected_objects(inftastructure_data, vehicle_data):
-
+# Merge infrastructure and vehcile detected objects into one csv file
+def merge_objects_from_logs(inftastructure_data, vehicle_data, merged_data):
     # Read the two CSV files
     df1 = pd.read_csv(inftastructure_data)
     df2 = pd.read_csv(vehicle_data)
@@ -23,10 +21,12 @@ def process_detected_objects(inftastructure_data, vehicle_data):
     merged_df.columns = ['Timestamp (ms)', 'Type_i', 'ObjID_i', 'Positionx_i', 'Positiony_i', 'ObjID_v', 'Positionx_v',  'Positiony_v']
 
     # Save the merged dataframe to a new CSV file
-    merged_df.to_csv('merged_detected_objects.csv', index=False)
+    merged_df.to_csv(merged_data, index=False)
 
+# Plot x, y and x error and y error and save the images
+def plot_merged_detected_objects(merged_detected_objects):
     # Read the merged CSV file
-    merged_df = pd.read_csv('merged_detected_objects.csv')
+    merged_df = pd.read_csv(merged_detected_objects)
 
     # Group by 'Object ID' and plot 'x_file1' and 'x_file2' over 'timestamp'
     grouped = merged_df.groupby('ObjID_i')
@@ -67,17 +67,22 @@ def process_detected_objects(inftastructure_data, vehicle_data):
         plt.grid(True)
 
         # Save the plot in the 'plots' directory
-        os.makedirs('plots', exist_ok=True)
+        plots_dir = Path("plots")
+        plots_dir.mkdir(exist_ok=True)
         plt.savefig(f'plots/object_{name}_plot.png')
         plt.close()
+
+   
 
 def main():
     parser = argparse.ArgumentParser(description='Script to Merge Detected Object Data frm Infrastructure and Vehicle')
     parser.add_argument('--infra-data', help='CSV file containing intfrastructure data.', type=str, required=True) 
-    parser.add_argument('--vehicle-data', help='CSV file containing vehicle data.', type=str, required=True) 
+    parser.add_argument('--vehicle-data', help='CSV file containing vehicle data.', type=str, required=True)
+    parser.add_argument('--merged-data', help='CSV file containing merged vehicle and infrastructure data.', type=str, required=True) 
     args = parser.parse_args()
 
-    process_detected_objects(args.infra_data, args.vehicle_data)
+    merge_objects_from_logs(args.infra_data, args.vehicle_data, args.merged_data)
+    plot_merged_detected_objects(args.merged_data)
 
 
 if __name__ == '__main__':
