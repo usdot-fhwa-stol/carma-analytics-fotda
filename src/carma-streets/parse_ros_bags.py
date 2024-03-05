@@ -27,25 +27,23 @@ def get_detected_objects(ros_bag_file, outputfile, time_offset):
     if outputfile.exists():
         print(f'Output file {outputfile} already exists. Overwriting file.')
     with open(outputfile, 'w', newline='') as file:
-        # check for duplicate
         writer = csv.writer(file)
         writer.writerow(['Timestamp (ms)', 'ObjID', 'Positionx',  'Positiony']) 
         for message in messages:
             timestamp_ms = message.header.stamp.secs * 1000 + message.header.stamp.nsecs // 1000000 - time_offset
-            writer.writerow([timestamp_ms, message.id, message.pose.pose.position.x, message.pose.pose.position.y]) 
+            writer.writerow([timestamp_ms, message.id%1000, message.pose.pose.position.x, message.pose.pose.position.y]) 
 
     print(f"Sorted data from topic '{detected_obj_topic_name}' saved to '{outputfile}'")
     print(f"Calculated sim time offset: '{time_offset}'")
+    
 
 def main():
     parser = argparse.ArgumentParser(description='Script to parse ROS Bags into CSV data')
     parser.add_argument('--ros-bag-file', help='ROS Bags File.', type=str, required=True) 
-    # parser.add_argument('--csv-dir', help='Directory to write csv files to.', type=str, required=True)
     parser.add_argument('--csv-dir', help='Directory to write csv file to.', type=Path, required=True)  
     args = parser.parse_args()
     
     time_offset = get_time_offset(args.ros_bag_file)
-    # csv_dir_path = Path(args.csv_dir)
     get_detected_objects(args.ros_bag_file, args.csv_dir/'vehicle_detected_objects.csv', time_offset)
 
 
