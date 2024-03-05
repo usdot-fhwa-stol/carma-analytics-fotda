@@ -92,15 +92,16 @@ def get_spat_timestamp(json_data: dict,test_year: int):
     Returns:
         int: epoch timestamp in milliseconds
     """
-    first_day_epoch = datetime.datetime(int(test_year), 1, 1, 0, 0, 0, tzinfo=tz.gettz('America/New_York')).timestamp()*1000
+    first_day_epoch = datetime.datetime(test_year, 1, 1, 0, 0, 0, tzinfo=tz.gettz('America/New_York')).timestamp()*1000
     return json_data['intersections'][0]['moy']*60*1000 + json_data['intersections'][0]['time_stamp'] + first_day_epoch
 
-def parse_spat_to_csv(inputfile: Path, outputfile: Path):
+def parse_spat_to_csv(inputfile: Path, outputfile: Path, simulation: bool=False):
     """Function to parse SPAT Kafka Topic log file and generate csv data of all time sync messages
 
     Args:
         inputfile (Path): Path to Kafka Topic log file
         outputfile (Path): File name (excluding file extension) of desired csv file
+        simulation (bool): Flag to indicate whether data was collected in simulation environment (Default = False)
     """
     spat_msgs = parse_kafka_logs_as_type(inputfile, KafkaLogMessageType.SPAT)
     if  outputfile.exists():
@@ -114,8 +115,14 @@ def parse_spat_to_csv(inputfile: Path, outputfile: Path):
         #Our local timezone GMT-5 actually needs to be implemented as GMT+5 with pytz library
         #documentation: https://stackoverflow.com/questions/54842491/printing-datetime-as-pytz-timezoneetc-gmt-5-yields-incorrect-result
         
-        #Get the epoch ms time of the first data of the relavent year              
-        test_year = str(datetime.datetime.fromtimestamp(int(spat_msgs[0].created_time)/1000)).split("-")[0]
+        #Get the epoch ms time of the first data of the relavent year
+        test_year = 0
+        if simulation:
+            # If data was collected in simulation environment. All timestamps need to be relative to Unix Time Epoch
+            test_year = 1970
+        else:
+            # Else get year in which data was collected from created_time.              
+            test_year = datetime.datetime.fromtimestamp(int(spat_msgs[0].created_time)/1000).year
         #extract relevant elements from the json
         for msg in spat_msgs:
             try:
@@ -200,7 +207,7 @@ def get_sdsm_timestamp(json_data: dict) -> int :
                     json_data['hour'], \
                     json_data['minute'], \
                     json_data['second']//1000, \
-                    json_data['second']%1000).timestamp()*1000
+                    (json_data['second']%1000) * 1000).timestamp()*1000
 
 def parse_sdsm_to_csv(inputfile: Path, outputfile: Path):
     """Function to parse SDSM Kafka Topic log file and generate csv data of all time sync messages
@@ -276,12 +283,15 @@ def parse_detected_objects_to_csv(inputfile: Path, outputfile: Path):
         else:
             print(f'WARNING: Skipped {skipped_messages_count} due to errors. Please inspect logs')
 
-def parse_kafka_log_dir(kafka_log_dir, csv_dir):
+
+def parse_kafka_log_dir(kafka_log_dir:str, csv_dir:str, simulation:bool=False):
     """Parse all Kafka Topic Logs in a provided directory and output csv message data.
 
     Args:
-        kafka_log_dir (Path): String path to directory kafka logs directory.
-        csv_dir (Path): _description_
+        kafka_log_dir (str): String path to directory kafka logs directory.
+        csv_dir (str): String path to directory to write CSV files to.
+        simulation (bool): Flag to indicate whether data was collected in simulation environment (Default = False)
+
     """
     kafka_log_dir_path = Path(kafka_log_dir)
     csv_dir_path = Path(csv_dir)
@@ -295,7 +305,7 @@ def parse_kafka_log_dir(kafka_log_dir, csv_dir):
                 parse_timesync_to_csv(kafka_topic_log, csv_dir_path/f'{KafkaLogMessageType.TimeSync.value}.csv')
             elif KafkaLogMessageType.SPAT.value in kafka_topic_log.name:
                 print(f'Found SPAT Kafka topic log {kafka_topic_log}. Parsing log to csv ...')
-                parse_spat_to_csv(kafka_topic_log, csv_dir_path/f'{KafkaLogMessageType.SPAT.value}.csv')
+                parse_spat_to_csv(kafka_topic_log, csv_dir_path/f'{KafkaLogMessageType.SPAT.value}.csv', simulation)
             elif KafkaLogMessageType.MAP.value in kafka_topic_log.name:
                 print(f'Found MAP Kafka topic log {kafka_topic_log}. Parsing log to csv ...')
                 parse_map_to_csv(kafka_topic_log, csv_dir_path/f'{KafkaLogMessageType.MAP.value}.csv')
@@ -312,9 +322,10 @@ def parse_kafka_log_dir(kafka_log_dir, csv_dir):
 def main():
     parser = argparse.ArgumentParser(description='Script to parse Kafka Topic log files into CSV data')
     parser.add_argument('--kafka-log-dir', help='Directory containing Kafka Log files.', type=str, required=True) 
-    parser.add_argument('--csv-dir', help='Directory to write csv files to.', type=str, required=True)  
+    parser.add_argument('--csv-dir', help='Directory to write csv files to.', type=str, required=True)
+    parser.add_argument('--simulation', help='Flag indicating data is from simulation', action='store_true')
     args = parser.parse_args()
-    parse_kafka_log_dir(args.kafka_log_dir, args.csv_dir)
+    parse_kafka_log_dir(args.kafka_log_dir, args.csv_dir, args.simulation)
 
 
 if __name__ == '__main__':
