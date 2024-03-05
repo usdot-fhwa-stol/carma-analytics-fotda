@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 from pathlib import Path
 import sys
@@ -7,46 +8,44 @@ from matplotlib import pyplot as plt
 from matplotlib import axes
 import pandas as pd
 
-def plot_message_frequencies(csv_dir: str, plots_dir: str, simulation: bool = False):
+def plot_message_frequencies(csv_dir: Path, plots_dir: Path, simulation: bool = False):
     """Function to plot all message frequencies in a single figure
 
     Args:
-        csv_dir (str): directory that holds CSV message data.
-        plots_dir (str): directory where create figure will be saved
+        csv_dir (Path): directory that holds CSV message data.
+        plots_dir (Path): directory where create figure will be saved
         simulation (bool,optional): bool flag to indicate whether data was collected in simulation. Defaults to False.
     """
-    csv_dir_path = Path(csv_dir)
-    plots_dir_path = Path(plots_dir)
-    if csv_dir_path.is_dir():
-        if plots_dir_path.is_dir():
+    if csv_dir.is_dir():
+        if plots_dir.is_dir():
             print(f"WARNING: {plots_dir} already exists. Contents will be overwritten.")
-        plots_dir_path.mkdir(exist_ok=True)
+        plots_dir.mkdir(exist_ok=True)
         # Read CSV data
         message_data = dict([])
         time_sync_data = None
-        for csv_file in csv_dir_path.glob("*.csv"):
+        for csv_file in csv_dir.glob("*.csv"):
             print(f'Reading csv file {csv_file.name} ...')
             if csv_file.name == 'time_sync.csv':
                 time_sync_data = pd.read_csv(csv_file)
             else:
                 df = pd.read_csv(csv_file)
-                message_data[csv_file.name.split('.')[0]] = df
+                message_data[csv_file.stem] = df
         fig, plots = plt.subplots(len(message_data), sharex=True, layout="constrained")
         # Add simulation time to message data
-        for idx,( message_name, message_data_frame) in enumerate(message_data.items()):
+        for msg_plot,( message_name, message_data_frame) in zip( plots, message_data.items()):
             print(f'Getting simulation time for {message_name} data ...')
             if simulation:
                 message_data_frame["Time (ms)"] = get_simulation_time(message_data_frame["Created Time(ms)"], time_sync_data["Created Time(ms)"], time_sync_data["Timestamp(ms)"])
                 message_data_frame["Time (s)"] = message_data_frame["Time (ms)"]/1000
             else :
                 message_data_frame["Time (s)"] = message_data_frame["Timestamp(ms)"]/1000
-            message_data_frame = get_message_frequency(message_data_frame)
+            message_data_frame = add_message_frequency_columns(message_data_frame)
             if KafkaLogMessageType.MAP.value in message_name:
                 #
-                plot_message_frequency(plots[idx],message_data_frame['Time (s)'], message_data_frame["Average Frequency (Hz)"] ,message_name,1, 1)
+                plot_message_frequency(msg_plot,message_data_frame['Time (s)'], message_data_frame["Average Frequency (Hz)"] ,message_name,1, 1)
             else:
                 # Any message with 10 Hz as target frequency
-                plot_message_frequency(plots[idx],message_data_frame['Time (s)'], message_data_frame["Average Frequency (Hz)"],message_name)
+                plot_message_frequency(msg_plot,message_data_frame['Time (s)'], message_data_frame["Average Frequency (Hz)"],message_name)
             fig.suptitle('Message Frequency Plots')
             fig.supxlabel('Time (s)')
             fig.supylabel('Message Frequency (Hz)')
@@ -71,6 +70,16 @@ def plot_message_frequency( axes: axes.Axes, time: list, frequency: list , messa
     axes.set_ylim(target_frequency-2*absolute_error, target_frequency+2*absolute_error)
 
 def get_simulation_time(message_wall_time : list, time_sync_wall_time: list, time_sync_simulation_time : list)-> list:
+    """Returns a list of simulation times for the provided message wall times.
+
+    Args:
+        message_wall_time (list): List of wall timestamp when a given message was sent
+        time_sync_wall_time (list): List of wall timestamps when simulation time was update
+        time_sync_simulation_time (list): List of simulation time values.
+
+    Returns:
+        list: List of simulation times for provided message set.
+    """
     message_simulation_time=list()
     for msg_wall_time in message_wall_time:
         for idx, t_sync_wall_time in enumerate(time_sync_wall_time):
@@ -83,7 +92,15 @@ def get_simulation_time(message_wall_time : list, time_sync_wall_time: list, tim
                 message_simulation_time.append(time_sync_simulation_time[idx])
                 break
     return message_simulation_time
-def get_message_frequency( messages: pd.DataFrame) -> pd.DataFrame:
+def add_message_frequency_columns( messages: pd.DataFrame) -> pd.DataFrame:
+    """Add columns for instantaneous and average (rolling 5 second) frequency for given message data
+
+    Args:
+        messages (pd.DataFrame): Message Data
+
+    Returns:
+        pd.DataFrame: Message data with columns for instantaneous and average frequency.
+    """
     messages["Instantaneous Frequency (Hz)"] = 1/messages["Time (s)"].diff() 
     messages["Average Frequency (Hz)"] = messages["Instantaneous Frequency (Hz)"].rolling(window=50, min_periods=1).mean()
     return messages
@@ -92,8 +109,8 @@ def get_message_frequency( messages: pd.DataFrame) -> pd.DataFrame:
 
 def main():
     parser = argparse.ArgumentParser(description='Script to plot message frequency from CARMA Streets message csv data.')
-    parser.add_argument('--csv-dir', help='Directory to read csv data from.', type=str, required=True)  
-    parser.add_argument('--plots-dir', help='Directory to save generated plots.', type=str, required=True) 
+    parser.add_argument('--csv-dir', help='Directory to read csv data from.', type=Path, required=True)  
+    parser.add_argument('--plots-dir', help='Directory to save generated plots.', type=Path, required=True) 
     parser.add_argument('--simulation', help='Flag indicating data is from simulation', action='store_true', default=False)
 
     args = parser.parse_args()
