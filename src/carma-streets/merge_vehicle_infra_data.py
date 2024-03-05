@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 # Merge infrastructure and vehcile detected objects into one csv file
-def merge_objects_from_logs(inftastructure_data, vehicle_data, merged_data):
+def merge_objects_from_logs(infrastructure_data, vehicle_data, merged_data):
     # Read the two CSV files
-    df1 = pd.read_csv(inftastructure_data)
+    df1 = pd.read_csv(infrastructure_data)
     df2 = pd.read_csv(vehicle_data)
 
     # Merge the two dataframes on 'timestamp'
@@ -67,8 +67,7 @@ def plot_merged_detected_objects(merged_detected_objects):
         plt.grid(True)
 
         # Save the plot in the 'plots' directory
-        plots_dir = Path("plots")
-        plots_dir.mkdir(exist_ok=True)
+        Path("plots").mkdir(exist_ok=True)
         plt.savefig(f'plots/object_{name}_plot.png')
         plt.close()
 
