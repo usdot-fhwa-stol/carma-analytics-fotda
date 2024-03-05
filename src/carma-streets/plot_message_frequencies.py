@@ -106,8 +106,9 @@ def add_message_frequency_columns( messages: pd.DataFrame) -> pd.DataFrame:
         pd.DataFrame: Message data with columns for instantaneous and average frequency.
     """
     messages['Instantaneous Frequency (Hz)'] = 1/messages['Time (s)'].diff() 
-    print(messages['Instantaneous Frequency (Hz)'].describe())
+    print(messages["Instantaneous Frequency (Hz)"].describe())
     messages['Average Frequency (Hz)'] = messages['Instantaneous Frequency (Hz)'].rolling(window=50, min_periods=1).mean()
+    print(messages["Average Frequency (Hz)"].describe())
     return messages
 
 
