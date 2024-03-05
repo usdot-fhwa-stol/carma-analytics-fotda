@@ -246,6 +246,44 @@ def parse_sdsm_to_csv(inputfile: Path, outputfile: Path):
             print('Finished writing all entries successfully')
         else:
             print(f'WARNING: Skipped {skipped_messages} due to errors. Please inspect logs')
+
+def parse_detected_object_to_csv(inputfile: Path, outputfile: Path):
+    """Function to parse Detected Object Kafka Topic log file and generate csv data of all time sync messages
+
+    Args:
+        inputfile (Path): Path to Kafka Topic log file
+        outputfile (Path): File name (excluding file extension) of desired csv file
+    """
+
+    detected_object_msgs = parse_kafka_logs_as_type(inputfile, KafkaLogMessageType.DetectedObject)
+    if  outputfile.exists():
+        print(f'Output file {outputfile} already exists. Overwritting file.')
+    #write data of interest to csv which will be used to produce plots
+    with open(outputfile, 'w', newline='') as file:
+        csv_writer = writer(file)
+        csv_writer.writerow(['Created Time(ms)', 'Timestamp(ms)',
+             'Type', 'Sensor ID', 'Projection String', 'Object ID', 
+             'Position X(m)', 'Position Y(m)','Position Z(m)'])
+        skipped_messages = 0
+        #extract relevant elements from the json
+        for msg in detected_object_msgs:
+            try:
+                csv_writer.writerow([
+                    msg.created_time, 
+                    msg.json_message['timestamp'], 
+                    msg.json_message['type'],
+                    msg.json_message['sensorId'],
+                    msg.json_message['projString'],
+                    msg.json_message['objectId'],
+                    msg.json_message['position']['x'], 
+                    msg.json_message['position']['y'], 
+                    msg.json_message['position']['z']])
+            except Exception as e:
+                print(f'Error {e.msgs} occurred while writing csv entry for kafka message {msg.json_message}. Skipping message.')
+        if skipped_messages == 0 :
+            print('Finished writing all entries successfully')
+        else:
+            print(f'WARNING: Skipped {skipped_messages} due to errors. Please inspect logs')
 def parse_kafka_log_dir(kafka_log_dir:str, csv_dir:str, simulation:bool=False):
     """Parse all Kafka Topic Logs in a provided directory and output csv message data.
 
@@ -274,6 +312,9 @@ def parse_kafka_log_dir(kafka_log_dir:str, csv_dir:str, simulation:bool=False):
             elif KafkaLogMessageType.SDSM.value in kafka_topic_log.name:
                 print(f'Found SDSM Kafka topic log {kafka_topic_log}. Parsing log to csv ...')
                 parse_sdsm_to_csv(kafka_topic_log, csv_dir_path/f'{KafkaLogMessageType.SDSM.value}.csv')
+            elif KafkaLogMessageType.DetectedObject.value in kafka_topic_log.name:
+                print(f'Found Detected Object Kafka topic log {kafka_topic_log}. Parsing log to csv ...')
+                parse_detected_object_to_csv(kafka_topic_log, csv_dir_path/f'{KafkaLogMessageType.DetectedObject.value}.csv')
     else:
         print('ERROR:Please ensure that Kafka Logs Directory exists.')
 
