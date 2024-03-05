@@ -43,7 +43,7 @@ def plot_message_frequencies(csv_dir: Path, plots_dir: Path, simulation: bool = 
                 message_data_frame["Time (s)"] = message_data_frame["Time (ms)"]/1000
             else :
                 message_data_frame["Time (s)"] = message_data_frame["Timestamp(ms)"]/1000
-            message_data_frame = add_message_frequency_columns(message_data_frame)
+            add_message_frequency_columns(message_data_frame)
             if KafkaLogMessageType.MAP.value in message_name:
                 #
                 plot_message_frequency(msg_plot,message_data_frame['Time (s)'], message_data_frame["Average Frequency (Hz)"] ,message_name,1, 1)
@@ -71,7 +71,7 @@ def plot_message_frequency( axes: axes.Axes, time: list, frequency: list , messa
     axes.axhline(y=target_frequency-absolute_error, color='r', linestyle='--', label="frequency lower bound")
     axes.axhline(y=target_frequency+absolute_error, color='r', linestyle='-', label="frequency upper bound")
     axes.set_title(message_name)
-    # axes.set_ylim(target_frequency-2*absolute_error, target_frequency+2*absolute_error)
+    axes.set_ylim(target_frequency-2*absolute_error, target_frequency+2*absolute_error)
 
 def get_simulation_time(message_wall_time : list, time_sync_wall_time: list, time_sync_simulation_time : list)-> list:
     """Returns a list of simulation times for the provided message wall times.
