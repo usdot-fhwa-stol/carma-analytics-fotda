@@ -25,8 +25,12 @@ def plot_message_frequencies(csv_dir: Path, plots_dir: Path, simulation: bool = 
         time_sync_data = None
         for csv_file in csv_dir.glob("*.csv"):
             print(f'Reading csv file {csv_file.name} ...')
-            if csv_file.name == 'time_sync.csv':
+            if KafkaLogMessageType.TimeSync.value in csv_file.name:
                 time_sync_data = pd.read_csv(csv_file)
+            elif KafkaLogMessageType.DetectedObject.value in csv_file.name:
+                # Since Detected Object messages are sent for each individual object they 
+                # do not have a static target frequency
+                continue
             else:
                 df = pd.read_csv(csv_file)
                 message_data[csv_file.stem] = df
@@ -67,7 +71,7 @@ def plot_message_frequency( axes: axes.Axes, time: list, frequency: list , messa
     axes.axhline(y=target_frequency-absolute_error, color='r', linestyle='--', label="frequency lower bound")
     axes.axhline(y=target_frequency+absolute_error, color='r', linestyle='-', label="frequency upper bound")
     axes.set_title(message_name)
-    axes.set_ylim(target_frequency-2*absolute_error, target_frequency+2*absolute_error)
+    # axes.set_ylim(target_frequency-2*absolute_error, target_frequency+2*absolute_error)
 
 def get_simulation_time(message_wall_time : list, time_sync_wall_time: list, time_sync_simulation_time : list)-> list:
     """Returns a list of simulation times for the provided message wall times.
@@ -101,8 +105,9 @@ def add_message_frequency_columns( messages: pd.DataFrame) -> pd.DataFrame:
     Returns:
         pd.DataFrame: Message data with columns for instantaneous and average frequency.
     """
-    messages["Instantaneous Frequency (Hz)"] = 1/messages["Time (s)"].diff() 
-    messages["Average Frequency (Hz)"] = messages["Instantaneous Frequency (Hz)"].rolling(window=50, min_periods=1).mean()
+    messages['Instantaneous Frequency (Hz)'] = 1/messages['Time (s)'].diff() 
+    print(messages['Instantaneous Frequency (Hz)'].describe())
+    messages['Average Frequency (Hz)'] = messages['Instantaneous Frequency (Hz)'].rolling(window=50, min_periods=1).mean()
     return messages
 
 
