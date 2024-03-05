@@ -30,7 +30,7 @@ def plot_message_frequencies(csv_dir: Path, plots_dir: Path, simulation: bool = 
             else:
                 df = pd.read_csv(csv_file)
                 message_data[csv_file.stem] = df
-        fig, plots = plt.subplots(len(message_data), sharex=True, layout="constrained")
+        fig, plots = plt.subplots(len(message_data), sharex=True, layout="constrained", figsize=[15,2.5*len(message_data)])
         # Add simulation time to message data
         for msg_plot,( message_name, message_data_frame) in zip( plots, message_data.items()):
             print(f'Getting simulation time for {message_name} data ...')

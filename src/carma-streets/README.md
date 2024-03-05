@@ -32,4 +32,4 @@ options:
   --simulation          Flag indicating data is from simulation
 ```
 ## Example Ouput:
-![Alt text](docs/image.png)
+![Alt text](docs/message_frequencies_example.png)
