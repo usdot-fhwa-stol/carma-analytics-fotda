@@ -11,57 +11,56 @@ import numpy as np
 import pandas as pd
 
 
-def parse_positions_from_sdsm_log(file_path: Path):
-    def get_timestamp(ddate_time_json: dict):
-        return ddate_time_json["minute"] * 60 * 1000 + ddate_time_json["second"]
+def parse_positions_from_sdsm_csv(file_path: Path):
+    def get_timestamp(line: str):
+        return round(float(line.split(",")[1]))
 
     def get_json_payload(line: str):
-        json_start = line.find("{")
-        json_end = line.rfind("}") + 1
+        json_start = line.find(',"') + 2
+        json_end = line.rfind('"')
 
-        return line[json_start:json_end]
+        # JSON string needs double quotes
+        return line[json_start:json_end].replace("'", '"')
 
     sdsm_data = []
-    for line in open(file_path):
-        sdsm = json.loads(get_json_payload(line))
-        timestamp = get_timestamp(sdsm["sdsm_time_stamp"])
+    with open(file_path) as file:
+        next(file)
 
-        for detected_object in sdsm["objects"]:
-            object_data = detected_object["detected_object_data"]
-            common_data = object_data["detected_object_common_data"]
+        for line in file:
+            detected_objects = json.loads(get_json_payload(line))
+            timestamp = get_timestamp(line)
 
-            id_ = str(common_data["object_id"])
+            for object_ in detected_objects:
+                object_data = object_["detected_object_data"]
+                common_data = object_data["detected_object_common_data"]
 
-            # The detection messages' position entries are offsets from the detection source,
-            # but the message does not provide the detection source's position.
-            position_offset = np.array(list(common_data["pos"].values())[:2]) / 10.0
+                id_ = str(common_data["object_id"])
 
-            sdsm_data.append(
-                [timestamp - common_data["measurement_time"], id_, *position_offset]
-            )
+                # The detection messages' position entries are offsets from the detection source,
+                # but the message does not provide the detection source's position.
+                position_offset = np.array(list(common_data["pos"].values())[:2]) / 10.0
+
+                sdsm_data.append(
+                    [timestamp - common_data["measurement_time"], id_, *position_offset]
+                )
 
     return pd.DataFrame(sdsm_data, columns=["timestamp", "object_id", "x", "y"])
 
 
-def parse_positions_from_detection_log(file_path: Path):
+def parse_positions_from_detection_csv(file_path: Path):
     def get_timestamp(line: str):
-        timestamp_start = line.find('"timestamp":') + len('"timestamp":')
-        timestamp_end = line.find("}", timestamp_start)
-
-        return int(line[timestamp_start:timestamp_end])
+        return int(line.split(",")[1])
 
     def get_id(line: str):
-        id_start = line.find('"objectId":') + len('"objectId":')
-        id_end = line.find(",", id_start)
-
-        return line[id_start:id_end]
+        return line.split(",")[5]
 
     def get_position(line: str):
-        position_start = line.find('"position":') + len('"position":')
-        position_end = line.find("}", position_start) + 1
-
         position = np.asarray(
-            list(json.loads(line[position_start:position_end]).values())
+            [
+                float(line.split(",")[6]),
+                float(line.split(",")[7]),
+                float(line.split(",")[8]),
+            ]
         )
 
         # CARLA uses a left-handed coordinate frame, but we use a right-handed one
@@ -69,14 +68,17 @@ def parse_positions_from_detection_log(file_path: Path):
 
         return position
 
-    data = [
-        [
-            get_timestamp(line),
-            get_id(line),
-            *get_position(line),
+    with open(file_path) as file:
+        next(file)
+
+        data = [
+            [
+                get_timestamp(line),
+                get_id(line),
+                *get_position(line),
+            ]
+            for line in file
         ]
-        for line in open(file_path)
-    ]
 
     return pd.DataFrame(data, columns=["timestamp", "object_id", "x", "y", "z"])
 
@@ -153,23 +155,23 @@ parser = ArgumentParser(
 )
 
 parser.add_argument(
-    "--sdsm-log",
+    "--sdsm-csv",
     type=Path,
-    help="Log file containing SDSM message entries",
+    help="CSV file containing SDSM message entries",
     required=True,
 )
 
 parser.add_argument(
-    "--detection-log",
+    "--detection-csv",
     type=Path,
-    help="Log file containing object detection entries",
+    help="CSV file containing object detection entries",
     required=True,
 )
 
 cli_args = parser.parse_args()
 
-detections_df = parse_positions_from_detection_log(cli_args.detection_log)
-sdsm_df = parse_positions_from_sdsm_log(cli_args.sdsm_log)
+detections_df = parse_positions_from_detection_csv(cli_args.detection_log)
+sdsm_df = parse_positions_from_sdsm_csv(cli_args.sdsm_log)
 
 position_distances = calc_position_distances(detections_df, sdsm_df)
 
