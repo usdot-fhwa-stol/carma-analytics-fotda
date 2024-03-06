@@ -80,3 +80,7 @@ Plot the data:
   --sdsm-csv <path_to_csv_dir>/sdsm.csv \
   --detection-csv <path_to_csv_dir>/detected_object.csv
 ```
+
+### Example output
+
+![](docs/example_plot.png)
