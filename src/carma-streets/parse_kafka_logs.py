@@ -82,7 +82,7 @@ def parse_kafka_logs_as_type(input_file_path: Path, message_type: KafkaLogMessag
             else:
                 print(f'Successfully extracted all {len(msgs)} messages from inputfile.')
             return msgs
-def get_spat_timestamp(json_data: dict,test_year: int):
+def get_spat_timestamp(json_data: dict,test_year: int, simulation: bool = False):
     """Function to extract timestamp data from SPAT message
 
     Args:
@@ -93,6 +93,10 @@ def get_spat_timestamp(json_data: dict,test_year: int):
         int: epoch timestamp in milliseconds
     """
     first_day_epoch = datetime.datetime(test_year, 1, 1, 0, 0, 0, tzinfo=tz.gettz('America/New_York')).timestamp()*1000
+    if simulation:
+        first_day_epoch = datetime.datetime(1970, 1, 1, 0, 0, 0, tzinfo=tz.UTC).timestamp()*1000
+
+
     return json_data['intersections'][0]['moy']*60*1000 + json_data['intersections'][0]['time_stamp'] + first_day_epoch
 
 def parse_spat_to_csv(inputfile: Path, outputfile: Path, simulation: bool=False):
@@ -115,14 +119,9 @@ def parse_spat_to_csv(inputfile: Path, outputfile: Path, simulation: bool=False)
         #Our local timezone GMT-5 actually needs to be implemented as GMT+5 with pytz library
         #documentation: https://stackoverflow.com/questions/54842491/printing-datetime-as-pytz-timezoneetc-gmt-5-yields-incorrect-result
         
-        #Get the epoch ms time of the first data of the relavent year
-        test_year = 0
-        if simulation:
-            # If data was collected in simulation environment. All timestamps need to be relative to Unix Time Epoch
-            test_year = 1970
-        else:
-            # Else get year in which data was collected from created_time.              
-            test_year = datetime.datetime.fromtimestamp(int(spat_msgs[0].created_time)/1000).year
+        #Get the epoch ms time of the first data of the relavent yea
+        # Else get year in which data was collected from created_time.              
+        test_year = datetime.datetime.fromtimestamp(int(spat_msgs[0].created_time)/1000).year
         #extract relevant elements from the json
         for msg in spat_msgs:
             try:
@@ -130,7 +129,7 @@ def parse_spat_to_csv(inputfile: Path, outputfile: Path, simulation: bool=False)
                     msg.created_time, 
                     msg.json_message['intersections'][0]['name'],
                     msg.json_message['intersections'][0]['id'],
-                    get_spat_timestamp(msg.json_message, test_year),
+                    get_spat_timestamp(msg.json_message, test_year,simulation),
                     msg.json_message['intersections'][0]['states']])
             except Exception as e:
                 print(f'Error {e} occurred while writing csv entry for kafka message {msg.json_message}. Skipping message.')
@@ -192,7 +191,7 @@ def parse_map_to_csv(inputfile: Path, outputfile: Path):
         else:
             print(f'WARNING: Skipped {skipped_messages} due to errors. Please inspect logs')
 
-def get_sdsm_timestamp(json_data: dict) -> int :
+def get_sdsm_timestamp(json_data: dict, simulation: bool = False) -> int :
     """Get SDSM timestamp in milliseconds from json SDSM date time
 
     Args:
@@ -201,15 +200,26 @@ def get_sdsm_timestamp(json_data: dict) -> int :
     Returns:
         int: epoch millisecond timestamp
     """
-    return datetime.datetime( json_data['year'], \
+    if simulation:
+        return datetime.datetime( json_data['year'], \
                     json_data['month'], \
                     json_data['day'], \
                     json_data['hour'], \
                     json_data['minute'], \
                     json_data['second']//1000, \
-                    (json_data['second']%1000) * 1000).timestamp()*1000
+                    (json_data['second']%1000) * 1000, \
+                    tzinfo=tz.UTC).timestamp()*1000
+    else:
+        return datetime.datetime( json_data['year'], \
+                    json_data['month'], \
+                    json_data['day'], \
+                    json_data['hour'], \
+                    json_data['minute'], \
+                    json_data['second']//1000, \
+                    (json_data['second']%1000) * 1000, \
+                    tzinfo=tz.gettz('America/New_York')).timestamp()*1000
 
-def parse_sdsm_to_csv(inputfile: Path, outputfile: Path):
+def parse_sdsm_to_csv(inputfile: Path, outputfile: Path, simulation: bool = False):
     """Function to parse SDSM Kafka Topic log file and generate csv data of all time sync messages
 
     Args:
@@ -232,7 +242,7 @@ def parse_sdsm_to_csv(inputfile: Path, outputfile: Path):
             try:
                 csv_writer.writerow([
                     msg.created_time, 
-                    get_sdsm_timestamp(msg.json_message['sdsm_time_stamp']), 
+                    get_sdsm_timestamp(msg.json_message['sdsm_time_stamp'],simulation), 
                     msg.json_message['msg_cnt'],
                     msg.json_message['source_id'],
                     msg.json_message['equipment_type'],
@@ -311,7 +321,7 @@ def parse_kafka_log_dir(kafka_log_dir:str, csv_dir:str, simulation:bool=False):
                 parse_map_to_csv(kafka_topic_log, csv_dir_path/f'{KafkaLogMessageType.MAP.value}.csv')
             elif KafkaLogMessageType.SDSM.value in kafka_topic_log.name:
                 print(f'Found SDSM Kafka topic log {kafka_topic_log}. Parsing log to csv ...')
-                parse_sdsm_to_csv(kafka_topic_log, csv_dir_path/f'{KafkaLogMessageType.SDSM.value}.csv')
+                parse_sdsm_to_csv(kafka_topic_log, csv_dir_path/f'{KafkaLogMessageType.SDSM.value}.csv', simulation)
             elif KafkaLogMessageType.DetectedObject.value in kafka_topic_log.name:
                 print(f'Found Detected Object Kafka topic log {kafka_topic_log}. Parsing log to csv ...')
                 parse_detected_object_to_csv(kafka_topic_log, csv_dir_path/f'{KafkaLogMessageType.DetectedObject.value}.csv')
