@@ -120,8 +120,7 @@ def parse_spat_to_csv(inputfile: Path, outputfile: Path, simulation: bool=False)
         #Our local timezone GMT-5 actually needs to be implemented as GMT+5 with pytz library
         #documentation: https://stackoverflow.com/questions/54842491/printing-datetime-as-pytz-timezoneetc-gmt-5-yields-incorrect-result
         
-        #Get the epoch ms time of the first data of the relavent yea
-        # Else get year in which data was collected from created_time.              
+        #Get the epoch ms time of the first data of the relavent year
         test_year = datetime.datetime.fromtimestamp(int(spat_msgs[0].created_time)/1000).year
         #extract relevant elements from the json
         for msg in spat_msgs:
