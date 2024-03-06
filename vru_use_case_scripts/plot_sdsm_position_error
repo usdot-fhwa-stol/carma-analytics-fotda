@@ -170,8 +170,8 @@ parser.add_argument(
 
 cli_args = parser.parse_args()
 
-detections_df = parse_positions_from_detection_csv(cli_args.detection_log)
-sdsm_df = parse_positions_from_sdsm_csv(cli_args.sdsm_log)
+detections_df = parse_positions_from_detection_csv(cli_args.detection_csv)
+sdsm_df = parse_positions_from_sdsm_csv(cli_args.sdsm_csv)
 
 position_distances = calc_position_distances(detections_df, sdsm_df)
 
