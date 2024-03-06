@@ -1,0 +1,187 @@
+#!/usr/bin/python3
+
+from argparse import ArgumentParser
+from collections import defaultdict
+import csv
+import json
+from pathlib import Path
+import sys
+
+from matplotlib import pyplot as plt
+import numpy as np
+import pandas as pd
+
+
+def parse_positions_from_sdsm_csv(file_path: Path):
+    def get_timestamp(csv_row: list):
+        return round(float(csv_row[1]))
+
+    def get_json_payload(csv_row: list):
+        json_string = csv_row[8]
+
+        # JSON string needs double quotes
+        return json_string.replace("'", '"')
+
+    sdsm_data = []
+    with open(file_path) as file:
+        csv_data = csv.reader(file)
+
+        # We don't need the CSV header
+        next(csv_data, None)
+
+        for row in csv_data:
+            detected_objects = json.loads(get_json_payload(row))
+            timestamp = get_timestamp(row)
+
+            for object_ in detected_objects:
+                object_data = object_["detected_object_data"]
+                common_data = object_data["detected_object_common_data"]
+
+                id_ = str(common_data["object_id"])
+
+                # The detection messages' position entries are offsets from the detection source,
+                # but the message does not provide the detection source's position.
+                position_offset = np.array(list(common_data["pos"].values())[:2]) / 10.0
+
+                sdsm_data.append(
+                    [timestamp - common_data["measurement_time"], id_, *position_offset]
+                )
+
+    return pd.DataFrame(sdsm_data, columns=["timestamp", "object_id", "x", "y"])
+
+
+def parse_positions_from_detection_csv(file_path: Path):
+    def get_timestamp(csv_row: list):
+        return int(csv_row[1])
+
+    def get_id(csv_row: list):
+        return csv_row[5]
+
+    def get_position(csv_row: list):
+        position = np.asarray(
+            [
+                float(csv_row[6]),
+                float(csv_row[7]),
+                float(csv_row[8]),
+            ]
+        )
+
+        # CARLA uses a left-handed coordinate frame, but we use a right-handed one
+        position[0], position[1] = position[1], position[0]
+
+        return position
+
+    with open(file_path) as file:
+        csv_data = csv.reader(file)
+
+        # We don't need the CSV header
+        next(csv_data, None)
+
+        data = [
+            [
+                get_timestamp(row),
+                get_id(row),
+                *get_position(row),
+            ]
+            for row in csv_data
+        ]
+
+    return pd.DataFrame(data, columns=["timestamp", "object_id", "x", "y", "z"])
+
+
+def filter_df_for_object_id(df: pd.DataFrame, id_: str):
+    return df.loc[df["object_id"] == id_]
+
+
+def filter_df_for_timestamp(df: pd.DataFrame, timestamp: int):
+    return df.loc[df["timestamp"] == timestamp]
+
+
+def get_unique_object_ids(df: pd.DataFrame):
+    return list(set(df["object_id"]))
+
+
+def plot_positions(times, distances, marker="o", title=None, axis=plt):
+    axis.plot(times, distances, marker=marker, linewidth=0)
+    axis.axhline(y=1.0, linestyle="dashed", color="tab:red", label="Max Required")
+
+    if axis == plt:
+        if title is not None:
+            axis.title(title)
+
+        axis.ylabel("Euclidean Distance [m]")
+        axis.xlabel("Simulation Time [s]")
+    else:
+        if title is not None:
+            axis.set_title(title)
+
+        axis.set_ylabel("Euclidean Distance [m]")
+        axis.set_xlabel("Simulation Time [s]")
+
+    axis.legend(loc="best")
+
+
+def get_distance(a, b):
+    return np.linalg.norm(np.array([a["x"], a["y"]]) - np.array([b["x"], b["y"]]))
+
+
+def calc_position_distances(detections_df: pd.DataFrame, sdsm_df: pd.DataFrame):
+    distances = defaultdict(list)
+    for detection_id in get_unique_object_ids(detections_df):
+        sdsm_df_object_id = filter_df_for_object_id(sdsm_df, detection_id)
+
+        for _, detection_row in filter_df_for_object_id(
+            detections_df, detection_id
+        ).iterrows():
+            timestamp = detection_row["timestamp"]
+            sdsm_row = filter_df_for_timestamp(sdsm_df_object_id, timestamp)
+
+            if sdsm_row.empty:
+                # We assume there are more detection entries than SDSM entries,
+                # so a missing SDSM entry is not an issue
+                continue
+
+            if len(sdsm_row) > 1:
+                print(
+                    f"fatal: Multiple SDSMs for object '{detection_id}'"
+                    f" at timestamp '{timestamp}'"
+                )
+                sys.exit(1)
+
+            distances[detection_id].append(
+                (timestamp / 1_000, get_distance(detection_row, sdsm_row.iloc[0]))
+            )
+
+    return distances
+
+
+parser = ArgumentParser(
+    prog="plot_sdsm_position_error",
+    description="Plot the error between detected object positions and their associated SDSM positions",
+)
+
+parser.add_argument(
+    "--sdsm-csv",
+    type=Path,
+    help="CSV file containing SDSM message entries",
+    required=True,
+)
+
+parser.add_argument(
+    "--detection-csv",
+    type=Path,
+    help="CSV file containing object detection entries",
+    required=True,
+)
+
+cli_args = parser.parse_args()
+
+detections_df = parse_positions_from_detection_csv(cli_args.detection_csv)
+sdsm_df = parse_positions_from_sdsm_csv(cli_args.sdsm_csv)
+
+position_distances = calc_position_distances(detections_df, sdsm_df)
+
+for object_id, distance_data in position_distances.items():
+    distances_np = np.asarray(distance_data).transpose()
+    plot_positions(distances_np[0], distances_np[1], title=object_id)
+    plt.show()
