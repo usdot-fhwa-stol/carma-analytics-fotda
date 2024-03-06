@@ -88,6 +88,7 @@ def get_spat_timestamp(json_data: dict,test_year: int, simulation: bool = False)
     Args:
         json_data (dict): SPAT JSON data
         test_year (int): Test year data is within
+        simulation (bool): Flag to indicate whether data was collected in simulation environment. Default is False
 
     Returns:
         int: epoch timestamp in milliseconds
@@ -196,6 +197,7 @@ def get_sdsm_timestamp(json_data: dict, simulation: bool = False) -> int :
 
     Args:
         json_data (dict): The sdsm_time_stamp part of the SDSM JSON
+        simulation (bool): Flag to indicate whether data was collected in simulation environment. Default is False
 
     Returns:
         int: epoch millisecond timestamp
@@ -225,6 +227,7 @@ def parse_sdsm_to_csv(inputfile: Path, outputfile: Path, simulation: bool = Fals
     Args:
         inputfile (Path): Path to Kafka Topic log file
         outputfile (Path): File name (excluding file extension) of desired csv file
+        simulation (bool): Flag to indicate whether data was collected in simulation environment. Default is False
     """
 
     sdsm_msgs = parse_kafka_logs_as_type(inputfile, KafkaLogMessageType.SDSM)
@@ -300,7 +303,7 @@ def parse_kafka_log_dir(kafka_log_dir:str, csv_dir:str, simulation:bool=False):
     Args:
         kafka_log_dir (str): String path to directory kafka logs directory.
         csv_dir (str): String path to directory to write CSV files to.
-        simulation (bool): Flag to indicate whether data was collected in simulation environment (Default = False)
+        simulation (bool): Flag to indicate whether data was collected in simulation environment. Default is False
 
     """
     kafka_log_dir_path = Path(kafka_log_dir)
