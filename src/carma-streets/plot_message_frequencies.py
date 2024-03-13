@@ -51,10 +51,12 @@ def plot_message_frequencies(csv_dir: Path, plots_dir: Path, simulation: bool = 
                 # Any message with 10 Hz as target frequency uses window size 30 (3 s) for rolling average
                 add_message_frequency_columns(message_data_frame)
                 plot_message_frequency(msg_plot,message_data_frame['Time (s)'], message_data_frame["Average Frequency (Hz)"],message_name)
-            fig.suptitle('Message Frequency Plots')
-            fig.supxlabel('Time (s)')
-            fig.supylabel('Message Frequency (Hz)')
-            fig.savefig(f'{plots_dir}/message_frequencies.png')
+        fig.suptitle('Message Frequency Plots')
+        fig.supxlabel('Time (s)')
+        fig.supylabel('Message Frequency (Hz)')
+        handles, labels = plots[-1].get_legend_handles_labels()
+        fig.legend(handles, labels, loc='upper right')
+        fig.savefig(f'{plots_dir}/message_frequencies.png')
         
 def plot_message_frequency( axes: axes.Axes, time: list, frequency: list , message_name: str, target_frequency: int = 10, absolute_error: int = 2) :
     """Generate subplots for each message frequency
@@ -99,7 +101,7 @@ def get_simulation_time(message_wall_time : list, time_sync_wall_time: list, tim
                 message_simulation_time.append(time_sync_simulation_time[idx])
                 break
     return message_simulation_time
-def add_message_frequency_columns( messages: pd.DataFrame, window: int = 25) -> pd.DataFrame:
+def add_message_frequency_columns( messages: pd.DataFrame, window: int = 30) -> pd.DataFrame:
     """Add columns for instantaneous and average (rolling 5 second) frequency for given message data
 
     Args:
