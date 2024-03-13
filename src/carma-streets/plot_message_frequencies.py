@@ -43,17 +43,20 @@ def plot_message_frequencies(csv_dir: Path, plots_dir: Path, simulation: bool = 
                 message_data_frame["Time (s)"] = message_data_frame["Time (ms)"]/1000
             else :
                 message_data_frame["Time (s)"] = message_data_frame["Timestamp(ms)"]/1000
-            add_message_frequency_columns(message_data_frame)
             if KafkaLogMessageType.MAP.value in message_name:
-                #
+                # Any message with 1 Hz as target frequency using window size 3 (3 s) for rolling average
+                add_message_frequency_columns(message_data_frame, 3)
                 plot_message_frequency(msg_plot,message_data_frame['Time (s)'], message_data_frame["Average Frequency (Hz)"] ,message_name,1, 1)
             else:
-                # Any message with 10 Hz as target frequency
+                # Any message with 10 Hz as target frequency uses window size 30 (3 s) for rolling average
+                add_message_frequency_columns(message_data_frame)
                 plot_message_frequency(msg_plot,message_data_frame['Time (s)'], message_data_frame["Average Frequency (Hz)"],message_name)
-            fig.suptitle('Message Frequency Plots')
-            fig.supxlabel('Time (s)')
-            fig.supylabel('Message Frequency (Hz)')
-            fig.savefig(f'{plots_dir}/message_frequencies.png')
+        fig.suptitle('Message Frequency Plots')
+        fig.supxlabel('Time (s)')
+        fig.supylabel('Message Frequency (Hz)')
+        handles, labels = plots[-1].get_legend_handles_labels()
+        fig.legend(handles, labels, loc='upper right')
+        fig.savefig(f'{plots_dir}/message_frequencies.png')
         
 def plot_message_frequency( axes: axes.Axes, time: list, frequency: list , message_name: str, target_frequency: int = 10, absolute_error: int = 2) :
     """Generate subplots for each message frequency
@@ -72,6 +75,8 @@ def plot_message_frequency( axes: axes.Axes, time: list, frequency: list , messa
     axes.axhline(y=target_frequency+absolute_error, color='r', linestyle='-', label="frequency upper bound")
     axes.set_title(message_name)
     axes.set_ylim(target_frequency-2*absolute_error, target_frequency+2*absolute_error)
+    axes.minorticks_on()
+    axes.grid(which='major', axis='both')
 
 def get_simulation_time(message_wall_time : list, time_sync_wall_time: list, time_sync_simulation_time : list)-> list:
     """Returns a list of simulation times for the provided message wall times.
@@ -96,18 +101,21 @@ def get_simulation_time(message_wall_time : list, time_sync_wall_time: list, tim
                 message_simulation_time.append(time_sync_simulation_time[idx])
                 break
     return message_simulation_time
-def add_message_frequency_columns( messages: pd.DataFrame) -> pd.DataFrame:
+def add_message_frequency_columns( messages: pd.DataFrame, window: int = 30) -> pd.DataFrame:
     """Add columns for instantaneous and average (rolling 5 second) frequency for given message data
 
     Args:
         messages (pd.DataFrame): Message Data
+        window (int): window size (number of messages) for rolling average. Default is 25.
 
     Returns:
         pd.DataFrame: Message data with columns for instantaneous and average frequency.
     """
-    messages['Instantaneous Frequency (Hz)'] = 1/messages['Time (s)'].diff() 
-    print(messages["Instantaneous Frequency (Hz)"].describe())
-    messages['Average Frequency (Hz)'] = messages['Instantaneous Frequency (Hz)'].rolling(window=50, min_periods=1).mean()
+    messages['Instantaneous Frequency (Hz)'] = 1/messages['Time (s)'].diff()
+    messages['Interval (s)'] = messages['Time (s)'].diff()
+    messages['Average Interval (s)'] = messages['Interval (s)'].rolling(window=window).mean()
+    messages['Average Frequency (Hz)'] = (1/messages['Average Interval (s)'])
+    print(messages["Average Interval (s)"].describe())
     print(messages["Average Frequency (Hz)"].describe())
     return messages
 
