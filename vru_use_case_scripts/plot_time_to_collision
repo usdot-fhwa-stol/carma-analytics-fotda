@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+
+from argparse import ArgumentParser
+from dataclasses import dataclass
+import itertools
+import math
+from pathlib import Path
+
+from matplotlib import pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy.interpolate import splrep, BSpline
+
+# This can be used to establish what constitutes a collision
+COLLISION_THRESHOLD = 5.0
+
+
+def parse_vehicle_odometry_from_csv(odometry_csv):
+    return pd.read_csv(odometry_csv)
+
+
+def parse_pedestrian_odometry_from_csv(odometry_csv):
+    return pd.read_csv(odometry_csv)
+
+
+def interpolate_trajectory(odometry_df):
+    times = odometry_df["cdasim_time_ms"].tolist()
+    tck_x = splrep(times, odometry_df["map_position_x_m"].tolist(), k=5)
+    tck_y = splrep(times, odometry_df["map_position_y_m"].tolist(), k=5)
+
+    return BSpline(*tck_x, extrapolate=False), BSpline(*tck_y, extrapolate=False)
+
+
+def calc_time_to_collision(vehicle_odom, ped_traj_x, ped_traj_y):
+    @dataclass
+    class Point:
+        x_m: float
+        y_m: float
+
+    def to_point(tup):
+        return Point(x_m=tup.map_position_x_m, y_m=tup.map_position_y_m)
+
+    def pairwise(iterable):
+        a, b = itertools.tee(iterable)
+        next(b, None)
+        return zip(a, b)
+
+    def pythagorean_distance(point_a, point_b):
+        return math.sqrt(
+            (point_a.x_m - point_b.x_m) ** 2 + (point_a.y_m - point_b.y_m) ** 2
+        )
+
+    trajectory_start_time_ms = vehicle_odom["cdasim_time_ms"].iloc[0]
+    vehicle_speed_mps = vehicle_odom["body_twist_longitudinal_mps"].iloc[0]
+
+    if abs(vehicle_speed_mps) < 0.01:
+        vehicle_position = Point(
+            x_m=vehicle_odom["map_position_x_m"].iloc[0],
+            y_m=vehicle_odom["map_position_y_m"].iloc[0],
+        )
+
+        pedestrian_position = Point(
+            x_m=ped_traj_x(trajectory_start_time_ms),
+            y_m=ped_traj_y(trajectory_start_time_ms),
+        )
+
+        if (
+            pythagorean_distance(vehicle_position, pedestrian_position)
+            < COLLISION_THRESHOLD
+        ):
+            return 0.0
+
+        return None
+
+    accumulated_time_ms = 0.0
+    for prev_v_position, current_v_position in pairwise(vehicle_odom.itertuples()):
+        vehicle_position = to_point(current_v_position)
+
+        travel_distance = pythagorean_distance(
+            to_point(prev_v_position), vehicle_position
+        )
+
+        if math.isclose(travel_distance, 0.0):
+            continue
+
+        travel_time_s = travel_distance / vehicle_speed_mps
+        accumulated_time_ms += travel_time_s * 1_000
+
+        pedestrian_position = Point(
+            x_m=ped_traj_x(trajectory_start_time_ms + accumulated_time_ms),
+            y_m=ped_traj_y(trajectory_start_time_ms + accumulated_time_ms),
+        )
+
+        # We only care about when the pedestrian is moving
+        # Assuming pedestrian odometry contains only values for when moving
+        if math.isnan(pedestrian_position.x_m) or math.isnan(pedestrian_position.y_m):
+            continue
+
+        if (
+            pythagorean_distance(vehicle_position, pedestrian_position)
+            < COLLISION_THRESHOLD
+        ):
+            print(accumulated_time_ms)
+            return accumulated_time_ms
+
+    return None
+
+
+parser = ArgumentParser(
+    prog="plot_time_to_collision",
+    description="",
+)
+
+parser.add_argument(
+    "--vehicle-odometry-csv",
+    type=Path,
+    help="CSV file containing vehicle odometry data",
+    required=True,
+)
+
+parser.add_argument(
+    "--pedestrian-odometry-csv",
+    type=Path,
+    help="CSV file containing pedestrian odometry data",
+    required=True,
+)
+
+cli_args = parser.parse_args()
+
+vehicle_odometry_df = parse_vehicle_odometry_from_csv(
+    cli_args.vehicle_odometry_csv
+    # Path(
+    #     "/home/carma/carma_ws/src/carma-analytics-fotda/src/carma-streets/foobar/vehicle_odometry.csv"
+    # )
+)
+
+pedestrian_odometry_df = parse_pedestrian_odometry_from_csv(
+    cli_args.pedestrian_odometry_csv
+    # Path(
+    #     "/home/carma/carma_ws/src/carma-analytics-fotda/src/carma-streets/foobar/pedestrian_odometry.csv"
+    # )
+)
+
+ped_traj_x, ped_traj_y = interpolate_trajectory(pedestrian_odometry_df)
+
+times_to_collision = [
+    calc_time_to_collision(vehicle_odometry_df.iloc[index:], ped_traj_x, ped_traj_y)
+    for index in range(len(vehicle_odometry_df.index))
+]
+
+plt.scatter(vehicle_odometry_df["cdasim_time_ms"], times_to_collision)
+plt.show()
