@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+
+from argparse import ArgumentParser
+from collections import defaultdict
+import csv
+import json
+from pathlib import Path
+import sys
+
+from matplotlib import pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy.interpolate import splrep, BSpline
+
+
+def parse_positions_from_sdsm_csv(file_path: Path):
+    def get_timestamp(csv_row: list):
+        return round(float(csv_row[1]))
+
+    def get_json_payload(csv_row: list):
+        json_string = csv_row[8]
+
+        # JSON string needs double quotes
+        return json_string.replace("'", '"')
+
+    sdsm_data = []
+    with open(file_path) as file:
+        csv_data = csv.reader(file)
+
+        # We don't need the CSV header
+        next(csv_data, None)
+
+        for row in csv_data:
+            detected_objects = json.loads(get_json_payload(row))
+            timestamp = get_timestamp(row)
+
+            for object_ in detected_objects:
+                object_data = object_["detected_object_data"]
+                common_data = object_data["detected_object_common_data"]
+
+                id_ = str(common_data["object_id"])
+
+                # The detection messages' position entries are offsets from the detection source,
+                # but the message does not provide the detection source's position.
+                position_offset = np.array(list(common_data["pos"].values())[:2]) / 10.0
+
+                position_offset[0], position_offset[1] = (
+                    position_offset[1],
+                    position_offset[0],
+                )
+
+                sdsm_data.append(
+                    [timestamp - common_data["measurement_time"], id_, *position_offset]
+                )
+
+    return pd.DataFrame(sdsm_data, columns=["cdasim_time_ms", "object_id", "x", "y"])
+
+
+def parse_positions_from_detection_csv(file_path: Path):
+    df = pd.read_csv(file_path, header=0)
+
+    df["object_id"] = df["object_id"].astype(str)
+
+    return df
+
+
+def filter_df_for_object_id(df: pd.DataFrame, id_: str):
+    return df.loc[df["object_id"] == id_]
+
+
+def filter_df_for_timestamp(df: pd.DataFrame, timestamp: int):
+    return df.loc[df["timestamp"] == timestamp]
+
+
+def get_unique_object_ids(df: pd.DataFrame):
+    return list(set(df["object_id"]))
+
+
+def get_distance(a, b):
+    return np.linalg.norm(np.array([a["x"], a["y"]]) - np.array([b["x"], b["y"]]))
+
+
+def calc_position_distances(detections_df: pd.DataFrame, sdsm_df: pd.DataFrame):
+    distances = defaultdict(list)
+    for detection_id in get_unique_object_ids(detections_df):
+        sdsm_df_object_id = filter_df_for_object_id(sdsm_df, detection_id)
+
+        for _, detection_row in filter_df_for_object_id(
+            detections_df, detection_id
+        ).iterrows():
+            timestamp = detection_row["timestamp"]
+            sdsm_row = filter_df_for_timestamp(sdsm_df_object_id, timestamp)
+
+            if sdsm_row.empty:
+                # We assume there are more detection entries than SDSM entries,
+                # so a missing SDSM entry is not an issue
+                continue
+
+            if len(sdsm_row) > 1:
+                print(
+                    f"fatal: Multiple SDSMs for object '{detection_id}'"
+                    f" at timestamp '{timestamp}'"
+                )
+                sys.exit(1)
+
+            distances[detection_id].append(
+                (timestamp / 1_000, get_distance(detection_row, sdsm_row.iloc[0]))
+            )
+
+    return distances
+
+
+def parse_infrastructure_sensor_position_from_json(file_path: Path):
+    if not file_path.exists():
+        print(f"plot_detected_objects: path '{file_path}' does not exist")
+        exit(1)
+
+    if not file_path.is_file():
+        print(f"plot_detected_objects: path '{file_path}' is not a file")
+        exit(1)
+
+    with open(file_path) as file:
+        json_data = json.load(file)
+
+    return json_data[0]["location"]
+
+
+parser = ArgumentParser(
+    prog="plot_sdsm_position_error",
+    description="Plot the error between detected object positions and their associated SDSM positions",
+)
+
+parser.add_argument(
+    "--sdsm-csv",
+    type=Path,
+    help="CSV file containing SDSM message entries from Kafka logs",
+    required=True,
+)
+
+parser.add_argument(
+    "--vehicle-detection-csv",
+    type=Path,
+    help="CSV file containing object detection entries from a rosbag file",
+    required=True,
+)
+
+parser.add_argument(
+    "--infrastructure-sensors-json",
+    type=Path,
+    help="JSON file containing infrastructure sensor positions",
+    required=True,
+)
+
+cli_args = parser.parse_args()
+
+detections_df = parse_positions_from_detection_csv(cli_args.vehicle_detection_csv)
+sdsm_df = parse_positions_from_sdsm_csv(cli_args.sdsm_csv)
+
+# print(detections_df)
+# print(sdsm_df)
+# exit()
+
+sensor_position = parse_infrastructure_sensor_position_from_json(
+    cli_args.infrastructure_sensors_json
+)
+
+figures_dir = Path("figures")
+figures_dir.mkdir(exist_ok=True)
+
+for detection_id in get_unique_object_ids(detections_df):
+    object_detection = detections_df.loc[detections_df["object_id"] == detection_id]
+    object_sdsm = sdsm_df.loc[sdsm_df["object_id"] == detection_id]
+
+    _, ax = plt.subplots()
+
+    ax.plot(
+        object_detection["map_position_x_m"],
+        object_detection["map_position_y_m"],
+        label="Vehicle Detected",
+    )
+
+    ax.plot(
+        object_sdsm["x"] + sensor_position["x"],
+        object_sdsm["y"] + sensor_position["y"],
+        label="SDSM Reported",
+    )
+
+    ax.set_title(f"Object Trace - {detection_id}")
+    ax.set_ylabel("$y$ (map) [m]")
+    ax.set_xlabel("$x$ (map) [m]")
+    ax.legend()
+
+    ax.set_aspect("equal")
+
+    plt.show()
+    # plt.savefig(figures_dir / f"object_trace_{detection_id}.pdf")
+
+for detection_id in get_unique_object_ids(detections_df):
+    object_detection = detections_df.loc[detections_df["object_id"] == detection_id]
+    object_sdsm = sdsm_df.loc[sdsm_df["object_id"] == detection_id]
+
+    object_detection_unique_times = object_detection.drop_duplicates("cdasim_time_ms")
+    object_sdsm_unique_times = object_sdsm.drop_duplicates("cdasim_time_ms")
+
+    times = np.arange(object_detection_unique_times["cdasim_time_ms"].iloc[0], object_sdsm_unique_times["cdasim_time_ms"].iloc[-1], 0.01)
+
+    fig, (position_x, error_x, position_y, error_y) = plt.subplots(4, sharex=True)
+
+    position_x.plot(
+        object_detection["cdasim_time_ms"] / 1e3,
+        object_detection["map_position_x_m"],
+        label="Vehicle Detected",
+    )
+
+    position_x.plot(
+        object_sdsm["cdasim_time_ms"] / 1e3,
+        object_sdsm["x"] + sensor_position["x"],
+        label="SDSM Reported"
+    )
+
+    position_x.set_ylabel("$x$ (map) [m]")
+    # position_x.legend()
+    lgd = position_x.legend(bbox_to_anchor=(1.04, 1), borderaxespad=0)
+
+    det_tck_x = splrep(object_detection_unique_times["cdasim_time_ms"].tolist(), object_detection_unique_times["map_position_x_m"].tolist(), k=5)
+    sdsm_tck_x = splrep(object_sdsm_unique_times["cdasim_time_ms"].tolist(), (object_sdsm_unique_times["x"] + sensor_position["x"]), k=5)
+
+    error_x.plot(times / 1e3, abs(BSpline(*det_tck_x)(times) - BSpline(*sdsm_tck_x)(times)))
+    error_x.set_ylabel("Error [m]")
+
+    position_y.plot(
+        object_detection["cdasim_time_ms"] / 1e3,
+        object_detection["map_position_y_m"],
+        label="Vehicle",
+    )
+
+    position_y.plot(
+        object_sdsm["cdasim_time_ms"] / 1e3,
+        object_sdsm["y"] + sensor_position["y"],
+        label="SDSM"
+    )
+
+    position_y.set_ylabel("$y$ (map) [m]")
+    # position_y.legend()
+
+    det_tck_y = splrep(object_detection_unique_times["cdasim_time_ms"].tolist(), object_detection_unique_times["map_position_y_m"].tolist(), k=5)
+    sdsm_tck_y = splrep(object_sdsm_unique_times["cdasim_time_ms"].tolist(), (object_sdsm_unique_times["y"] + sensor_position["y"]), k=5)
+
+    error_y.plot(times / 1e3, abs(BSpline(*det_tck_y)(times) - BSpline(*sdsm_tck_y)(times)))
+    error_y.set_ylabel("Error [m]")
+
+    error_y.set_xlabel("CDASim Time [s]")
+
+    suptitle = fig.suptitle(f"Object Position v. Simulation Time - {detection_id}")
+
+    # plt.show(bbox_extra_artists=(lgd), bbox_inches='tight')
+    plt.savefig(figures_dir / f"object_position_v_simulation_time_{detection_id}.pdf", bbox_extra_artists=(lgd, suptitle), bbox_inches="tight")
