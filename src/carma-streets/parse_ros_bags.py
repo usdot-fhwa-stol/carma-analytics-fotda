@@ -1,19 +1,13 @@
 import argparse
 import csv
-import itertools
-import math
 from pathlib import Path
 
+import more_itertools
 import rosbag
 
 
 def find_msg_closest_to_timestamp(bag_msgs, timestamp):
-    def pairwise(iterable):
-        a, b = itertools.tee(iterable)
-        next(b, None)
-        return zip(a, b)
-
-    for current, next_ in pairwise(bag_msgs):
+    for current, next_ in more_itertools.pairwise(bag_msgs):
         if next_[2] > timestamp:
             if abs(timestamp - current[2]) < abs(next_[2] - timestamp):
                 return current
