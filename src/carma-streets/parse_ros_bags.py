@@ -10,10 +10,14 @@ def find_msg_closest_to_timestamp(bag_msgs, timestamp):
     for current, next_ in more_itertools.pairwise(bag_msgs):
         # Each element in `bag_msgs` is a triple:
         # <topic_name, msg, system_time_at_receive>
+        _, _, current_log_timestamp = current
         _, _, next_log_timestamp = next_
 
+        # We only need to iterate until we find two messages who's logged
+        # timestamps straddle the timestamp of interest. All messages
+        # afterwards will have increasing differences.
         if next_log_timestamp > timestamp:
-            if abs(timestamp - current[2]) < abs(next_log_timestamp - timestamp):
+            if abs(timestamp - current_log_timestamp) < abs(next_log_timestamp - timestamp):
                 return current
 
             return next_
