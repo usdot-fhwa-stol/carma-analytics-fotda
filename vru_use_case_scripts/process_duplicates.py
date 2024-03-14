@@ -1,0 +1,109 @@
+import rosbag
+import csv
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import argparse
+from pathlib import Path
+from enum import Enum
+
+
+class ObjectType(Enum):
+    UNKNOWN = 0
+    SMALL_VEHICLE = 1
+    LARGE_VEHICLE = 2
+    MOTORCYCLE = 3
+    PEDESTRIAN = 4
+    def __str__(self):
+        return self.name
+
+
+def plot_duplicates(input_file):
+    # plot duplicate durations of each Object over time
+    df = pd.read_csv(input_file)
+    figures_dir = Path("duplicates_plots")
+    figures_dir.mkdir(exist_ok=True)
+    # Group by ObjIDShort
+    grouped = df.groupby('ObjIDShort')
+    # Plot durations for each group
+    for obj_id_short, group in grouped:
+        plt.figure()
+        for obj_id_main, sub_group in group.groupby('ObjIDMain'):
+            obj_type = sub_group['ObjType'].iloc[0]  # Get the ObjType for the current ObjIDMain
+            x = sub_group['Timestamp(ms)'].values[:, np.newaxis]  # Convert x to a numpy array before indexing
+            y = sub_group['Duration'].values
+            plt.plot(x, y, label=f'Actual Object ID: {obj_id_main}, Type: {obj_type}')
+        plt.axhline(y=1000, color='r', linestyle='--', label='Cutoff')
+        plt.xlabel('Timestamp(ms)')
+        plt.ylabel('Duration')
+        plt.title(f'Duplicates Duration for Object ID: {obj_id_short}')
+        plt.legend()
+        # plt.show()
+        plt.savefig(figures_dir / f"duplicates_{obj_id_short}.png")
+
+def get_duplicate_duration(input_file, output_file):
+    # Caluclate the duration each duplicate lasts
+    df = pd.read_csv(input_file)
+    df.sort_values(by=['ObjIDMain', 'Timestamp(ms)'], inplace=True)
+    df['TimeDiff'] = df.groupby('ObjIDMain')['Timestamp(ms)'].diff()
+    # Create a mask to identify interruptions in the ObjIDMain sequence
+    mask = (df['TimeDiff'] <= 100)
+    df['Mask'] = mask
+    sum_timediff = 0
+    # calculate the duration each duplicate lasts
+    for index, row in df.iterrows():
+        if row['Mask']:
+            sum_timediff += row['TimeDiff']
+        else:
+            sum_timediff = 0
+        df.at[index, 'Duration'] = sum_timediff
+    # Reset the index of the DataFrame
+    df.reset_index(drop=True, inplace=True)
+    df.to_csv(output_file, index=False)
+
+
+def remove_main_obj(input_file, output_file):
+    # The main detections are removed from the detected objects by removing the first instance of each object ID
+    df = pd.read_csv(input_file)
+    df = df.drop_duplicates() # this line removes the exact duplicates (
+    # Group by 'Timestamp(ms)' and drop the first row for each group
+    df = df.groupby('Timestamp(ms)').apply(lambda x: x.iloc[1:]).reset_index(drop=True)
+    # Write the output to a new CSV file
+    df.to_csv(output_file, index=False)
+
+
+def extract_all_objects(ros_bag_file, output_file):
+    # Extracting all detected objects from ROS bag
+    detected_obj_topic_name = '/environment/fused_external_objects'
+    messages = []
+    with rosbag.Bag(ros_bag_file, 'r') as bag:
+        for topic, msg, _ in bag.read_messages(topics=[detected_obj_topic_name]):
+            messages.extend(msg.objects)
+
+    if output_file.exists():
+        print(f'Output file {output_file} already exists. Overwriting file.')
+    with open(output_file, 'w', newline='') as file:
+        # check for duplicate
+        writer = csv.writer(file)
+        writer.writerow(['Timestamp(ms)', 'ObjIDShort', 'ObjIDMain', 'ObjType'])
+        for message in messages:
+            timestamp_ms = message.header.stamp.secs * 1000 + message.header.stamp.nsecs // 1000000
+            writer.writerow([timestamp_ms, message.id%1000, message.id, ObjectType(message.object_type)])
+
+    print(f"Sorted data from topic '{detected_obj_topic_name}' saved to '{output_file}'")
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Script to parse ROS Bags into CSV data')
+    parser.add_argument('--ros-bag-file', help='ROS Bags File.', type=str, required=True)
+    parser.add_argument('--csv-dir', help='Directory to write csv file to.', type=Path, required=True)
+    args = parser.parse_args()
+
+    extract_all_objects(args.ros_bag_file, args.csv_dir/'all_detected_objects.csv')
+    remove_main_obj(args.csv_dir/'all_detected_objects.csv', args.csv_dir/'duplicates.csv')
+    get_duplicate_duration(args.csv_dir/'duplicates.csv', args.csv_dir/'duplicates_durations.csv')
+    plot_duplicates(args.csv_dir/'duplicates_durations.csv')
+
+
+if __name__ == '__main__':
+    main()
