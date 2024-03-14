@@ -71,12 +71,12 @@ def parse_kafka_logs_as_type(input_file_path: Path, message_type: KafkaLogMessag
                             print(f'Error {e.msg} extracting json info for message: {kafka_message}. Skipping message.')
                             skipped_messages += 1
                             kafka_message = ''
-                    create_time = get_create_time(line)      
+                    create_time = get_create_time(line)
                     json_beg_index = line.find('{')
                     kafka_message += line[json_beg_index:]
                 else:
                     kafka_message += line
-                
+
             if skipped_messages > 0 :
                 print(f'WARNING: Skipped {skipped_messages} due to JSON decoding errors. Please inspect logs.')
             else:
@@ -114,19 +114,19 @@ def parse_spat_to_csv(inputfile: Path, outputfile: Path, simulation: bool=False)
     #write data of interest to csv which will be used to produce plots
     with open(outputfile, 'w', newline='') as file:
         csv_writer = writer(file)
-        csv_writer.writerow(['Created Time(ms)', 'Intersection Name', 'Intersection ID', 'Timestamp(ms)', 'Intersection State'])            
+        csv_writer.writerow(['Created Time(ms)', 'Intersection Name', 'Intersection ID', 'Timestamp(ms)', 'Intersection State'])
         skipped_messages = 0
         #Need to get time since epoch of first day of year to use with moy and timestamp
         #Our local timezone GMT-5 actually needs to be implemented as GMT+5 with pytz library
         #documentation: https://stackoverflow.com/questions/54842491/printing-datetime-as-pytz-timezoneetc-gmt-5-yields-incorrect-result
-        
+
         #Get the epoch ms time of the first data of the relavent year
         test_year = datetime.datetime.fromtimestamp(int(spat_msgs[0].created_time)/1000).year
         #extract relevant elements from the json
         for msg in spat_msgs:
             try:
                 csv_writer.writerow([
-                    msg.created_time, 
+                    msg.created_time,
                     msg.json_message['intersections'][0]['name'],
                     msg.json_message['intersections'][0]['id'],
                     get_spat_timestamp(msg.json_message, test_year,simulation),
@@ -235,22 +235,22 @@ def parse_sdsm_to_csv(inputfile: Path, outputfile: Path, simulation: bool = Fals
     #write data of interest to csv which will be used to produce plots
     with open(outputfile, 'w', newline='') as file:
         csv_writer = writer(file)
-        csv_writer.writerow(['Created Time(ms)', 'Timestamp(ms)',
-             'Message Count', 'Source ID', 'Equipement Type', 'Reference Position Longitude', 
+        csv_writer.writerow(['system_time_ms', 'cdasim_time_ms',
+             'Message Count', 'Source ID', 'Equipement Type', 'Reference Position Longitude',
              'Reference Position Latitude', 'Reference Position Elevation','Objects'])
         skipped_messages = 0
         #extract relevant elements from the json
         for msg in sdsm_msgs:
             try:
                 csv_writer.writerow([
-                    msg.created_time, 
-                    get_sdsm_timestamp(msg.json_message['sdsm_time_stamp'],simulation), 
+                    msg.created_time,
+                    get_sdsm_timestamp(msg.json_message['sdsm_time_stamp'],simulation),
                     msg.json_message['msg_cnt'],
                     msg.json_message['source_id'],
                     msg.json_message['equipment_type'],
-                    msg.json_message['ref_pos']['long'], 
-                    msg.json_message['ref_pos']['lat'], 
-                    msg.json_message['ref_pos']['elevation'], 
+                    msg.json_message['ref_pos']['long'],
+                    msg.json_message['ref_pos']['lat'],
+                    msg.json_message['ref_pos']['elevation'],
                     msg.json_message['objects']])
             except Exception as e:
                 print(f'Error {e.msgs} occurred while writing csv entry for kafka message {msg.json_message}. Skipping message.')
@@ -273,22 +273,22 @@ def parse_detected_object_to_csv(inputfile: Path, outputfile: Path):
     #write data of interest to csv which will be used to produce plots
     with open(outputfile, 'w', newline='') as file:
         csv_writer = writer(file)
-        csv_writer.writerow(['Created Time(ms)', 'Timestamp(ms)',
-             'Type', 'Sensor ID', 'Projection String', 'Object ID', 
+        csv_writer.writerow(['system_time_ms', 'cdasim_time_ms',
+             'Type', 'Sensor ID', 'Projection String', 'Object ID',
              'Position X(m)', 'Position Y(m)','Position Z(m)'])
         skipped_messages = 0
         #extract relevant elements from the json
         for msg in detected_object_msgs:
             try:
                 csv_writer.writerow([
-                    msg.created_time, 
-                    msg.json_message['timestamp'], 
+                    msg.created_time,
+                    msg.json_message['timestamp'],
                     msg.json_message['type'],
                     msg.json_message['sensorId'],
                     msg.json_message['projString'],
                     msg.json_message['objectId'],
-                    msg.json_message['position']['x'], 
-                    msg.json_message['position']['y'], 
+                    msg.json_message['position']['x'],
+                    msg.json_message['position']['y'],
                     msg.json_message['position']['z']])
             except Exception as e:
                 print(f'Error {e.msgs} occurred while writing csv entry for kafka message {msg.json_message}. Skipping message.')
@@ -330,10 +330,10 @@ def parse_kafka_log_dir(kafka_log_dir:str, csv_dir:str, simulation:bool=False):
     else:
         print('ERROR:Please ensure that Kafka Logs Directory exists.')
 
-   
+
 def main():
     parser = argparse.ArgumentParser(description='Script to parse Kafka Topic log files into CSV data')
-    parser.add_argument('--kafka-log-dir', help='Directory containing Kafka Log files.', type=str, required=True) 
+    parser.add_argument('--kafka-log-dir', help='Directory containing Kafka Log files.', type=str, required=True)
     parser.add_argument('--csv-dir', help='Directory to write csv files to.', type=str, required=True)
     parser.add_argument('--simulation', help='Flag indicating data is from simulation', action='store_true')
     args = parser.parse_args()
