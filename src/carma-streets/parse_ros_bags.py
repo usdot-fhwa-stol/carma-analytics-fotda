@@ -21,11 +21,13 @@ def get_time_offset(ros_bag_file):
         cdasim_clock_msgs = bag.read_messages(topics=["/sim_clock"])  # CDASim clock
         carla_clock_msgs = bag.read_messages(topics=["/clock"])  # CARLA clock
 
+        _, cdasim_clock_msg, cdasim_clock_log_time = next(cdasim_clock_msgs)
+
         carla_clock_at_cdasim_start = find_msg_closest_to_timestamp(
-            carla_clock_msgs, next(cdasim_clock_msgs)[2]
+            carla_clock_msgs, cdasim_clock_log_time
         )
 
-        return carla_clock_at_cdasim_start[1].clock - next(cdasim_clock_msgs)[1].clock
+        return carla_clock_at_cdasim_start[1].clock - cdasim_clock_msg.clock
 
 
 def get_detected_objects(ros_bag_file, output_file, time_offset):
