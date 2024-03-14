@@ -236,7 +236,6 @@ for detection_id in get_unique_object_ids(detections_df):
     )
 
     position_y.set_ylabel("$y$ (map) [m]")
-    # position_y.legend()
 
     det_tck_y = splrep(object_detection_unique_times["cdasim_time_ms"].tolist(), object_detection_unique_times["map_position_y_m"].tolist(), k=5)
     sdsm_tck_y = splrep(object_sdsm_unique_times["cdasim_time_ms"].tolist(), (object_sdsm_unique_times["y"] + sensor_position["y"]), k=5)
