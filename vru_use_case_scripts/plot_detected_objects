@@ -156,10 +156,6 @@ cli_args = parser.parse_args()
 detections_df = parse_positions_from_detection_csv(cli_args.vehicle_detection_csv)
 sdsm_df = parse_positions_from_sdsm_csv(cli_args.sdsm_csv)
 
-# print(detections_df)
-# print(sdsm_df)
-# exit()
-
 sensor_position = parse_infrastructure_sensor_position_from_json(
     cli_args.infrastructure_sensors_json
 )
@@ -192,8 +188,7 @@ for detection_id in get_unique_object_ids(detections_df):
 
     ax.set_aspect("equal")
 
-    plt.show()
-    # plt.savefig(figures_dir / f"object_trace_{detection_id}.pdf")
+    plt.savefig(figures_dir / f"object_trace_{detection_id}.png")
 
 for detection_id in get_unique_object_ids(detections_df):
     object_detection = detections_df.loc[detections_df["object_id"] == detection_id]
@@ -253,5 +248,4 @@ for detection_id in get_unique_object_ids(detections_df):
 
     suptitle = fig.suptitle(f"Object Position v. Simulation Time - {detection_id}")
 
-    # plt.show(bbox_extra_artists=(lgd), bbox_inches='tight')
-    plt.savefig(figures_dir / f"object_position_v_simulation_time_{detection_id}.pdf", bbox_extra_artists=(lgd, suptitle), bbox_inches="tight")
+    plt.savefig(figures_dir / f"object_position_v_simulation_time_{detection_id}.png", bbox_extra_artists=(lgd, suptitle), bbox_inches="tight")
