@@ -8,8 +8,12 @@ import rosbag
 
 def find_msg_closest_to_timestamp(bag_msgs, timestamp):
     for current, next_ in more_itertools.pairwise(bag_msgs):
-        if next_[2] > timestamp:
-            if abs(timestamp - current[2]) < abs(next_[2] - timestamp):
+        # Each element in `bag_msgs` is a triple:
+        # <topic_name, msg, system_time_at_receive>
+        _, _, next_log_timestamp = next_
+
+        if next_log_timestamp > timestamp:
+            if abs(timestamp - current[2]) < abs(next_log_timestamp - timestamp):
                 return current
 
             return next_
