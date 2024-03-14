@@ -72,6 +72,8 @@ def calc_time_to_collision(vehicle_odom, ped_traj_x, ped_traj_y):
 
         return None
 
+    # Represents the running approximate integral as the vehicle is
+    # propagated along the path
     accumulated_time_ms = 0.0
     for prev_v_position, current_v_position in pairwise(vehicle_odom.itertuples()):
         vehicle_position = to_point(current_v_position)
@@ -83,6 +85,7 @@ def calc_time_to_collision(vehicle_odom, ped_traj_x, ped_traj_y):
         if math.isclose(travel_distance_m, 0.0):
             continue
 
+        # Time to travel between to path points
         travel_time_s = travel_distance_m / vehicle_speed_mps
         accumulated_time_ms += travel_time_s * 1_000
 
