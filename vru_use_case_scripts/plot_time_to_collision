@@ -138,10 +138,17 @@ pedestrian_odometry_df = parse_pedestrian_odometry_from_csv(
 
 ped_traj_x, ped_traj_y = interpolate_trajectory(pedestrian_odometry_df)
 
-times_to_collision = [
+times_to_collision_ms = [
     calc_time_to_collision(vehicle_odometry_df.iloc[index:], ped_traj_x, ped_traj_y)
     for index in range(len(vehicle_odometry_df.index))
 ]
 
-plt.scatter(vehicle_odometry_df["cdasim_time_ms"], times_to_collision)
+times_to_collision_s = [
+    ttc / 1_000 if ttc is not None else None for ttc in times_to_collision_ms
+]
+
+plt.scatter(vehicle_odometry_df["cdasim_time_ms"] / 1_000.0, times_to_collision_s)
+plt.title("Time-to-collision (TTC) v. Simulation Time")
+plt.ylabel("Time-to-collision (TTC) [s]")
+plt.xlabel("CDASim Time [s]")
 plt.show()
