@@ -150,4 +150,8 @@ plt.scatter(vehicle_odometry_df["cdasim_time_ms"] / 1_000.0, times_to_collision_
 plt.title("Time-to-collision (TTC) v. Simulation Time")
 plt.ylabel("Time-to-collision (TTC) [s]")
 plt.xlabel("CDASim Time [s]")
-plt.show()
+
+figures_dir = Path("figures")
+figures_dir.mkdir(exist_ok=True)
+
+plt.savefig(figures_dir / f"ttc.png")
