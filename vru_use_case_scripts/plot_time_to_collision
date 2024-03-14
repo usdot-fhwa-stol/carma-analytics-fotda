@@ -103,7 +103,6 @@ def calc_time_to_collision(vehicle_odom, ped_traj_x, ped_traj_y):
             pythagorean_distance(vehicle_position, pedestrian_position)
             < COLLISION_THRESHOLD_M
         ):
-            print(accumulated_time_ms)
             return accumulated_time_ms
 
     return None
