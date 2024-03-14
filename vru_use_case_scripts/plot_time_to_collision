@@ -127,18 +127,10 @@ parser.add_argument(
 
 cli_args = parser.parse_args()
 
-vehicle_odometry_df = parse_vehicle_odometry_from_csv(
-    cli_args.vehicle_odometry_csv
-    # Path(
-    #     "/home/carma/carma_ws/src/carma-analytics-fotda/src/carma-streets/foobar/vehicle_odometry.csv"
-    # )
-)
+vehicle_odometry_df = parse_vehicle_odometry_from_csv(cli_args.vehicle_odometry_csv)
 
 pedestrian_odometry_df = parse_pedestrian_odometry_from_csv(
     cli_args.pedestrian_odometry_csv
-    # Path(
-    #     "/home/carma/carma_ws/src/carma-analytics-fotda/src/carma-streets/foobar/pedestrian_odometry.csv"
-    # )
 )
 
 ped_traj_x, ped_traj_y = interpolate_trajectory(pedestrian_odometry_df)
