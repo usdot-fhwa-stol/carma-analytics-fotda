@@ -236,7 +236,7 @@ def parse_sdsm_to_csv(inputfile: Path, outputfile: Path, simulation: bool = Fals
     with open(outputfile, 'w', newline='') as file:
         csv_writer = writer(file)
         csv_writer.writerow(['System Time (ms)', 'Message Time (ms)',
-             'Message Count', 'Source ID', 'Equipement Type', 'Reference Position Longitude',
+             'Message Count', 'Source ID', 'Equipment Type', 'Reference Position Longitude',
              'Reference Position Latitude', 'Reference Position Elevation','Objects'])
         skipped_messages = 0
         #extract relevant elements from the json
@@ -275,7 +275,7 @@ def parse_detected_object_to_csv(inputfile: Path, outputfile: Path):
         csv_writer = writer(file)
         csv_writer.writerow(['System Time (ms)', 'Message Time (ms)',
              'Type', 'Sensor ID', 'Projection String', 'Object ID',
-             'Position X(m)', 'Position Y(m)','Position Z(m)'])
+             'Map Position X (m)', 'Map Position Y (m)','Map Position Z (m)'])
         skipped_messages = 0
         #extract relevant elements from the json
         for msg in detected_object_msgs:
