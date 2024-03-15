@@ -1,5 +1,6 @@
 import argparse
 import csv
+import math
 from pathlib import Path
 
 import more_itertools
@@ -17,7 +18,9 @@ def find_msg_closest_to_timestamp(bag_msgs, timestamp):
         # timestamps straddle the timestamp of interest. All messages
         # afterwards will have increasing differences.
         if next_log_timestamp > timestamp:
-            if abs(current_log_timestamp - timestamp) < abs(timestamp - next_log_timestamp):
+            if abs(current_log_timestamp - timestamp) < abs(
+                timestamp - next_log_timestamp
+            ):
                 return current
 
             return next_
@@ -72,6 +75,52 @@ def get_detected_objects(ros_bag_file, output_file, time_offset):
     print(f"Calculated sim time offset: '{time_offset}'")
 
 
+def get_carla_object_odometry(actor_id, ros_bag_file, output_file, time_offset):
+    def get_object_with_id(id_, msg):
+        for object_ in msg.objects:
+            if object_.id == id_:
+                return object_
+
+    with rosbag.Bag(ros_bag_file, "r") as bag:
+        messages = [msg for (_, msg, _) in bag.read_messages(topics=["/carla/objects"])]
+
+    output_file.parent.mkdir(exist_ok=True)
+
+    if output_file.exists():
+        print(f"Output file {output_file} already exists. Overwriting file.")
+
+    with open(output_file, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(
+            [
+                "cdasim_time_ms",
+                "map_position_x_m",
+                "map_position_y_m",
+                "map_velocity_x_mps",
+                "map_velocity_y_mps",
+            ]
+        )
+
+        for message in messages:
+            pedestrian_odometry = get_object_with_id(actor_id, message)
+
+            if not pedestrian_odometry or math.isclose(
+                pedestrian_odometry.twist.linear.x, 0.0
+            ):
+                continue
+
+            cdasim_time_ms = (message.header.stamp - time_offset).to_sec() * 1_000
+            writer.writerow(
+                [
+                    cdasim_time_ms,
+                    pedestrian_odometry.pose.position.x,
+                    pedestrian_odometry.pose.position.y,
+                    pedestrian_odometry.twist.linear.x,
+                    pedestrian_odometry.twist.linear.y,
+                ]
+            )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Script to parse ROS Bags into CSV data"
@@ -87,6 +136,10 @@ def main():
     time_offset = get_time_offset(args.ros_bag_file)
     get_detected_objects(
         args.ros_bag_file, args.csv_dir / "vehicle_detected_objects.csv", time_offset
+    )
+
+    get_carla_object_odometry(
+        221, args.ros_bag_file, args.csv_dir / "pedestrian_odometry.csv", time_offset
     )
 
 
