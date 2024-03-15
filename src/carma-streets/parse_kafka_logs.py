@@ -114,7 +114,7 @@ def parse_spat_to_csv(inputfile: Path, outputfile: Path, simulation: bool=False)
     #write data of interest to csv which will be used to produce plots
     with open(outputfile, 'w', newline='') as file:
         csv_writer = writer(file)
-        csv_writer.writerow(['Created Time(ms)', 'Intersection Name', 'Intersection ID', 'Timestamp(ms)', 'Intersection State'])
+        csv_writer.writerow(['Message Time (ms)', 'Intersection Name', 'Intersection ID', 'System Time (ms)', 'Intersection State'])
         skipped_messages = 0
         #Need to get time since epoch of first day of year to use with moy and timestamp
         #Our local timezone GMT-5 actually needs to be implemented as GMT+5 with pytz library
@@ -151,7 +151,7 @@ def parse_timesync_to_csv(inputfile: Path, outputfile: Path):
     #write data of interest to csv which will be used to produce plots
     with open(outputfile, 'w', newline='') as file:
         csv_writer = writer(file)
-        csv_writer.writerow(['Created Time(ms)', 'Timestamp(ms)', 'Sequence Number'])
+        csv_writer.writerow(['Message Time (ms)', 'System Time (ms)', 'Sequence Number'])
         skipped_messages = 0
         #extract relevant elements from the json
         for msg in timesync_msgs:
@@ -178,7 +178,7 @@ def parse_map_to_csv(inputfile: Path, outputfile: Path):
     #write data of interest to csv which will be used to produce plots
     with open(outputfile, 'w', newline='') as file:
         csv_writer = writer(file)
-        csv_writer.writerow(['Created Time(ms)', 'Timestamp(ms)', 'Map Data'])
+        csv_writer.writerow(['Message Time (ms)', 'System Time (ms)', 'Map Data'])
         skipped_messages = 0
         #extract relevant elements from the json
         for msg in map_msgs:
@@ -235,7 +235,7 @@ def parse_sdsm_to_csv(inputfile: Path, outputfile: Path, simulation: bool = Fals
     #write data of interest to csv which will be used to produce plots
     with open(outputfile, 'w', newline='') as file:
         csv_writer = writer(file)
-        csv_writer.writerow(['system_time_ms', 'cdasim_time_ms',
+        csv_writer.writerow(['System Time (ms)', 'Message Time (ms)',
              'Message Count', 'Source ID', 'Equipement Type', 'Reference Position Longitude',
              'Reference Position Latitude', 'Reference Position Elevation','Objects'])
         skipped_messages = 0
@@ -273,7 +273,7 @@ def parse_detected_object_to_csv(inputfile: Path, outputfile: Path):
     #write data of interest to csv which will be used to produce plots
     with open(outputfile, 'w', newline='') as file:
         csv_writer = writer(file)
-        csv_writer.writerow(['system_time_ms', 'cdasim_time_ms',
+        csv_writer.writerow(['System Time (ms)', 'Message Time (ms)',
              'Type', 'Sensor ID', 'Projection String', 'Object ID',
              'Position X(m)', 'Position Y(m)','Position Z(m)'])
         skipped_messages = 0
