@@ -1,11 +1,9 @@
+import argparse
+import csv
 import math
+from pathlib import Path
 
 import rosbag
-import csv
-import pandas as pd
-import matplotlib.pyplot as plt
-import argparse
-from pathlib import Path
 
 
 # calculate the offset between ros ckock and the sim clock
