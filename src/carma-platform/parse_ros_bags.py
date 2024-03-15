@@ -121,6 +121,40 @@ def get_carla_object_odometry(actor_id, ros_bag_file, output_file, time_offset):
             )
 
 
+def get_vehicle_odometry(ros_bag_file, output_file, time_offset):
+    with rosbag.Bag(ros_bag_file, "r") as bag:
+        messages = [
+            msg for (_, msg, _) in bag.read_messages(topics=["/carla/carma_1/odometry"])
+        ]
+
+    output_file.parent.mkdir(exist_ok=True)
+
+    if output_file.exists():
+        print(f"Output file {output_file} already exists. Overwriting file.")
+
+    with open(output_file, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(
+            [
+                "Message Time (ms)",
+                "Map Position X (m)",
+                "Map Position Y (m)",
+                "Body Twist Longitudinal (mps)",
+            ]
+        )
+
+        for message in messages:
+            cdasim_time_ms = (message.header.stamp - time_offset).to_sec() * 1_000
+            writer.writerow(
+                [
+                    cdasim_time_ms,
+                    message.pose.pose.position.x,
+                    message.pose.pose.position.y,
+                    message.twist.twist.linear.x,
+                ]
+            )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Script to parse ROS Bags into CSV data"
@@ -140,6 +174,10 @@ def main():
 
     get_carla_object_odometry(
         221, args.ros_bag_file, args.csv_dir / "pedestrian_odometry.csv", time_offset
+    )
+
+    get_vehicle_odometry(
+        args.ros_bag_file, args.csv_dir / "vehicle_odometry.csv", time_offset
     )
 
 
