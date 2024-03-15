@@ -1,3 +1,5 @@
+import math
+
 import rosbag
 import csv
 import pandas as pd
@@ -28,16 +30,16 @@ def get_detected_objects(ros_bag_file, outputfile, time_offset):
         print(f'Output file {outputfile} already exists. Overwriting file.')
     with open(outputfile, 'w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(['Timestamp (ms)', 'ObjID', 'Positionx',  'Positiony']) 
+        writer.writerow(['Timestamp (ms)', 'ObjID', 'Positionx',  'Positiony'])
         for message in messages:
             timestamp_ms = message.header.stamp.secs * 1000 + message.header.stamp.nsecs // 1000000 - time_offset
-            writer.writerow([timestamp_ms, message.id%1000, message.pose.pose.position.x, message.pose.pose.position.y]) 
+            writer.writerow([timestamp_ms, message.id%1000, message.pose.pose.position.x, message.pose.pose.position.y])
 
     print(f"Sorted data from topic '{detected_obj_topic_name}' saved to '{outputfile}'")
     print(f"Calculated sim time offset: '{time_offset}'")
-    
 
-def get_pedestrian_odometry(ros_bag_file, output_file, time_offset):
+
+def get_object_odometry(actor_id, ros_bag_file, output_file, time_offset):
     def get_object_with_id(id_, msg):
         for object_ in msg.objects:
             if object_.id == id_:
@@ -64,7 +66,7 @@ def get_pedestrian_odometry(ros_bag_file, output_file, time_offset):
         )
 
         for message in messages:
-            pedestrian_odometry = get_object_with_id(221, message)
+            pedestrian_odometry = get_object_with_id(actor_id, message)
 
             if not pedestrian_odometry or math.isclose(
                 pedestrian_odometry.twist.linear.x, 0.0
@@ -85,14 +87,14 @@ def get_pedestrian_odometry(ros_bag_file, output_file, time_offset):
 
 def main():
     parser = argparse.ArgumentParser(description='Script to parse ROS Bags into CSV data')
-    parser.add_argument('--ros-bag-file', help='ROS Bags File.', type=str, required=True) 
-    parser.add_argument('--csv-dir', help='Directory to write csv file to.', type=Path, required=True)  
+    parser.add_argument('--ros-bag-file', help='ROS Bags File.', type=str, required=True)
+    parser.add_argument('--csv-dir', help='Directory to write csv file to.', type=Path, required=True)
     args = parser.parse_args()
-    
+
     time_offset = get_time_offset(args.ros_bag_file)
     get_detected_objects(args.ros_bag_file, args.csv_dir/'vehicle_detected_objects.csv', time_offset)
 
-    get_pedestrian_odometry(
+    get_object_odometry(221,
         args.ros_bag_file, args.csv_dir / "pedestrian_odometry.csv", time_offset
     )
 
