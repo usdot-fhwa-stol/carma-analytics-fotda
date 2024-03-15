@@ -136,10 +136,10 @@ def get_vehicle_odometry(ros_bag_file, output_file, time_offset):
         writer = csv.writer(file)
         writer.writerow(
             [
-                "cdasim_time_ms",
-                "map_position_x_m",
-                "map_position_y_m",
-                "body_twist_longitudinal_mps",
+                "Message Time (ms)",
+                "Map Position X (m)",
+                "Map Position Y (m)",
+                "Body Twist Longitudinal (mps)",
             ]
         )
 
