@@ -24,9 +24,9 @@ def parse_pedestrian_odometry_from_csv(odometry_csv):
 
 
 def interpolate_trajectory(odometry_df):
-    times = odometry_df["cdasim_time_ms"].tolist()
-    tck_x = splrep(times, odometry_df["map_position_x_m"].tolist(), k=5)
-    tck_y = splrep(times, odometry_df["map_position_y_m"].tolist(), k=5)
+    times = odometry_df["Message Time (ms)"].tolist()
+    tck_x = splrep(times, odometry_df["Map Position X (m)"].tolist(), k=5)
+    tck_y = splrep(times, odometry_df["Map Position Y (m)"].tolist(), k=5)
 
     return BSpline(*tck_x, extrapolate=False), BSpline(*tck_y, extrapolate=False)
 
@@ -38,7 +38,9 @@ def calc_time_to_collision(vehicle_odom, ped_traj_x, ped_traj_y):
         y_m: float
 
     def to_point(tup):
-        return Point(x_m=tup.map_position_x_m, y_m=tup.map_position_y_m)
+        # CSV header: Index, Message Time (ms), Map Position X (m), Map Position Y (m), Body Twist Longitudinal (mps)
+        # Can't use namedtuple field names because column names have spaces
+        return Point(x_m=tup[2], y_m=tup[3])
 
     def pairwise(iterable):
         a, b = itertools.tee(iterable)
@@ -50,13 +52,13 @@ def calc_time_to_collision(vehicle_odom, ped_traj_x, ped_traj_y):
             (point_a.x_m - point_b.x_m) ** 2 + (point_a.y_m - point_b.y_m) ** 2
         )
 
-    trajectory_start_time_ms = vehicle_odom["cdasim_time_ms"].iloc[0]
-    vehicle_speed_mps = vehicle_odom["body_twist_longitudinal_mps"].iloc[0]
+    trajectory_start_time_ms = vehicle_odom["Message Time (ms)"].iloc[0]
+    vehicle_speed_mps = vehicle_odom["Body Twist Longitudinal (mps)"].iloc[0]
 
     if abs(vehicle_speed_mps) < 0.01:
         vehicle_position = Point(
-            x_m=vehicle_odom["map_position_x_m"].iloc[0],
-            y_m=vehicle_odom["map_position_y_m"].iloc[0],
+            x_m=vehicle_odom["Map Position X (m)"].iloc[0],
+            y_m=vehicle_odom["Map Position Y (m)"].iloc[0],
         )
 
         pedestrian_position = Point(
@@ -146,7 +148,7 @@ times_to_collision_s = [
     ttc / 1_000 if ttc is not None else None for ttc in times_to_collision_ms
 ]
 
-plt.scatter(vehicle_odometry_df["cdasim_time_ms"] / 1_000.0, times_to_collision_s)
+plt.scatter(vehicle_odometry_df["Message Time (ms)"] / 1_000.0, times_to_collision_s)
 plt.title("Time-to-collision (TTC) v. Simulation Time")
 plt.ylabel("Time-to-collision (TTC) [s]")
 plt.xlabel("CDASim Time [s]")
