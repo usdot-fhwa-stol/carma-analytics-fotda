@@ -37,7 +37,7 @@ def get_detected_objects(ros_bag_file, outputfile, time_offset):
     print(f"Calculated sim time offset: '{time_offset}'")
 
 
-def get_object_odometry(actor_id, ros_bag_file, output_file, time_offset):
+def get_carla_object_odometry(actor_id, ros_bag_file, output_file, time_offset):
     def get_object_with_id(id_, msg):
         for object_ in msg.objects:
             if object_.id == id_:
@@ -92,7 +92,7 @@ def main():
     time_offset = get_time_offset(args.ros_bag_file)
     get_detected_objects(args.ros_bag_file, args.csv_dir/'vehicle_detected_objects.csv', time_offset)
 
-    get_object_odometry(221,
+    get_carla_object_odometry(221,
         args.ros_bag_file, args.csv_dir / "pedestrian_odometry.csv", time_offset
     )
 
