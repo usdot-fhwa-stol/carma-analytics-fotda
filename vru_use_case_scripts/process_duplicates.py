@@ -23,29 +23,28 @@ def plot_duplicates(input_file):
     df = pd.read_csv(input_file)
     figures_dir = Path("duplicates_plots")
     figures_dir.mkdir(exist_ok=True)
-    # Group by ObjIDShort
-    grouped = df.groupby('ObjIDShort')
-    # Plot durations for each group
-    for obj_id_short, group in grouped:
-        plt.figure()
-        for obj_id_main, sub_group in group.groupby('ObjIDMain'):
-            obj_type = sub_group['ObjType'].iloc[0]  # Get the ObjType for the current ObjIDMain
-            x = sub_group['Timestamp(ms)'].values[:, np.newaxis]  # Convert x to a numpy array before indexing
-            y = sub_group['Duration'].values
-            plt.plot(x, y, label=f'Actual Object ID: {obj_id_main}, Type: {obj_type}')
+    grouped = df.groupby('ObjID')
+
+    # Plot duration over timestamp for each ObjID
+    for obj_id, group in grouped:
+        obj_type = group['ObjType'].iloc[0]  # Get the ObjType for the current ObjIDMain
+        fig, ax = plt.subplots()
+        ax.stem(group['Timestamp(ms)'], group['Duration'], basefmt=" ", markerfmt=' ', use_line_collection=True)
+        ax.set_xlim(left=0)  # Set x-axis to start at zero
+        ax.set_ylim(bottom=0)  # Set y-axis to start at zero
         plt.axhline(y=1000, color='r', linestyle='--', label='Cutoff')
         plt.xlabel('Timestamp(ms)')
         plt.ylabel('Duration')
-        plt.title(f'Duplicates Duration for Object ID: {obj_id_short}')
+        plt.title(f'Duration over Timestamp for ObjID: {obj_id} with type: {obj_type}')
         plt.legend()
         # plt.show()
-        plt.savefig(figures_dir / f"duplicates_{obj_id_short}.png")
+        plt.savefig(figures_dir / f"duplicates_{obj_id}.png")
 
 def get_duplicate_duration(input_file, output_file):
     # Caluclate the duration each duplicate lasts
     df = pd.read_csv(input_file)
-    df.sort_values(by=['ObjIDMain', 'Timestamp(ms)'], inplace=True)
-    df['TimeDiff'] = df.groupby('ObjIDMain')['Timestamp(ms)'].diff()
+    df.sort_values(by=['ObjID', 'Timestamp(ms)'], inplace=True)
+    df['TimeDiff'] = df.groupby('ObjID')['Timestamp(ms)'].diff()
     # Create a mask to identify interruptions in the ObjIDMain sequence
     mask = (df['TimeDiff'] <= 100)
     df['Mask'] = mask
@@ -57,6 +56,7 @@ def get_duplicate_duration(input_file, output_file):
         else:
             sum_timediff = 0
         df.at[index, 'Duration'] = sum_timediff
+
     # Reset the index of the DataFrame
     df.reset_index(drop=True, inplace=True)
     df.to_csv(output_file, index=False)
@@ -65,9 +65,9 @@ def get_duplicate_duration(input_file, output_file):
 def remove_main_obj(input_file, output_file):
     # The main detections are removed from the detected objects by removing the first instance of each object ID
     df = pd.read_csv(input_file)
-    df = df.drop_duplicates() # this line removes the exact duplicates (
     # Group by 'Timestamp(ms)' and drop the first row for each group
     df = df.groupby('Timestamp(ms)').apply(lambda x: x.iloc[1:]).reset_index(drop=True)
+    df = df.drop_duplicates() # this line removes the exact duplicates (
     # Write the output to a new CSV file
     df.to_csv(output_file, index=False)
 
@@ -85,10 +85,10 @@ def extract_all_objects(ros_bag_file, output_file):
     with open(output_file, 'w', newline='') as file:
         # check for duplicate
         writer = csv.writer(file)
-        writer.writerow(['Timestamp(ms)', 'ObjIDShort', 'ObjIDMain', 'ObjType'])
+        writer.writerow(['Timestamp(ms)', 'ObjID', 'ObjType'])
         for message in messages:
             timestamp_ms = message.header.stamp.secs * 1000 + message.header.stamp.nsecs // 1000000
-            writer.writerow([timestamp_ms, message.id%1000, message.id, ObjectType(message.object_type)])
+            writer.writerow([timestamp_ms, message.id%1000, ObjectType(message.object_type)])
 
     print(f"Sorted data from topic '{detected_obj_topic_name}' saved to '{output_file}'")
 
