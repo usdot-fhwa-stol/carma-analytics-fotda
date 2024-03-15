@@ -17,7 +17,7 @@ def find_msg_closest_to_timestamp(bag_msgs, timestamp):
         # timestamps straddle the timestamp of interest. All messages
         # afterwards will have increasing differences.
         if next_log_timestamp > timestamp:
-            if abs(timestamp - current_log_timestamp) < abs(next_log_timestamp - timestamp):
+            if abs(current_log_timestamp - timestamp) < abs(timestamp - next_log_timestamp):
                 return current
 
             return next_
