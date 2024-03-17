@@ -163,7 +163,7 @@ def start_monitoring(rosout_base_path, sim_base_path, files_to_monitor):
             if not file_path:
                 print("No recent rosout.log file found.")
                 continue
-        elif 'Infrastructure.log' in file_name or 'Traffic.log' in file_name or 'MOSAIC.log' in file_name :
+        elif ('Infrastructure.log' in file_name) or ('Traffic.log' in file_name) or ('MOSAIC.log' in file_name):
             file_path = find_most_recent_file(sim_base_path, file_name)
             if not file_path:
                 print(f"No recent {file_name} file found.")
@@ -195,6 +195,7 @@ def start_monitoring(rosout_base_path, sim_base_path, files_to_monitor):
                 break
 
         for ax, (file_name, delay_list) in zip(axs, delays.items()):
+            print(f"================================================ PLOTTING {file_name}")
             if 'MOSAIC.log' in file_name:
                 continue  # Skip plotting MOSAIC.log here
 
@@ -265,18 +266,6 @@ def backup_and_clear_sdsm_log(file_path):
     with open(file_path, 'w'):
         pass
 
-def capture_docker_container_log_OLD(file_path, container_name):
-
-    with open(file_path, 'w') as f:
-    # Start the process
-        with subprocess.Popen(["docker", "logs", "-f", container_name], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, text=True) as proc:
-            # Check if the process has a valid stdout
-            if proc.stdout:
-                # Iterate through each line of the output
-                for line in proc.stdout:
-                    # Write to the file and flush
-                    f.write(line)
-                    f.flush()
 
 if __name__ == "__main__":
 
@@ -299,8 +288,9 @@ if __name__ == "__main__":
         #sensor_data_sharing_service_file_path,
         'rosout.log',  # This will be replaced by the path to the most recent rosout.log found
         '/home/carma/v2xhub.log',
-        'MOSAIC.log',
         'Traffic.log',
+        ### ... Save MOSAIC for last
+        'MOSAIC.log',
     ]
 
     start_monitoring(rosout_base_path, sim_base_path, files_to_monitor)
