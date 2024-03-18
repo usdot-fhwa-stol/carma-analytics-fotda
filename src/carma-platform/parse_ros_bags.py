@@ -99,10 +99,11 @@ def get_objects_from_incoming_sdsm(ros_bag_file, output_file, time_offset):
     print(f"Calculated sim time offset: '{time_offset}'")
 
 def get_detected_objects(ros_bag_file, output_file, time_offset):
-
     detected_obj_topic_name = "/environment/fused_external_objects"
-
-    messages = get_object_msgs_with_its_system_times(ros_bag_file, detected_obj_topic_name)
+    messages = []
+    with rosbag.Bag(ros_bag_file, "r") as bag:
+        for _, msg, _ in bag.read_messages(topics=[detected_obj_topic_name]):
+            messages.extend(msg.objects)
 
     output_file.parent.mkdir(exist_ok=True)
 
@@ -112,20 +113,18 @@ def get_detected_objects(ros_bag_file, output_file, time_offset):
     with open(output_file, "w", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(
-            ["cdasim_time_ms", "rosbag_t_received_s", "object_id", "map_position_x_m", "map_position_y_m"]
+            ["Message Time (ms)", "Object ID", "Map Position X (m)", "Map Position Y (m)"]
         )
-        for message, rosbag_t_received_s in messages:
-            for obj in message:
-                cdasim_time_ms = math.floor((obj.header.stamp - time_offset).to_sec() * 1_000)
-                writer.writerow(
-                    [
-                        cdasim_time_ms,
-                        rosbag_t_received_s,
-                        obj.id % 1_000,
-                        obj.pose.pose.position.x,
-                        obj.pose.pose.position.y,
-                    ]
-                )
+        for message in messages:
+            cdasim_time_ms = (message.header.stamp - time_offset).to_sec() * 1_000
+            writer.writerow(
+                [
+                    cdasim_time_ms,
+                    message.id % 1_000,
+                    message.pose.pose.position.x,
+                    message.pose.pose.position.y,
+                ]
+            )
 
     print(
         f"Sorted data from topic '{detected_obj_topic_name}' saved to '{output_file}'"
