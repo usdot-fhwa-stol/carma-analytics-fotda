@@ -32,7 +32,7 @@ def plot_duplicates(input_file):
         fig, ax = plt.subplots()
         ax.stem(group['Message Time (ms)'], group['Duration'], basefmt=" ", markerfmt=' ', use_line_collection=True)
         ax.set_xlim(left=0)  # Set x-axis to start at zero
-        ax.set_ylim(bottom=0)  # Set y-axis to start at zero
+        ax.set_ylim(bottom=0, top=1100)  # Set y-axis to start at zero
         plt.axhline(y=1000, color='r', linestyle='--', label='Cutoff')
         plt.xlabel('Message Time (ms)')
         plt.ylabel('Duration')
