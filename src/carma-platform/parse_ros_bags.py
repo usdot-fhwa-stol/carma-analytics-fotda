@@ -10,7 +10,7 @@ import rosbag
 def find_msg_closest_to_timestamp(bag_msgs, timestamp):
     for current, next_ in more_itertools.pairwise(bag_msgs):
         # Each element in `bag_msgs` is a triple:
-        # <topic_name, msg, system_time_at_receive>
+        # <topic_name, msg, rosbag_t_received>
         _, _, current_log_timestamp = current
         _, _, next_log_timestamp = next_
 
@@ -40,13 +40,69 @@ def get_time_offset(ros_bag_file):
 
         return carla_clock_at_cdasim_start[1].clock - cdasim_clock_msg.clock
 
+def get_object_msgs_with_its_system_times(ros_bag_file, topic_name):
 
-def get_detected_objects(ros_bag_file, output_file, time_offset):
-    detected_obj_topic_name = "/environment/fused_external_objects"
     messages = []
     with rosbag.Bag(ros_bag_file, "r") as bag:
-        for _, msg, _ in bag.read_messages(topics=[detected_obj_topic_name]):
-            messages.extend(msg.objects)
+        for _, msg, rosbag_t_received in bag.read_messages(topics=[topic_name]):
+            messages.append((msg.objects, rosbag_t_received.to_sec())) #nano to sec
+    return messages
+
+def get_objects_from_incoming_sdsm(ros_bag_file, output_file, time_offset):
+    incoming_msgs_topic_name = "/message/incoming_sdsm"
+
+    sdsm_msgs = get_object_msgs_with_its_system_times(ros_bag_file, incoming_msgs_topic_name)
+
+    print(f"Detected sdsm_msgs size {len(sdsm_msgs)}" )
+    #print(sdsm_msgs[0])
+    output_file.parent.mkdir(exist_ok=True)
+
+    if output_file.exists():
+        print(f"Output file {output_file} already exists. Overwriting file.")
+
+    sim_times = []
+    with rosbag.Bag(ros_bag_file, "r") as bag:
+        for _, msg, t in bag.read_messages(topics=["/sim_clock"]):
+            sim_times.append((t, msg.clock)) # Assuming 'clock' attribute holds simulation time in seconds
+
+    with open(output_file, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(
+            ["cdasim_time_ms", "rosbag_t_received_s", "object_id"]
+        )
+
+        last_idx = 0
+        for message, rosbag_t_received_s in sdsm_msgs:
+
+            for t, sim_time in sim_times[last_idx:]:
+                if (t.to_sec() > rosbag_t_received_s):
+                    break
+                last_idx += 1
+
+            if (last_idx >= len(sim_times)):
+                break
+
+            cdasim_time_ms = math.floor(sim_times[last_idx][1].to_sec() * 1000)
+            for object_data in message.detected_object_data:
+
+                writer.writerow(
+                    [
+                        cdasim_time_ms,
+                        rosbag_t_received_s,
+                        object_data.detected_object_common_data.detected_id.object_id,
+                    ]
+                )
+
+    print(
+        f"Sorted data from topic '{incoming_msgs_topic_name}' saved to '{output_file}'"
+    )
+    print(f"Calculated sim time offset: '{time_offset}'")
+
+def get_detected_objects(ros_bag_file, output_file, time_offset):
+
+    detected_obj_topic_name = "/environment/fused_external_objects"
+
+    messages = get_object_msgs_with_its_system_times(ros_bag_file, detected_obj_topic_name)
 
     output_file.parent.mkdir(exist_ok=True)
 
@@ -56,24 +112,74 @@ def get_detected_objects(ros_bag_file, output_file, time_offset):
     with open(output_file, "w", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(
-            ["cdasim_time_ms", "object_id", "map_position_x_m", "map_position_y_m"]
+            ["cdasim_time_ms", "rosbag_t_received_s", "object_id", "map_position_x_m", "map_position_y_m"]
         )
-        for message in messages:
-            cdasim_time_ms = (message.header.stamp - time_offset).to_sec() * 1_000
-            writer.writerow(
-                [
-                    cdasim_time_ms,
-                    message.id % 1_000,
-                    message.pose.pose.position.x,
-                    message.pose.pose.position.y,
-                ]
-            )
+        for message, rosbag_t_received_s in messages:
+            for obj in message:
+                cdasim_time_ms = math.floor((obj.header.stamp - time_offset).to_sec() * 1_000)
+                writer.writerow(
+                    [
+                        cdasim_time_ms,
+                        rosbag_t_received_s,
+                        obj.id % 1_000,
+                        obj.pose.pose.position.x,
+                        obj.pose.pose.position.y,
+                    ]
+                )
 
     print(
         f"Sorted data from topic '{detected_obj_topic_name}' saved to '{output_file}'"
     )
     print(f"Calculated sim time offset: '{time_offset}'")
 
+def get_detected_objects_with_sim_received_time(ros_bag_file, output_file, time_offset):
+
+    detected_obj_topic_name = "/environment/fused_external_objects"
+
+    messages = get_object_msgs_with_its_system_times(ros_bag_file, detected_obj_topic_name)
+
+    output_file.parent.mkdir(exist_ok=True)
+
+    if output_file.exists():
+        print(f"Output file {output_file} already exists. Overwriting file.")
+
+    sim_times = []
+    with rosbag.Bag(ros_bag_file, "r") as bag:
+        for _, msg, t in bag.read_messages(topics=["/sim_clock"]):
+            sim_times.append((t, msg.clock)) # Assuming 'clock' attribute holds simulation time in seconds
+
+    with open(output_file, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(
+            ["cdasim_time_ms", "rosbag_t_received_s", "object_id", "map_position_x_m", "map_position_y_m"]
+        )
+
+        last_idx = 0
+        for message, rosbag_t_received_s in messages:
+            for t, sim_time in sim_times[last_idx:]:
+                if (t.to_sec() > rosbag_t_received_s):
+                    break
+                last_idx += 1
+
+            if (last_idx >= len(sim_times)):
+                break
+
+            cdasim_time_ms = math.floor(sim_times[last_idx][1].to_sec() * 1000)
+            for obj in message:
+                writer.writerow(
+                    [
+                        cdasim_time_ms,
+                        rosbag_t_received_s,
+                        obj.id % 1_000,
+                        obj.pose.pose.position.x,
+                        obj.pose.pose.position.y,
+                    ]
+                )
+
+    print(
+        f"Sorted data from topic '{detected_obj_topic_name}' saved to '{output_file}'"
+    )
+    print(f"Calculated sim time offset: '{time_offset}'")
 
 def get_carla_object_odometry(actor_id, ros_bag_file, output_file, time_offset):
     def get_object_with_id(id_, msg):
@@ -109,7 +215,7 @@ def get_carla_object_odometry(actor_id, ros_bag_file, output_file, time_offset):
             ):
                 continue
 
-            cdasim_time_ms = (message.header.stamp - time_offset).to_sec() * 1_000
+            cdasim_time_ms = math.floor((message.header.stamp - time_offset).to_sec() * 1_000)
             writer.writerow(
                 [
                     cdasim_time_ms,
@@ -144,7 +250,7 @@ def get_vehicle_odometry(ros_bag_file, output_file, time_offset):
         )
 
         for message in messages:
-            cdasim_time_ms = (message.header.stamp - time_offset).to_sec() * 1_000
+            cdasim_time_ms = math.floor((message.header.stamp - time_offset).to_sec() * 1_000)
             writer.writerow(
                 [
                     cdasim_time_ms,
@@ -168,18 +274,22 @@ def main():
     args = parser.parse_args()
 
     time_offset = get_time_offset(args.ros_bag_file)
-    get_detected_objects(
+    get_detected_objects_with_sim_received_time(
         args.ros_bag_file, args.csv_dir / "vehicle_detected_objects.csv", time_offset
     )
 
-    get_carla_object_odometry(
-        221, args.ros_bag_file, args.csv_dir / "pedestrian_odometry.csv", time_offset
+    get_objects_from_incoming_sdsm(
+        args.ros_bag_file, args.csv_dir / "objects_from_incoming_sdsm.csv", time_offset
     )
 
-    get_vehicle_odometry(
-        args.ros_bag_file, args.csv_dir / "vehicle_odometry.csv", time_offset
-    )
-
+#    get_carla_object_odometry(
+#        221, args.ros_bag_file, args.csv_dir / "pedestrian_odometry.csv", time_offset
+#    )
+#
+#    get_vehicle_odometry(
+#        args.ros_bag_file, args.csv_dir / "vehicle_odometry.csv", time_offset
+#    )
+#
 
 if __name__ == "__main__":
     main()
