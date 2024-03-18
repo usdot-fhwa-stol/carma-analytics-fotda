@@ -2,12 +2,11 @@
 
 from argparse import ArgumentParser
 from dataclasses import dataclass
-import itertools
 import math
 from pathlib import Path
 
 from matplotlib import pyplot as plt
-import numpy as np
+import more_itertools
 import pandas as pd
 from scipy.interpolate import splrep, BSpline
 
@@ -38,14 +37,9 @@ def calc_time_to_collision(vehicle_odom, ped_traj_x, ped_traj_y):
         y_m: float
 
     def to_point(tup):
-        # CSV header: Index, Message Time (ms), Map Position X (m), Map Position Y (m), Body Twist Longitudinal (mps)
+        # CSV row: Index, Message Time (ms), Map Position X (m), Map Position Y (m), Body Twist Longitudinal (mps)
         # Can't use namedtuple field names because column names have spaces
         return Point(x_m=tup[2], y_m=tup[3])
-
-    def pairwise(iterable):
-        a, b = itertools.tee(iterable)
-        next(b, None)
-        return zip(a, b)
 
     def pythagorean_distance(point_a, point_b):
         return math.sqrt(
@@ -77,7 +71,9 @@ def calc_time_to_collision(vehicle_odom, ped_traj_x, ped_traj_y):
     # Represents the running approximate integral as the vehicle is
     # propagated along the path
     accumulated_time_ms = 0.0
-    for prev_v_position, current_v_position in pairwise(vehicle_odom.itertuples()):
+    for prev_v_position, current_v_position in more_itertools.pairwise(
+        vehicle_odom.itertuples()
+    ):
         vehicle_position = to_point(current_v_position)
 
         travel_distance_m = pythagorean_distance(
