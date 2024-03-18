@@ -69,20 +69,20 @@ def get_objects_from_incoming_sdsm(ros_bag_file, output_file, time_offset):
             ["Received Simulation Time (ms)", "System Time (s)", "Object Id"]
         )
 
+        # Correlate with the simulation time when the object data was received on a topic
+        # This is different than "Message Time (ms)" in object's header
         last_idx = 0
         for message, rosbag_t_received_s in sdsm_msgs:
+            # Find the index in 'sim_times' where simulation time exceeds the message's received time
+            last_idx = next((idx for idx, (t, _) in enumerate(sim_times[last_idx:], start=last_idx)
+                            if t.to_sec() > rosbag_t_received_s), None)
 
-            for t, sim_time in sim_times[last_idx:]:
-                if (t.to_sec() > rosbag_t_received_s):
-                    break
-                last_idx += 1
-
-            if (last_idx >= len(sim_times)):
+            if last_idx is None:
                 break
 
             cdasim_time_ms = math.floor(sim_times[last_idx][1].to_sec() * 1000)
-            for object_data in message.detected_object_data:
 
+            for object_data in message.detected_object_data:
                 writer.writerow(
                     [
                         cdasim_time_ms,
@@ -133,7 +133,7 @@ def get_detected_objects_with_sim_received_time(ros_bag_file, output_file, time_
 
     detected_obj_topic_name = "/environment/fused_external_objects"
 
-    messages = get_object_msgs_with_its_system_times(ros_bag_file, detected_obj_topic_name)
+    object_msgs_and_system_times = get_object_msgs_with_its_system_times(ros_bag_file, detected_obj_topic_name)
 
     output_file.parent.mkdir(exist_ok=True)
 
@@ -151,18 +151,19 @@ def get_detected_objects_with_sim_received_time(ros_bag_file, output_file, time_
             ["Received Simulation Time (ms)", "System Time (s)", "Object Id"]
         )
 
+        # Correlate with the simulation time when the object data was received on a topic
+        # This is different than "Message Time (ms)" in object's header
         last_idx = 0
-        for message, rosbag_t_received_s in messages:
-            for t, sim_time in sim_times[last_idx:]:
-                if (t.to_sec() > rosbag_t_received_s):
-                    break
-                last_idx += 1
+        for object_msgs, rosbag_t_received_s in object_msgs_and_system_times:
+            # Find the index in 'sim_times' where simulation time exceeds the message's received time
+            last_idx = next((idx for idx, (t, _) in enumerate(sim_times[last_idx:], start=last_idx)
+                            if t.to_sec() > rosbag_t_received_s), None)
 
-            if (last_idx >= len(sim_times)):
+            if last_idx is None:
                 break
 
             cdasim_time_ms = math.floor(sim_times[last_idx][1].to_sec() * 1000)
-            for obj in message:
+            for obj in object_msgs:
                 writer.writerow(
                     [
                         cdasim_time_ms,
