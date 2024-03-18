@@ -196,11 +196,11 @@ def get_carla_object_odometry(actor_id, ros_bag_file, output_file, time_offset):
         writer = csv.writer(file)
         writer.writerow(
             [
-                "cdasim_time_ms",
-                "map_position_x_m",
-                "map_position_y_m",
-                "map_velocity_x_mps",
-                "map_velocity_y_mps",
+                "Message Time (ms)",
+                "Map Position X (m)",
+                "Map Position Y (m)",
+                "Map Velocity X (mps)",
+                "Map Velocity Y (mps)",
             ]
         )
 
