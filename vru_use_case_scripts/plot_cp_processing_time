@@ -21,18 +21,18 @@ def parse_df(file_path: Path):
     return df
 
 def filter_df_for_object_id(df: pd.DataFrame, id_: str):
-    return df.loc[df["object_id"] == id_].reset_index(drop=True)
+    return df.loc[df["Object Id"] == id_].reset_index(drop=True)
 
 
 def filter_df_for_timestamp(df: pd.DataFrame, timestamp: int):
-    return df.loc[df["rosbag_t_received_s"] == timestamp]
+    return df.loc[df["System Time (s)"] == timestamp]
 
 
 def filter_df_for_timestamp(df: pd.DataFrame, timestamp: int):
     return df.loc[df["timestamp"] == timestamp]
 
 def get_unique_object_ids(df: pd.DataFrame):
-    return list(set(df["object_id"]))
+    return list(set(df["Object Id"]))
 
 parser = ArgumentParser(
     prog="plot_cp_processing_time",
@@ -63,19 +63,19 @@ sdsm_df = parse_df(cli_args.sdsm_csv)
 pedestrian_df_from_cp = filter_df_for_object_id(detections_df, PEDESTRIAN_ID)
 
 pedestrian_df_from_cp = pedestrian_df_from_cp.drop_duplicates(
-  subset = ['cdasim_time_ms', 'object_id'],
+  subset = ["Received Simulation Time (ms)", "Object Id"],
   keep = 'last').reset_index(drop = True)
 
 pedestrian_df_from_sdsm = filter_df_for_object_id(sdsm_df, PEDESTRIAN_ID)
 
 pedestrian_df_from_sdsm = pedestrian_df_from_sdsm.drop_duplicates(
-  subset = ['cdasim_time_ms', 'object_id'],
+  subset = ["Received Simulation Time (ms)", "Object Id"],
   keep = 'last').reset_index(drop = True)
 
 print(pedestrian_df_from_cp)
 print(pedestrian_df_from_sdsm)
 
-result = (pedestrian_df_from_cp['cdasim_time_ms'] - pedestrian_df_from_sdsm['cdasim_time_ms']).fillna(0)
+result = (pedestrian_df_from_cp["Received Simulation Time (ms)"] - pedestrian_df_from_sdsm["Received Simulation Time (ms)"]).fillna(0)
 
 print(result)
 result.to_csv('/home/carma/Desktop/difference.csv', index=False)
