@@ -66,7 +66,7 @@ def get_objects_from_incoming_sdsm(ros_bag_file, output_file, time_offset):
     with open(output_file, "w", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(
-            ["cdasim_time_ms", "rosbag_t_received_s", "object_id"]
+            ["Received Simulation Time (ms)", "System Time (s)", "Object Id"]
         )
 
         last_idx = 0
@@ -148,7 +148,7 @@ def get_detected_objects_with_sim_received_time(ros_bag_file, output_file, time_
     with open(output_file, "w", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(
-            ["cdasim_time_ms", "rosbag_t_received_s", "object_id", "map_position_x_m", "map_position_y_m"]
+            ["Received Simulation Time (ms)", "System Time (s)", "Object Id"]
         )
 
         last_idx = 0
@@ -167,9 +167,7 @@ def get_detected_objects_with_sim_received_time(ros_bag_file, output_file, time_
                     [
                         cdasim_time_ms,
                         rosbag_t_received_s,
-                        obj.id % 1_000,
-                        obj.pose.pose.position.x,
-                        obj.pose.pose.position.y,
+                        obj.id % 1_000
                     ]
                 )
 
