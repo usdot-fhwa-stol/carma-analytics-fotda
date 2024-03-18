@@ -53,8 +53,6 @@ def get_objects_from_incoming_sdsm(ros_bag_file, output_file, time_offset):
 
     sdsm_msgs = get_object_msgs_with_its_system_times(ros_bag_file, incoming_msgs_topic_name)
 
-    print(f"Detected sdsm_msgs size {len(sdsm_msgs)}" )
-    #print(sdsm_msgs[0])
     output_file.parent.mkdir(exist_ok=True)
 
     if output_file.exists():
@@ -63,7 +61,7 @@ def get_objects_from_incoming_sdsm(ros_bag_file, output_file, time_offset):
     sim_times = []
     with rosbag.Bag(ros_bag_file, "r") as bag:
         for _, msg, t in bag.read_messages(topics=["/sim_clock"]):
-            sim_times.append((t, msg.clock)) # Assuming 'clock' attribute holds simulation time in seconds
+            sim_times.append((t, msg.clock))
 
     with open(output_file, "w", newline="") as file:
         writer = csv.writer(file)
