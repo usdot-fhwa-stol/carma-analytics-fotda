@@ -39,7 +39,7 @@ def plot_message_frequencies(csv_dir: Path, plots_dir: Path, simulation: bool = 
         for msg_plot,( message_name, message_data_frame) in zip( plots, message_data.items()):
             print(f'Getting simulation time for {message_name} data ...')
             if simulation:
-                message_data_frame["Time (ms)"] = get_simulation_time(message_data_frame["Created Time(ms)"], time_sync_data["Created Time(ms)"], time_sync_data["Timestamp(ms)"])
+                message_data_frame["Time (ms)"] = get_simulation_time(message_data_frame["System Time (ms)"], time_sync_data["System Time (ms)"], time_sync_data["Message Time (ms)"])
                 message_data_frame["Time (s)"] = message_data_frame["Time (ms)"]/1000
             else :
                 message_data_frame["Time (s)"] = message_data_frame["Timestamp(ms)"]/1000
