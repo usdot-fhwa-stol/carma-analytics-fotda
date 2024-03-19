@@ -131,7 +131,6 @@ time as the time to collision (TTC).
 ### Usage examples
 
 Plot the data:
-
 ```console
 ./plot_time_to_collision \
   --vehicle-odometry-csv <path_to_csv_dir>/vehicle_odometry.csv \
@@ -142,3 +141,28 @@ Plot the data:
 ### Example output
 
 ![](docs/plot_time_to_collision_example.png)
+
+## `monitor_time_sync_through_logs`
+
+This script monitors real-time whether if all components are stepping in synchronization ensuring their simulation time synchronization.
+> [!NOTE]
+> This script relies on python libraries watchdog and docker
+
+> [!NOTE]
+> Graph is not automatically saved, please be sure to save it before closing if needed
+
+After starting cdasim through carma start all, give few seconds before running:
+```console
+./monitor_time_sync_through_logs
+```
+
+### Example output
+Red line shows how long in system wall time it took for MOSAIC to step to the next simulation time step.
+Blue lines show how long it took ofr each tool to be called by MOSAIC to step to the next simulation time step.
+We should expect red lines under the blue so that all tools are moving forward at the same time.
+First subplot on the top indicates whether of all tools are synced or not according to above criteria where 1:Synced 0: Not.
+MOSAIC.log is mosaic time
+vx2hub.log is V2XHub time
+Traffic.log is sumo and carla time (since they are synced)
+rosout.log is ROS time
+![](docs/time_sync_plot_example.png)
