@@ -14,20 +14,20 @@ def filter_df_for_object_type(df: pd.DataFrame, object_type: str):
 
 parser = ArgumentParser(
     prog="extract_cp_stack_processing_time",
-    description="Extract the simulation time (ms) it takes for CP stack to process an object",
+    description="Extract the cdasim time (ms) it takes for CP stack to process an object",
 )
 
 parser.add_argument(
     "--sdsm-csv",
     type=Path,
-    help="CSV file containing SDSM message entries with 'Received Simulation Time (ms)' and 'Object Type' from rosbag file",
+    help="CSV file containing SDSM message entries with 'Received CDASim Time (ms)' and 'Object Type' from rosbag file",
     required=True,
 )
 
 parser.add_argument(
     "--vehicle-detection-csv",
     type=Path,
-    help="CSV file containing object detection entries with 'Received Simulation Time (ms)' and 'Object Type' from a rosbag file",
+    help="CSV file containing object detection entries with 'Received CDASim Time (ms)' and 'Object Type' from a rosbag file",
     required=True,
 )
 
@@ -43,21 +43,21 @@ sdsm_df = parse_df(cli_args.sdsm_csv)
 pedestrian_df_from_cp = filter_df_for_object_type(detections_df, "PEDESTRIAN")
 
 pedestrian_df_from_cp = pedestrian_df_from_cp.drop_duplicates(
-  subset = ["Received Simulation Time (ms)", "Object Type"],
+  subset = ["Received CDASim Time (ms)", "Object Type"],
   keep = 'last').reset_index(drop = True)
 
 pedestrian_df_from_sdsm = filter_df_for_object_type(sdsm_df, "PEDESTRIAN")
 
 pedestrian_df_from_sdsm = pedestrian_df_from_sdsm.drop_duplicates(
-  subset = ["Received Simulation Time (ms)", "Object Type"],
+  subset = ["Received CDASim Time (ms)", "Object Type"],
   keep = 'last').reset_index(drop = True)
 
-result = (pedestrian_df_from_cp["Received Simulation Time (ms)"] - pedestrian_df_from_sdsm["Received Simulation Time (ms)"]).fillna(0)
+result = (pedestrian_df_from_cp["Received CDASim Time (ms)"] - pedestrian_df_from_sdsm["Received CDASim Time (ms)"]).fillna(0)
 
 # Only first value is relevant because it shows the time
 # passed between first received pedestrian data from SDSM
 # and first reported pedestrian data in the cp objects
 processing_time = result.iloc[0]
 
-print(f"Simulation Time (ms) processing for Cooperative Perception Stack (Input from SDSM to output on local perception): {processing_time}")
+print(f"CDASim Time (ms) processing for Cooperative Perception Stack (Input from SDSM to output on local perception): {processing_time}")
 
