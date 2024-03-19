@@ -37,9 +37,9 @@ def plot_missing(df: pd.DataFrame):
         ax.set_ylim(bottom=0, top=1100)  # Set y-axis to start at zero
         plt.axhline(y=1000, color='r', linestyle='--', label='Missing Duration Cutoff')
         plt.axhline(y= round(1/COOPERATIVE_PERCEPTION_STACK_FREQUENCY_IN_HZ * 1000), color='b', linestyle='--', label='CP stack operation period')
-        plt.xlabel('Message Time (ms)')
-        plt.ylabel('Missing Duration (ms)')
-        plt.title(f'Duration over Message Time for Object ID: {obj_id}')
+        plt.xlabel('Message Time (ms) of the Object that is Missing')
+        plt.ylabel('Missing Duration (ms) in CDASim Time')
+        plt.title(f'Missing Duration for Object ID: {obj_id}')
         plt.legend()
         plt.savefig(figures_dir / f"missing_obj_duration_{obj_id}.png")
 

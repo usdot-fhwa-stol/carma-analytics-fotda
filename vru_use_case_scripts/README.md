@@ -161,8 +161,6 @@ It takes in one CSV files containing vehicle's cp objects respective detected si
 
 ### Usage examples
 
-Extract the processing time to terminal:
-
 ```console
 ./plot_missing_object_durations
   --vehicle-detection-csv <path_to_csv_dir>/vehicle_detected_objects.csv.csv
