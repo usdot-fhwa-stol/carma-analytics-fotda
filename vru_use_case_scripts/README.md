@@ -142,3 +142,32 @@ Plot the data:
 ### Example output
 
 ![](docs/plot_time_to_collision_example.png)
+
+## `extract_cp_stack_processing_time`
+
+This script takes in two CSV files containing vehicle's cp objects and objects from incoming_sdsm with
+their respective simulation times generated from rosbags.
+It extracts the simulation time (ms) it takes for CP stack to process an object
+
+> [!NOTE]
+> Measuring processing time from ros bag is only possible for the pedestrian data in this use case
+> This is because pedestrian is occluded form the vehicle, its data only comes from sdsm
+> Therefore, from the first time pedestrian was detected in the sdsm and until it became available
+> on fused object topic is the processing time
+
+
+### Usage examples
+
+Extract the processing time to terminal:
+
+```console
+./extract_cp_stack_processing_time
+  --vehicle-detection-csv <path_to_csv_dir>/detected_objects_with_sim_received_time.csv
+  --sdsm-csv <path_to_csv_dir>/detected_objects_from_incoming_sdsm.csv
+```
+
+### Example output
+
+```console
+Simulation Time (ms) processing for Cooperative Perception Stack (Input from SDSM to output on local perception): 400.0
+```
