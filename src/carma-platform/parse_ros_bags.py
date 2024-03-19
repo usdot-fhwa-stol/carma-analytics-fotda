@@ -56,7 +56,7 @@ def get_detected_objects(ros_bag_file, output_file, time_offset):
     with open(output_file, "w", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(
-            ["cdasim_time_ms", "object_id", "map_position_x_m", "map_position_y_m"]
+            ["Message Time (ms)", "Object ID", "Map Position X (m)", "Map Position Y (m)"]
         )
         for message in messages:
             cdasim_time_ms = (message.header.stamp - time_offset).to_sec() * 1_000
@@ -93,11 +93,11 @@ def get_carla_object_odometry(actor_id, ros_bag_file, output_file, time_offset):
         writer = csv.writer(file)
         writer.writerow(
             [
-                "cdasim_time_ms",
-                "map_position_x_m",
-                "map_position_y_m",
-                "map_velocity_x_mps",
-                "map_velocity_y_mps",
+                "Message Time (ms)",
+                "Map Position X (m)",
+                "Map Position Y (m)",
+                "Map Velocity X (mps)",
+                "Map Velocity Y (mps)",
             ]
         )
 

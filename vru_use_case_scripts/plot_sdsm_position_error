@@ -47,7 +47,7 @@ def parse_positions_from_sdsm_csv(file_path: Path):
                     [timestamp - common_data["measurement_time"], id_, *position_offset]
                 )
 
-    return pd.DataFrame(sdsm_data, columns=["timestamp", "object_id", "x", "y"])
+    return pd.DataFrame(sdsm_data, columns=["timestamp", "Object ID", "x", "y"])
 
 
 def parse_positions_from_detection_csv(file_path: Path):
@@ -86,11 +86,11 @@ def parse_positions_from_detection_csv(file_path: Path):
             for row in csv_data
         ]
 
-    return pd.DataFrame(data, columns=["timestamp", "object_id", "x", "y", "z"])
+    return pd.DataFrame(data, columns=["timestamp", "Object ID", "x", "y", "z"])
 
 
 def filter_df_for_object_id(df: pd.DataFrame, id_: str):
-    return df.loc[df["object_id"] == id_]
+    return df.loc[df["Object ID"] == id_]
 
 
 def filter_df_for_timestamp(df: pd.DataFrame, timestamp: int):
@@ -98,7 +98,7 @@ def filter_df_for_timestamp(df: pd.DataFrame, timestamp: int):
 
 
 def get_unique_object_ids(df: pd.DataFrame):
-    return list(set(df["object_id"]))
+    return list(set(df["Object ID"]))
 
 
 def plot_positions(times, distances, marker="o", title=None, axis=plt):
