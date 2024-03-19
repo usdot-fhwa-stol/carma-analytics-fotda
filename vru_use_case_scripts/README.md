@@ -108,3 +108,20 @@ Plot the data:
 ### Example output
 
 ![](docs/plot_detected_objects_example.png)
+
+## `monitor_time_sync_through_logs`
+
+This script monitors whether if all components are stepping in synchronization ensuring their simulation time synchronization.
+
+
+### Usage examples
+
+Plot the data:
+
+```console
+./monitor_time_sync_through_logs
+```
+
+### Example output
+
+![](docs/plot_detected_objects_example.png)

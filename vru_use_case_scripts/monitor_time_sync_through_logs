@@ -210,7 +210,6 @@ def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, f
                 break
 
         for ax, (file_name, delay_list) in zip(axs, tool_activation_delay_since_last_cdasim_step.items()):
-            print(f"Size: {len(tool_activation_delay_since_last_cdasim_step[file_name])}")
 
             if 'MOSAIC.log' in file_name:
                 continue  # Skip plotting MOSAIC.log here
