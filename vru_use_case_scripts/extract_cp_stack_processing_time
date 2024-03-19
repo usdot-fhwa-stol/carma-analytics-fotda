@@ -13,21 +13,21 @@ def filter_df_for_object_type(df: pd.DataFrame, object_type: str):
     return df.loc[df["Object Type"] == object_type].reset_index(drop=True)
 
 parser = ArgumentParser(
-    prog="plot_cp_processing_time",
-    description="Plot the error between detected object positions and their associated SDSM positions",
+    prog="extract_cp_stack_processing_time",
+    description="Extract the simulation time (ms) it takes for CP stack to process an object",
 )
 
 parser.add_argument(
     "--sdsm-csv",
     type=Path,
-    help="CSV file containing SDSM message entries from rosbag file",
+    help="CSV file containing SDSM message entries with 'Received Simulation Time (ms)' and 'Object Type' from rosbag file",
     required=True,
 )
 
 parser.add_argument(
     "--vehicle-detection-csv",
     type=Path,
-    help="CSV file containing object detection entries from a rosbag file",
+    help="CSV file containing object detection entries with 'Received Simulation Time (ms)' and 'Object Type' from a rosbag file",
     required=True,
 )
 
