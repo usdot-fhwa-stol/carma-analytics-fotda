@@ -69,7 +69,7 @@ def get_detected_objects_from_incoming_sdsm(ros_bag_file, output_file):
     if output_file.exists():
         print(f"Output file {output_file} already exists. Overwriting file.")
 
-    #sim_times [{ "System Time (s)" , "Received Simulation Time (ms)"}]
+    #sim_times [{ "System Time (s)" , "Received CDASim Time (ms)"}]
     sim_times = []
     with rosbag.Bag(ros_bag_file, "r") as bag:
         for _, msg, t in bag.read_messages(topics=["/sim_clock"]):
@@ -78,7 +78,7 @@ def get_detected_objects_from_incoming_sdsm(ros_bag_file, output_file):
     with open(output_file, "w", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(
-            ["Received Simulation Time (ms)", "System Time (s)", "Object Id", "Object Type"]
+            ["Received CDASim Time (ms)", "System Time (s)", "Object Id", "Object Type"]
         )
 
         # Correlate with the simulation time when the object data was received on a topic
@@ -96,7 +96,7 @@ def get_detected_objects_from_incoming_sdsm(ros_bag_file, output_file):
             if (last_idx >= len(sim_times)):
                 break
 
-            cdasim_time_ms = math.floor(sim_times[last_idx][1].to_sec() * 1000)
+            cdasim_time_ms = round(sim_times[last_idx][1].to_sec() * 1000)
 
             for object_data in message.detected_object_data:
                 writer.writerow(
@@ -173,7 +173,7 @@ def get_detected_objects_with_sim_received_time(ros_bag_file, output_file):
     with open(output_file, "w", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(
-            ["Received Simulation Time (ms)", "System Time (s)", "Object Id", "Object Type"]
+            ["Received CDASim Time (ms)", "System Time (s)", "Object Id", "Object Type"]
         )
 
         # Correlate with the simulation time when the object data was received on a topic
@@ -191,7 +191,7 @@ def get_detected_objects_with_sim_received_time(ros_bag_file, output_file):
             if (last_idx >= len(sim_times)):
                 break
 
-            cdasim_time_ms = math.floor(sim_times[last_idx][1].to_sec() * 1000)
+            cdasim_time_ms = round(sim_times[last_idx][1].to_sec() * 1000)
             for obj in object_msgs:
                 writer.writerow(
                     [
@@ -241,7 +241,7 @@ def get_carla_object_odometry(actor_id, ros_bag_file, output_file, time_offset):
             ):
                 continue
 
-            cdasim_time_ms = math.floor((message.header.stamp - time_offset).to_sec() * 1_000)
+            cdasim_time_ms = round((message.header.stamp - time_offset).to_sec() * 1_000)
             writer.writerow(
                 [
                     cdasim_time_ms,
@@ -276,7 +276,7 @@ def get_vehicle_odometry(ros_bag_file, output_file, time_offset):
         )
 
         for message in messages:
-            cdasim_time_ms = math.floor((message.header.stamp - time_offset).to_sec() * 1_000)
+            cdasim_time_ms = round((message.header.stamp - time_offset).to_sec() * 1_000)
             writer.writerow(
                 [
                     cdasim_time_ms,
