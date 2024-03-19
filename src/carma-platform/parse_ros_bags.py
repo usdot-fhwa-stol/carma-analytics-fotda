@@ -61,7 +61,7 @@ def get_detected_objects(ros_bag_file, output_file, time_offset):
         for message in messages:
 
             try:
-                cdasim_time_ms = math.floor((message.header.stamp - time_offset).to_sec() * 1_000)
+                cdasim_time_ms = round((message.header.stamp - time_offset).to_sec() * 1_000)
             except (TypeError):
                 cdasim_time_ms = 0
 
@@ -115,7 +115,7 @@ def get_carla_object_odometry(actor_id, ros_bag_file, output_file, time_offset):
                 continue
 
             try:
-                cdasim_time_ms = math.floor((message.header.stamp - time_offset).to_sec() * 1_000)
+                cdasim_time_ms = round((message.header.stamp - time_offset).to_sec() * 1_000)
             except (TypeError):
                 cdasim_time_ms = 0
             writer.writerow(
@@ -153,7 +153,7 @@ def get_vehicle_odometry(ros_bag_file, output_file, time_offset):
 
         for message in messages:
             try:
-                cdasim_time_ms = math.floor((message.header.stamp - time_offset).to_sec() * 1_000)
+                cdasim_time_ms = round((message.header.stamp - time_offset).to_sec() * 1_000)
             except (TypeError):
                 cdasim_time_ms = 0
             writer.writerow(
