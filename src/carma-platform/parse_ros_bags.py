@@ -10,7 +10,7 @@ from enum import Enum
 def find_msg_closest_to_timestamp(bag_msgs, timestamp):
     for current, next_ in more_itertools.pairwise(bag_msgs):
         # Each element in `bag_msgs` is a triple:
-        # <topic_name, msg, rosbag_t_received>
+        # <topic_name, msg, system_time_at_receive>
         _, _, current_log_timestamp = current
         _, _, next_log_timestamp = next_
 
@@ -69,6 +69,7 @@ def get_detected_objects_from_incoming_sdsm(ros_bag_file, output_file):
     if output_file.exists():
         print(f"Output file {output_file} already exists. Overwriting file.")
 
+    #sim_times [{ "System Time (s)" , "Received Simulation Time (ms)"}]
     sim_times = []
     with rosbag.Bag(ros_bag_file, "r") as bag:
         for _, msg, t in bag.read_messages(topics=["/sim_clock"]):
@@ -84,11 +85,15 @@ def get_detected_objects_from_incoming_sdsm(ros_bag_file, output_file):
         # This is different than "Message Time (ms)" in object's header
         last_idx = 0
         for message, rosbag_t_received_s in sdsm_msgs:
-            # Find the index in 'sim_times' where simulation time exceeds the message's received time
-            last_idx = next((idx for idx, (t, _) in enumerate(sim_times[last_idx:], start=last_idx)
-                            if t.to_sec() > rosbag_t_received_s), None)
+            # Find the index in 'sim_times' corresponding to when the message was received
+            for t, sim_time in sim_times[last_idx:]:
+                if (t.to_sec() > rosbag_t_received_s):
+                    # break here without incrementing idx
+                    # to pick SIMULATION_TIME that was in effect when message was received
+                    break
+                last_idx += 1
 
-            if last_idx is None:
+            if (last_idx >= len(sim_times)):
                 break
 
             cdasim_time_ms = math.floor(sim_times[last_idx][1].to_sec() * 1000)
@@ -174,12 +179,16 @@ def get_detected_objects_with_sim_received_time(ros_bag_file, output_file):
         # Correlate with the simulation time when the object data was received on a topic
         # This is different than "Message Time (ms)" in object's header
         last_idx = 0
-        for object_msgs, rosbag_t_received_s in object_msgs_and_system_times:
-            # Find the index in 'sim_times' where simulation time exceeds the message's received time
-            last_idx = next((idx for idx, (t, _) in enumerate(sim_times[last_idx:], start=last_idx)
-                            if t.to_sec() > rosbag_t_received_s), None)
+        for message, rosbag_t_received_s in object_msgs_and_system_times:
+            # Find the index in 'sim_times' corresponding to when the message was received
+            for t, sim_time in sim_times[last_idx:]:
+                if (t.to_sec() > rosbag_t_received_s):
+                    # break here without incrementing idx
+                    # to pick SIMULATION_TIME that was in effect when message was received
+                    break
+                last_idx += 1
 
-            if last_idx is None:
+            if (last_idx >= len(sim_times)):
                 break
 
             cdasim_time_ms = math.floor(sim_times[last_idx][1].to_sec() * 1000)
