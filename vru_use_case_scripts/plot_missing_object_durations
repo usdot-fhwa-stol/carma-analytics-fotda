@@ -46,7 +46,6 @@ def plot_missing(df: pd.DataFrame):
 def get_missing_duration(df: pd.DataFrame):
 
     df = df[['Message Time (ms)', 'Object ID']].drop_duplicates()
-    df.to_csv("~/Desktop/DEBUG.csv", index=False)
 
     df.sort_values(by=['Object ID', 'Message Time (ms)'], inplace=True)
 
@@ -55,7 +54,6 @@ def get_missing_duration(df: pd.DataFrame):
     # and how long did it last
     df['Missing Duration (ms)'] = df.groupby('Object ID')['Message Time (ms)'].diff().shift(-1)
 
-    df.to_csv("~/Desktop/DEBUG.csv", index=False)
     # Reset the index of the DataFrame
     df.reset_index(drop=True, inplace=True)
 
