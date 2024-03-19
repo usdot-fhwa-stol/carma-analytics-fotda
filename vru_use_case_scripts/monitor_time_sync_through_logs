@@ -219,7 +219,7 @@ def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, f
             ax.plot(iterations, delay_list, label=file_name)
             ax.set_title(file_name)
             ax.set_xlabel('Iteration Times')
-            ax.set_ylabel('Max processing time between sim steps, ms')
+            ax.set_ylabel('Duration between sim steps, ms')
             if (delay_list):
                 ax.set_ylim(max(-500, min(delay_list)), min(500, max(delay_list))) #sometimes the delay is spiking due to other windows starting etc
             ax.legend()
