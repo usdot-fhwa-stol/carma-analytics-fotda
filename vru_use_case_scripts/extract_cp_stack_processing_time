@@ -45,7 +45,10 @@ cli_args = parser.parse_args()
 detections_df = parse_df(cli_args.vehicle_detection_csv)
 sdsm_df = parse_df(cli_args.sdsm_csv)
 
-#base off of pedestrian
+# Measuring processing time from ros bag is only possible for the pedestrian data in this use case
+# This is because pedestrian is occluded form the vehicle, its data only comes from sdsm
+# Therefore, from the first time pedestrian was detected in the sdsm and until it became available
+# on fused object topic is the processing time
 pedestrian_df_from_cp = filter_df_for_object_type(detections_df, "PEDESTRIAN")
 
 pedestrian_df_from_cp = pedestrian_df_from_cp.drop_duplicates(
@@ -62,7 +65,7 @@ result = (pedestrian_df_from_cp["Received Simulation Time (ms)"] - pedestrian_df
 
 # Only first value is relevant because it shows the time
 # passed between first received pedestrian data from SDSM
-# and reporting it as detected after CP stack.
+# and first reported pedestrian data in the cp objects
 processing_time = result.iloc[0]
 
 print(f"Simulation Time (ms) processing for Cooperative Perception Stack (Input from SDSM to output on local perception): {processing_time}")

@@ -308,13 +308,13 @@ def main():
         args.ros_bag_file, args.csv_dir / "detected_objects_from_incoming_sdsm.csv"
     )
 
-    #get_carla_object_odometry(
-    #    221, args.ros_bag_file, args.csv_dir / "pedestrian_odometry.csv", time_offset
-    #)
+    get_carla_object_odometry(
+        221, args.ros_bag_file, args.csv_dir / "pedestrian_odometry.csv", time_offset
+    )
 
-    #get_vehicle_odometry(
-    #    args.ros_bag_file, args.csv_dir / "vehicle_odometry.csv", time_offset
-    #)
+    get_vehicle_odometry(
+        args.ros_bag_file, args.csv_dir / "vehicle_odometry.csv", time_offset
+    )
 
 if __name__ == "__main__":
     main()
