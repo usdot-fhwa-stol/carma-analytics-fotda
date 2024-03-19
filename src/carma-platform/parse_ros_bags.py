@@ -179,7 +179,7 @@ def get_detected_objects_with_sim_received_time(ros_bag_file, output_file):
         # Correlate with the simulation time when the object data was received on a topic
         # This is different than "Message Time (ms)" in object's header
         last_idx = 0
-        for message, rosbag_t_received_s in object_msgs_and_system_times:
+        for object_msgs, rosbag_t_received_s in object_msgs_and_system_times:
             # Find the index in 'sim_times' corresponding to when the message was received
             for t, sim_time in sim_times[last_idx:]:
                 if (t.to_sec() > rosbag_t_received_s):
