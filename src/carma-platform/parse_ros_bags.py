@@ -130,7 +130,11 @@ def get_detected_objects(ros_bag_file, output_file, time_offset):
             ["Message Time (ms)", "Object ID", "Map Position X (m)", "Map Position Y (m)"]
         )
         for message in messages:
-            cdasim_time_ms = (message.header.stamp - time_offset).to_sec() * 1_000
+            try:
+                cdasim_time_ms = round((message.header.stamp - time_offset).to_sec() * 1_000)
+            except (TypeError):
+                cdasim_time_ms = 0
+
             writer.writerow(
                 [
                     cdasim_time_ms,
@@ -241,7 +245,11 @@ def get_carla_object_odometry(actor_id, ros_bag_file, output_file, time_offset):
             ):
                 continue
 
-            cdasim_time_ms = round((message.header.stamp - time_offset).to_sec() * 1_000)
+            try:
+                cdasim_time_ms = round((message.header.stamp - time_offset).to_sec() * 1_000)
+            except (TypeError):
+                cdasim_time_ms = 0
+
             writer.writerow(
                 [
                     cdasim_time_ms,
@@ -276,7 +284,11 @@ def get_vehicle_odometry(ros_bag_file, output_file, time_offset):
         )
 
         for message in messages:
-            cdasim_time_ms = round((message.header.stamp - time_offset).to_sec() * 1_000)
+            try:
+                cdasim_time_ms = round((message.header.stamp - time_offset).to_sec() * 1_000)
+            except (TypeError):
+                cdasim_time_ms = 0
+
             writer.writerow(
                 [
                     cdasim_time_ms,
@@ -300,10 +312,7 @@ def main():
     args = parser.parse_args()
 
     time_offset = get_time_offset(args.ros_bag_file)
-
-    get_detected_objects(
-        args.ros_bag_file, args.csv_dir / "vehicle_detected_objects.csv", time_offset
-    )
+    get_detected_objects(        args.ros_bag_file, args.csv_dir / "vehicle_detected_objects.csv", time_offset    )
 
     get_detected_objects_with_sim_received_time(
         args.ros_bag_file, args.csv_dir / "detected_objects_with_sim_received_time.csv"
