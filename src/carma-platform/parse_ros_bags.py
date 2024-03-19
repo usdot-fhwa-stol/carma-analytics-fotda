@@ -300,6 +300,11 @@ def main():
     args = parser.parse_args()
 
     time_offset = get_time_offset(args.ros_bag_file)
+
+    get_detected_objects(
+        args.ros_bag_file, args.csv_dir / "vehicle_detected_objects.csv", time_offset
+    )
+
     get_detected_objects_with_sim_received_time(
         args.ros_bag_file, args.csv_dir / "detected_objects_with_sim_received_time.csv"
     )

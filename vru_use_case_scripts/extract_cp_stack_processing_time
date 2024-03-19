@@ -1,17 +1,8 @@
 #!/usr/bin/env python3
 
 from argparse import ArgumentParser
-from collections import defaultdict
-import csv
-import json
 from pathlib import Path
-import sys
-
-from matplotlib import pyplot as plt
-import numpy as np
 import pandas as pd
-from scipy.interpolate import splrep, BSpline
-
 
 def parse_df(file_path: Path):
     df = pd.read_csv(file_path, header=0)
