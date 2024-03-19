@@ -144,15 +144,17 @@ Plot the data:
 
 ## `monitor_time_sync_through_logs`
 
-This script monitors whether if all components are stepping in synchronization ensuring their simulation time synchronization.
+This script monitors real-time whether if all components are stepping in synchronization ensuring their simulation time synchronization.
 > [!NOTE]
 > This script relies on python libraries watchdog and docker
 
+> [!NOTE]
+> Graph is not automatically saved, please be sure to save it before closing if needed
 
+After starting cdasim through carma start all, give few seconds before running:
 ```console
 ./monitor_time_sync_through_logs
 ```
-
 
 ### Example output
 Red line shows how long in system wall time it took for MOSAIC to step to the next simulation time step.
