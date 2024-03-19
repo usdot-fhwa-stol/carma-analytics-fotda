@@ -5,7 +5,7 @@ from pathlib import Path
 
 import more_itertools
 import rosbag
-
+from enum import Enum
 
 def find_msg_closest_to_timestamp(bag_msgs, timestamp):
     for current, next_ in more_itertools.pairwise(bag_msgs):
@@ -48,8 +48,19 @@ def get_object_msgs_with_its_system_times(ros_bag_file, topic_name):
             messages.append((msg.objects, rosbag_t_received.to_sec())) #nano to sec
     return messages
 
-def get_objects_from_incoming_sdsm(ros_bag_file, output_file, time_offset):
+def get_detected_objects_from_incoming_sdsm(ros_bag_file, output_file):
     incoming_msgs_topic_name = "/message/incoming_sdsm"
+
+    # Map from Enum of J2334 SDSM Object Type
+    # ExternalObject object type's naming convention so that data
+    # fills same object type name
+
+    class ObjectType(Enum):
+        UNKNOWN = 0 # J2334 UNKNOWN
+        SMALL_VEHICLE = 1 # J2334 VEHICLE
+        PEDESTRIAN = 2 # J2334 VRU
+        def __str__(self):
+            return self.name
 
     sdsm_msgs = get_object_msgs_with_its_system_times(ros_bag_file, incoming_msgs_topic_name)
 
@@ -66,7 +77,7 @@ def get_objects_from_incoming_sdsm(ros_bag_file, output_file, time_offset):
     with open(output_file, "w", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(
-            ["Received Simulation Time (ms)", "System Time (s)", "Object Id"]
+            ["Received Simulation Time (ms)", "System Time (s)", "Object Id", "Object Type"]
         )
 
         # Correlate with the simulation time when the object data was received on a topic
@@ -88,13 +99,13 @@ def get_objects_from_incoming_sdsm(ros_bag_file, output_file, time_offset):
                         cdasim_time_ms,
                         rosbag_t_received_s,
                         object_data.detected_object_common_data.detected_id.object_id,
+                        ObjectType(object_data.detected_object_common_data.obj_type.object_type)
                     ]
                 )
 
     print(
         f"Sorted data from topic '{incoming_msgs_topic_name}' saved to '{output_file}'"
     )
-    print(f"Calculated sim time offset: '{time_offset}'")
 
 def get_detected_objects(ros_bag_file, output_file, time_offset):
     detected_obj_topic_name = "/environment/fused_external_objects"
@@ -129,7 +140,16 @@ def get_detected_objects(ros_bag_file, output_file, time_offset):
     )
     print(f"Calculated sim time offset: '{time_offset}'")
 
-def get_detected_objects_with_sim_received_time(ros_bag_file, output_file, time_offset):
+def get_detected_objects_with_sim_received_time(ros_bag_file, output_file):
+
+    class ObjectType(Enum):
+        UNKNOWN = 0
+        SMALL_VEHICLE = 1
+        LARGE_VEHICLE = 2
+        MOTORCYCLE = 3
+        PEDESTRIAN = 4
+        def __str__(self):
+            return self.name
 
     detected_obj_topic_name = "/environment/fused_external_objects"
 
@@ -148,7 +168,7 @@ def get_detected_objects_with_sim_received_time(ros_bag_file, output_file, time_
     with open(output_file, "w", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(
-            ["Received Simulation Time (ms)", "System Time (s)", "Object Id"]
+            ["Received Simulation Time (ms)", "System Time (s)", "Object Id", "Object Type"]
         )
 
         # Correlate with the simulation time when the object data was received on a topic
@@ -168,14 +188,15 @@ def get_detected_objects_with_sim_received_time(ros_bag_file, output_file, time_
                     [
                         cdasim_time_ms,
                         rosbag_t_received_s,
-                        obj.id % 1_000
+                        obj.id % 1_000,
+                        ObjectType(obj.object_type)
                     ]
                 )
 
     print(
         f"Sorted data from topic '{detected_obj_topic_name}' saved to '{output_file}'"
     )
-    print(f"Calculated sim time offset: '{time_offset}'")
+
 
 def get_carla_object_odometry(actor_id, ros_bag_file, output_file, time_offset):
     def get_object_with_id(id_, msg):
@@ -271,21 +292,20 @@ def main():
 
     time_offset = get_time_offset(args.ros_bag_file)
     get_detected_objects_with_sim_received_time(
-        args.ros_bag_file, args.csv_dir / "vehicle_detected_objects.csv", time_offset
+        args.ros_bag_file, args.csv_dir / "detected_objects_with_sim_received_time.csv"
     )
 
-    get_objects_from_incoming_sdsm(
-        args.ros_bag_file, args.csv_dir / "objects_from_incoming_sdsm.csv", time_offset
+    get_detected_objects_from_incoming_sdsm(
+        args.ros_bag_file, args.csv_dir / "detected_objects_from_incoming_sdsm.csv"
     )
 
-#    get_carla_object_odometry(
-#        221, args.ros_bag_file, args.csv_dir / "pedestrian_odometry.csv", time_offset
-#    )
-#
-#    get_vehicle_odometry(
-#        args.ros_bag_file, args.csv_dir / "vehicle_odometry.csv", time_offset
-#    )
-#
+    #get_carla_object_odometry(
+    #    221, args.ros_bag_file, args.csv_dir / "pedestrian_odometry.csv", time_offset
+    #)
+
+    #get_vehicle_odometry(
+    #    args.ros_bag_file, args.csv_dir / "vehicle_odometry.csv", time_offset
+    #)
 
 if __name__ == "__main__":
     main()
