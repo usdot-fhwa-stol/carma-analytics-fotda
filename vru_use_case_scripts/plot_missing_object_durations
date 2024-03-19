@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+
+from argparse import ArgumentParser
+from pathlib import Path
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+# CP Stack's operation frequency is important because
+# object will be missing minimum of duration of the CP stack's operation period
+# For example, if CP stack is operating at 5 Hz, duration between detected objects
+# will be minimum 200 ms.
+COOPERATIVE_PERCEPTION_STACK_FREQUENCY_IN_HZ = 5
+
+def parse_df(file_path: Path):
+    df = pd.read_csv(file_path, header=0)
+
+    return df
+
+def filter_df_for_object_id(df: pd.DataFrame, id_: str):
+    return df.loc[df["Object ID"] == id_]
+
+def get_unique_object_ids(df: pd.DataFrame):
+    return list(set(df["Object ID"]))
+
+def plot_missing(df: pd.DataFrame):
+    # plot duplicate durations of each Object over time
+    figures_dir = Path("missing_objects_plots")
+    figures_dir.mkdir(exist_ok=True)
+    grouped = df.groupby('Object ID')
+
+    # Plot duration over Message Time for each Object ID
+    for obj_id, group in grouped:
+        fig, ax = plt.subplots()
+        ax.stem(group['Message Time (ms)'], group['Missing Duration (ms)'], basefmt=" ", markerfmt=' ', use_line_collection=True)
+        ax.set_xlim(left=0)  # Set x-axis to start at zero
+        ax.set_ylim(bottom=0, top=1100)  # Set y-axis to start at zero
+        plt.axhline(y=1000, color='r', linestyle='--', label='Missing Duration Cutoff')
+        plt.axhline(y= round(1/COOPERATIVE_PERCEPTION_STACK_FREQUENCY_IN_HZ * 1000), color='b', linestyle='--', label='CP stack operation period')
+        plt.xlabel('Message Time (ms)')
+        plt.ylabel('Missing Duration (ms)')
+        plt.title(f'Duration over Message Time for Object ID: {obj_id}')
+        plt.legend()
+        plt.savefig(figures_dir / f"missing_obj_duration_{obj_id}.png")
+
+def get_missing_duration(df: pd.DataFrame):
+
+    df = df[['Message Time (ms)', 'Object ID']].drop_duplicates()
+    df.to_csv("~/Desktop/DEBUG.csv", index=False)
+
+    df.sort_values(by=['Object ID', 'Message Time (ms)'], inplace=True)
+
+    # Shift by -1 meaning move up so that each row
+    # indicates what timestamp the data started missing
+    # and how long did it last
+    df['Missing Duration (ms)'] = df.groupby('Object ID')['Message Time (ms)'].diff().shift(-1)
+
+    df.to_csv("~/Desktop/DEBUG.csv", index=False)
+    # Reset the index of the DataFrame
+    df.reset_index(drop=True, inplace=True)
+
+    return df
+
+
+parser = ArgumentParser(
+    prog="plot_missing_object_durations",
+    description="Plot the consecutive amount of time a track was missing for each object",
+)
+
+parser.add_argument(
+    "--vehicle-detection-csv",
+    type=Path,
+    help="CSV file containing object detection entries from a rosbag file",
+    required=True,
+)
+
+cli_args = parser.parse_args()
+
+detections_df = parse_df(cli_args.vehicle_detection_csv)
+
+missing_duration_df = get_missing_duration(detections_df)
+
+plot_missing(missing_duration_df)
