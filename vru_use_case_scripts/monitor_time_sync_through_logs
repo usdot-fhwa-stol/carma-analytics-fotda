@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import time
 import re
 from watchdog.observers import Observer
@@ -278,39 +280,42 @@ def backup_and_clear_sdsm_log(file_path):
         pass
 
 
-if __name__ == "__main__":
 
-    sensor_data_sharing_service_file_base_path = '/home/carma/cdasim_config/sensor_data_sharing_service/logs/'
 
-    # sensor_data_sharing_service creates one file each day and appends new logs to it
-    # NOTE: by default when this log is created, it is under user root. It must be chown/chrp to carma to be able to be modified
-    current_date = datetime.today().strftime('%Y-%m-%d')
-    sensor_data_sharing_service_file_path = sensor_data_sharing_service_file_base_path + 'sensor_data_sharing_service_' + current_date
+###############
+##### MAIN ####
+###############
+sensor_data_sharing_service_file_base_path = '/home/carma/cdasim_config/sensor_data_sharing_service/logs/'
 
-    # Save previous SDSM service log and start a new one
-    #backup_and_clear_sdsm_log(sensor_data_sharing_service_file_path)
+# sensor_data_sharing_service creates one file each day and appends new logs to it
+# NOTE: by default when this log is created, it is under user root. It must be chown/chrp to carma to be able to be modified
+current_date = datetime.today().strftime('%Y-%m-%d')
+sensor_data_sharing_service_file_path = sensor_data_sharing_service_file_base_path + 'sensor_data_sharing_service_' + current_date
 
-    # Base path to start searching for rosout.log
-    rosout_base_path = '/opt/carma/logs/carma_1/'
+# Save previous SDSM service log and start a new one
+#backup_and_clear_sdsm_log(sensor_data_sharing_service_file_path)
 
-    # Base path to start searching for simulation logs
-    sim_base_path = '/opt/carma-simulation/logs/'
+# Base path to start searching for rosout.log
+rosout_base_path = '/opt/carma/logs/carma_1/'
 
-    # Base path to save v2xhub logs
-    carma_streets_base_path = '/home/carma/vru-logs/v2xhub/'
+# Base path to start searching for simulation logs
+sim_base_path = '/opt/carma-simulation/logs/'
 
-    # Sleep so that the logs have enough time to start getting populated/created
-    time.sleep(2)
+# Base path to save v2xhub logs
+carma_streets_base_path = '/home/carma/vru-logs/v2xhub/'
 
-    # List of other specific files to monitor, add full paths or just filenames if in the same directory
-    # Graph only plots if all files get the anticipated pattern of string
-    files_to_monitor = [
-        #sensor_data_sharing_service_file_path,
-        'rosout.log',  # just file name because its parent folder is dynamically created
-        'v2xhub.log',
-        'Traffic.log',
-        ### ... Save MOSAIC for last
-        'MOSAIC.log',
-    ]
+# Sleep so that the logs have enough time to start getting populated/created
+time.sleep(2)
 
-    start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, files_to_monitor)
+# List of other specific files to monitor, add full paths or just filenames if in the same directory
+# Graph only plots if all files get the anticipated pattern of string
+files_to_monitor = [
+    #sensor_data_sharing_service_file_path,
+    'rosout.log',  # just file name because its parent folder is dynamically created
+    'v2xhub.log',
+    'Traffic.log',
+    ### ... Save MOSAIC for last
+    'MOSAIC.log',
+]
+
+start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, files_to_monitor)
