@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+from argparse import ArgumentParser
+from pathlib import Path
+import matplotlib.pyplot as plt
+import rosbag
+import more_itertools
+import numpy as np
+
+EPSILON = 0.01
+intersection_lanelets = {
+        61629,
+        61499,
+        61691,
+        61567,
+        61405,
+        61759,
+        62119,
+        62023,
+        61995,
+        61823,
+        61891,
+        62215
+}
+
+def moving_average(data, window_size):
+    return np.convolve(data, np.ones(window_size)/window_size, mode='valid')
+
+
+def get_intersection_entry_exit_times(ros_bag_file, intersection_lanelets):
+
+    with rosbag.Bag(ros_bag_file, "r") as bag:
+        route_state_msgs = list(bag.read_messages(topics=['/guidance/route_state']))
+
+        print(f"Reached here: {len(route_state_msgs)}")
+        entry_t = None
+        exit_t = None
+
+        for _, msg, t in route_state_msgs:
+            if (entry_t is None and msg.lanelet_id in intersection_lanelets):
+                print(f"Detected entry time into the intersection (lanelet id: {msg.lanelet_id}) at: {t.to_sec()}")
+                entry_t = t
+
+            if (entry_t is not None and msg.lanelet_id not in intersection_lanelets):
+                print(f"Detected exit time out of the intersection (from lanelet id: {msg.lanelet_id}) at: {t.to_sec()}")
+                exit_t = t
+                break
+
+    return (entry_t, exit_t)
+
+
+
+def plot_deceleration(ros_bag_file, window_size=5):
+    decel_rates = []
+    time_stamps = []
+    plotting_time_stamps = []
+    speeds = []
+
+    entry_t, exit_t = get_intersection_entry_exit_times(ros_bag_file, intersection_lanelets)
+
+    with rosbag.Bag(ros_bag_file, "r") as bag:
+        twist_msgs = list(bag.read_messages(topics=['/hardware_interface/vehicle/twist']))
+
+    for _, msg, t in twist_msgs:
+        speeds.append(msg.twist.linear.x)
+        time_stamps.append(t.to_sec())
+
+     # Apply moving average filter
+    filtered_speeds = moving_average(speeds, window_size)
+    # Adjust time_stamps length to match the filtered_speeds length
+    adjusted_time_stamps = time_stamps[int(window_size/2):int(-window_size/2)+1]
+    speed_time_pair = zip(filtered_speeds, adjusted_time_stamps)
+
+    for current, next in more_itertools.pairwise(speed_time_pair):
+        curr_speed, current_log_timestamp = current
+        next_speed, next_log_timestamp = next
+
+        # ROS time to seconds
+        delta_time = next_log_timestamp - current_log_timestamp
+        if delta_time <= 0:
+            continue  # Avoid division by zero or negative time intervals
+
+        instant_decel_rate = (next_speed - curr_speed) / delta_time
+
+        if (curr_speed > EPSILON):
+            # Store deceleration rate and timestamp for plotting
+            decel_rates.append(instant_decel_rate)
+            plotting_time_stamps.append(current_log_timestamp)
+
+    # Plotting
+    plt.figure(figsize=(10, 5))
+    plt.plot(plotting_time_stamps, decel_rates, 'o')
+    plt.title('Instantaneous Deceleration Rate over Time')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Deceleration Rate (m/s^2)')
+
+    # Add intersection entry and exit timestamps as vertical lines
+    plt.axvline(x=entry_t.to_sec(), color='g', linestyle='--', label='Intersection Entry Time')
+    plt.axvline(x=exit_t.to_sec(), color='r', linestyle='--', label='Intersection Exit Time')
+
+    # Creating legend without duplicate labels
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    plt.legend(by_label.values(), by_label.keys())
+
+    plt.grid(True)
+    plt.show()
+
+
+parser = ArgumentParser(
+    prog="plot deceleration rate",
+    description="",
+)
+
+parser.add_argument(
+    "--rosbag",
+    type=Path,
+    help="ROS Bag to analyze",
+    required=True,
+)
+
+cli_args = parser.parse_args()
+
+plot_deceleration(cli_args.rosbag)
+
