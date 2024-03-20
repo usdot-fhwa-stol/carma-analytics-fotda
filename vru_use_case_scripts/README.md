@@ -142,3 +142,28 @@ Plot the data:
 ### Example output
 
 ![](docs/plot_time_to_collision_example.png)
+
+
+## `plot_deceleration_rate`
+
+This script takes in one argument - rosbag and plots the deceleration rate between each twist msgs of the platform.
+
+> [!NOTE]
+> This script low pass filters the speed before plotting to filter the short term noise
+
+### Usage examples
+
+Plot the data:
+
+```console
+./plot_deceleration_rate \
+  --rosbag <dir-to-rosbag>
+```
+
+### Example output
+
+![](docs/example-deceleration-rate.png)
+
+
+
+

@@ -103,6 +103,10 @@ def plot_deceleration(ros_bag_file, window_size=5):
     plt.legend(by_label.values(), by_label.keys())
 
     plt.grid(True)
+
+    plt.savefig(
+        figures_dir / f"deceleration-rate.png",
+    )
     plt.show()
 
 
@@ -117,6 +121,9 @@ parser.add_argument(
     help="ROS Bag to analyze",
     required=True,
 )
+
+figures_dir = Path("figures")
+figures_dir.mkdir(exist_ok=True)
 
 cli_args = parser.parse_args()
 
