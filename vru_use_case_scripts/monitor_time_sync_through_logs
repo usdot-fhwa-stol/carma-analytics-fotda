@@ -21,12 +21,15 @@ IS_SYNCED_PLOT_NAME = 'Is Synced?'
 tool_activation_delay_since_last_cdasim_step = {}
 
 PATTERN_TO_MATCH = 'Simulation Time: (\d+) where current system time is: (\d+)'
+PATTERN_TO_MATCH1 = 'Simulation Time: (\d+) here current system time is: (\d+)'
 
 # Main class that tracks and processes log lines retrieved from multiple files and observers
 class LogMonitor:
     def __init__(self, files):
         # Pattern to match "Simulation Time: X where current system time is: Y"
         self.log_pattern = re.compile(PATTERN_TO_MATCH)
+        self.log_pattern1 = re.compile(PATTERN_TO_MATCH1)
+
         # Store system times by simulation time, across all files {simulation_time, list({system_time, file_name})}
         self.simulation_times = {}
         # Latest line from each file that was processed {file_name, latest_line_num}
@@ -55,11 +58,17 @@ class LogMonitor:
     def process_line(self, line, file_path):
         global tool_activation_delay_since_last_cdasim_step
         global IS_SYNCED_PLOT_NAME
+        #print(f"running process_line: {line}")
 
         match = self.log_pattern.search(line)
+        if not match:
+            match = self.log_pattern1.search(line)
         if match:
             simulation_time = int(match.group(1))
             system_time = int(match.group(2))
+            if ('Traffic.log' in file_path):
+                print(f"Simtime: {simulation_time} and system_time: {system_time}")
+            #print(f"DETECTED simulation_time: {simulation_time} and system_time: {system_time} and file: {file_path}")
 
             if simulation_time in self.simulation_times:
                 # Already have an entry for this simulation time
@@ -108,9 +117,10 @@ class LogMonitor:
                     tool_activation_delay_since_last_cdasim_step[IS_SYNCED_PLOT_NAME].append(is_synced) #
 
                     #already checked this simulation time, so del to save space
-                    del self.simulation_times[T1]
+                    #del self.simulation_times[T1]
 
-            except KeyError:
+            except:
+                print(f"Reached KeyError expected")
                 # Do nothing
                 return
 
@@ -179,25 +189,44 @@ def get_full_file_path(file_name, rosout_base_path, sim_base_path, carma_streets
 
     return file_path
 
-def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, files_to_monitor):
+def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, files_to_monitor, is_post_process = False):
     global tool_activation_delay_since_last_cdasim_step
     tool_activation_delay_since_last_cdasim_step[IS_SYNCED_PLOT_NAME] = []
     log_monitor = LogMonitor(files_to_monitor)
 
     observers = []
 
-    for file_name in files_to_monitor:
-        file_path = get_full_file_path(file_name, rosout_base_path, sim_base_path, carma_streets_base_path)
-        print(f"Detected file to monitor: {file_path}")
-        tool_activation_delay_since_last_cdasim_step[file_path] = []
+    if (not is_post_process):
+        for file_name in files_to_monitor:
+            file_path = get_full_file_path(file_name, rosout_base_path, sim_base_path, carma_streets_base_path)
+            print(f"Detected file to monitor: {file_path}")
+            tool_activation_delay_since_last_cdasim_step[file_path] = []
 
-        if ('v2xhub' in file_path):
-            # Create a Thread to capture docker logging in the background and dont use watchdog library
-            log_thread = threading.Thread(target=log_monitor.capture_docker_container_log, args=(file_path, 'v2xhub'))
-            log_thread.start()
-        else:
-            observer = monitor_file(file_path, log_monitor)
-            observers.append(observer)
+            if ('v2xhub' in file_path):
+                # Create a Thread to capture docker logging in the background and dont use watchdog library
+                log_thread = threading.Thread(target=log_monitor.capture_docker_container_log, args=(file_path, 'v2xhub'))
+                log_thread.start()
+            else:
+                observer = monitor_file(file_path, log_monitor)
+                observers.append(observer)
+
+    if (is_post_process):
+        files_to_process = []
+        for file_name in files_to_monitor:
+            file_path = get_full_file_path(file_name, rosout_base_path, sim_base_path, carma_streets_base_path)
+            print(f"Post Processing detected file to monitor: {file_path}")
+            tool_activation_delay_since_last_cdasim_step[file_path] = []
+            files_to_process.append(file_path)
+
+        for file_path in files_to_process:
+            with open(file_path, 'r') as file:
+                for i, line in enumerate(file, start=1):
+                    try:
+                        log_monitor.process_line(line, file_path)
+                    except Exception as e:
+                        print(f"Failed at line: {i} for file {file_path}. Error: {e}")
+                        continue  # Continue to the next line
+
 
     # Function to update plots for each file
     def update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step):
@@ -237,6 +266,8 @@ def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, f
             fig.canvas.draw_idle()
             plt.pause(0.1)  # Pause to update the chart
 
+        plt.savefig("/home/carma/Desktop/time_sync.png")
+
     # Setup figure and subplots for dynamic updating
     plt.ion()  # Turn on interactive mode
     num_plots = len(files_to_monitor)
@@ -245,16 +276,22 @@ def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, f
     if num_plots == 1:  # Ensure axs is iterable for a single subplot
         axs = [axs]
 
-    try:
-        while True:
-            time.sleep(2) #only plot every 2 sec
-            update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step)
+    if (not is_post_process):
+        try:
+            while True:
+                time.sleep(2) #only plot every 2 sec
+                update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step)
 
-    except KeyboardInterrupt:
-        for observer in observers:
-            observer.stop()
-        for observer in observers:
-            observer.join()
+        except KeyboardInterrupt:
+            for observer in observers:
+                observer.stop()
+            for observer in observers:
+                observer.join()
+    else:
+        #print(f"plotting now")
+        #for sim_time in log_monitor.simulation_times.keys():
+            #print(f"T: {sim_time} has size: {len(log_monitor.simulation_times[sim_time])}")
+        update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step)
 
 def backup_and_clear_sdsm_log(file_path):
     # Split the file path into directory, basename, and extension
@@ -281,6 +318,8 @@ def backup_and_clear_sdsm_log(file_path):
 
 
 
+
+
 ###############
 ##### MAIN ####
 ###############
@@ -295,13 +334,13 @@ sensor_data_sharing_service_file_path = sensor_data_sharing_service_file_base_pa
 #backup_and_clear_sdsm_log(sensor_data_sharing_service_file_path)
 
 # Base path to start searching for rosout.log
-rosout_base_path = '/opt/carma/logs/carma_1/'
+rosout_base_path = '/home/carma/Downloads/'
 
 # Base path to start searching for simulation logs
-sim_base_path = '/opt/carma-simulation/logs/'
+sim_base_path = '/home/carma/Downloads/'
 
 # Base path to save v2xhub logs
-carma_streets_base_path = '/home/carma/vru-logs/v2xhub/'
+carma_streets_base_path = '/home/carma/Downloads/'
 
 # Sleep so that the logs have enough time to start getting populated/created
 time.sleep(2)
@@ -317,4 +356,5 @@ files_to_monitor = [
     'MOSAIC.log',
 ]
 
-start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, files_to_monitor)
+start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, files_to_monitor, True)
+#start_post_process(rosout_base_path, sim_base_path, carma_streets_base_path, files_to_monitor)
