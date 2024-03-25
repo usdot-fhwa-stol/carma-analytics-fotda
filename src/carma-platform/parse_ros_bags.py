@@ -63,7 +63,8 @@ def get_detected_objects(ros_bag_file, output_file, time_offset):
             try:
                 cdasim_time_ms = round((message.header.stamp - time_offset).to_sec() * 1_000)
             except (TypeError):
-                cdasim_time_ms = 0
+                # negative time indicates CDASim is not up and running
+                continue
 
             writer.writerow(
                 [
@@ -117,7 +118,8 @@ def get_carla_object_odometry(actor_id, ros_bag_file, output_file, time_offset):
             try:
                 cdasim_time_ms = round((message.header.stamp - time_offset).to_sec() * 1_000)
             except (TypeError):
-                cdasim_time_ms = 0
+                # negative time indicates CDASim is not up and running
+                continue
             writer.writerow(
                 [
                     cdasim_time_ms,
@@ -155,7 +157,8 @@ def get_vehicle_odometry(ros_bag_file, output_file, time_offset):
             try:
                 cdasim_time_ms = round((message.header.stamp - time_offset).to_sec() * 1_000)
             except (TypeError):
-                cdasim_time_ms = 0
+                # negative time indicates CDASim is not up and running
+                continue
             writer.writerow(
                 [
                     cdasim_time_ms,
