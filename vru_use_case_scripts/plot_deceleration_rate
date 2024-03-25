@@ -50,7 +50,7 @@ def get_intersection_entry_exit_times(ros_bag_file, intersection_lanelets):
 
 
 def plot_deceleration(ros_bag_file, window_size=5):
-    decel_rates = []
+    decel_values = []
     time_stamps = []
     plotting_time_stamps = []
     speeds = []
@@ -70,28 +70,28 @@ def plot_deceleration(ros_bag_file, window_size=5):
     adjusted_time_stamps = time_stamps[int(window_size/2):int(-window_size/2)+1]
     speed_time_pair = zip(filtered_speeds, adjusted_time_stamps)
 
-    for current, next in more_itertools.pairwise(speed_time_pair):
+    for current, next_ in more_itertools.pairwise(speed_time_pair):
         curr_speed, current_log_timestamp = current
-        next_speed, next_log_timestamp = next
+        next_speed, next_log_timestamp = next_
 
         # ROS time to seconds
         delta_time = next_log_timestamp - current_log_timestamp
         if delta_time <= 0:
             continue  # Avoid division by zero or negative time intervals
 
-        instant_decel_rate = (next_speed - curr_speed) / delta_time
+        instant_decel = (next_speed - curr_speed) / delta_time
 
         if (curr_speed > EPSILON):
-            # Store deceleration rate and timestamp for plotting
-            decel_rates.append(instant_decel_rate)
+            # Store deceleration and timestamp for plotting
+            decel_values.append(instant_decel)
             plotting_time_stamps.append(current_log_timestamp)
 
     # Plotting
     plt.figure(figsize=(10, 5))
-    plt.plot(plotting_time_stamps, decel_rates, 'o')
-    plt.title('Instantaneous Deceleration Rate over Time')
+    plt.plot(plotting_time_stamps, decel_values, 'o')
+    plt.title('Instantaneous Deceleration over Time')
     plt.xlabel('Time (s)')
-    plt.ylabel('Deceleration Rate (m/s^2)')
+    plt.ylabel('Deceleration (m/s^2)')
 
     # Add intersection entry and exit timestamps as vertical lines
     plt.axvline(x=entry_t.to_sec(), color='g', linestyle='--', label='Intersection Entry Time')
@@ -105,13 +105,13 @@ def plot_deceleration(ros_bag_file, window_size=5):
     plt.grid(True)
 
     plt.savefig(
-        figures_dir / f"deceleration-rate.png",
+        figures_dir / f"deceleration.png",
     )
     plt.show()
 
 
 parser = ArgumentParser(
-    prog="plot deceleration rate",
+    prog="plot deceleration",
     description="",
 )
 
