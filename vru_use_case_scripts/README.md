@@ -138,7 +138,6 @@ Plot the data:
   --pedestrian-odometry-csv <path_to_csv_dir>/pedestrian_odometry.csv
 ```
 
-
 ### Example output
 
 ![](docs/plot_time_to_collision_example.png)
@@ -206,6 +205,9 @@ This script takes in two CSV files containing vehicle and pedestrian odometry ge
 the post-encroachment time (PET), which is the duration between the pedestrian leaving the encroachment zone and the
 vehicle entering it. The script optionally plots the odometry information and visualizes the encroachment.
 
+> [!NOTE]
+> This script assumes the vehicle and pedestrian are point masses, and the `ENCROACHMENT_ZONE_WIDTH` variable determines the size of the encroachment zone.
+
 ### Usage examples
 
 Calculate the PET:
@@ -215,7 +217,6 @@ Calculate the PET:
   --vehicle-odometry-csv <path_to_csv_dir>/vehicle_odometry.csv \
   --pedestrian-odometry-csv <path_to_csv_dir>/pedestrian_odometry.csv
 ```
-
 
 Calculate the PET (with plotting):
 

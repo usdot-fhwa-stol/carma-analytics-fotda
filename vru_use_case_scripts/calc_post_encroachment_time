@@ -11,6 +11,8 @@ from shapely import Point, LineString
 import shapely.geometry
 import shapely.plotting
 
+ENCROACHMENT_ZONE_WIDTH = 2
+
 
 def parse_vehicle_odometry_from_csv(odometry_csv):
     return pd.read_csv(odometry_csv)
@@ -44,12 +46,11 @@ def get_encroachment_zone(vehicle_odom_df, pedestrian_odom_df):
     plt.plot(*vehicle_path.xy)
     plt.plot(*pedestrian_path.xy)
 
-    BOX_SIZE = 2
     return shapely.geometry.box(
-        intersect_point.x - BOX_SIZE / 2,
-        intersect_point.y - BOX_SIZE / 2,
-        intersect_point.x + BOX_SIZE / 2,
-        intersect_point.y + BOX_SIZE / 2,
+        intersect_point.x - ENCROACHMENT_ZONE_WIDTH / 2,
+        intersect_point.y - ENCROACHMENT_ZONE_WIDTH / 2,
+        intersect_point.x + ENCROACHMENT_ZONE_WIDTH / 2,
+        intersect_point.y + ENCROACHMENT_ZONE_WIDTH / 2,
     )
 
 
@@ -114,10 +115,7 @@ parser.add_argument(
     required=True,
 )
 
-parser.add_argument(
-    "--show-plot",
-    action="store_true"
-)
+parser.add_argument("--show-plot", action="store_true")
 
 cli_args = parser.parse_args()
 
