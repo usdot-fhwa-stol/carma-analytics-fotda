@@ -143,6 +143,7 @@ Plot the data:
 
 ![](docs/plot_time_to_collision_example.png)
 
+
 ## `extract_cp_stack_processing_time`
 
 This script takes in two CSV files containing vehicle's cp objects and objects from incoming_sdsm with
@@ -166,8 +167,35 @@ Extract the processing time to terminal:
   --sdsm-csv <path_to_csv_dir>/detected_objects_from_incoming_sdsm.csv
 ```
 
-### Example output
+### Example Output
 
 ```console
 Simulation Time (ms) processing for Cooperative Perception Stack (Input from SDSM to output on local perception): 400.0
 ```
+
+## `plot_missing_object_durations`
+
+This script plots the duration of consecutive time the detected object is missing.
+It takes in one CSV files containing vehicle's cp objects respective detected simulation time in their messages generated from rosbags.
+
+> [!NOTE]
+> This script is tighly coupled with how to VRU use case scenario is setup. It assumes that the infrastructure sensor detects
+> all the objects in the intersection and feeds CP stack the info without fail at all time steps. Therefore, if an object is missing from
+> the output of the CP stack, it would be interpreted as CP stack's misbehavior although it can technically be just that infrastructure
+> did not send the object data for those times.
+
+> [!NOTE]
+> Missing duration is also tightly coupled with the CP stack's operation_period. Object will be missing minimum operation_period time and
+> has a resolution error of operation_period
+
+### Usage examples
+
+```console
+./plot_missing_object_durations
+  --vehicle-detection-csv <path_to_csv_dir>/vehicle_detected_objects.csv.csv
+```
+
+### Example output
+
+![](docs/example_missing_duration.png)
+

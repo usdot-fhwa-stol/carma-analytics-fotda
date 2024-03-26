@@ -251,7 +251,7 @@ def get_carla_object_odometry(actor_id, ros_bag_file, output_file, time_offset):
             except (TypeError):
                 # negative time indicates CDASim is not up and running
                 continue
-
+                
             writer.writerow(
                 [
                     cdasim_time_ms,
@@ -291,7 +291,7 @@ def get_vehicle_odometry(ros_bag_file, output_file, time_offset):
             except (TypeError):
                 # negative time indicates CDASim is not up and running
                 continue
-
+                
             writer.writerow(
                 [
                     cdasim_time_ms,
