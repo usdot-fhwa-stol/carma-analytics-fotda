@@ -197,5 +197,5 @@ It takes in one CSV files containing vehicle's cp objects respective detected si
 
 ### Example output
 
-![](docs/example_missing_duration.png)
+![](docs/example_missing_object_duration.png)
 
