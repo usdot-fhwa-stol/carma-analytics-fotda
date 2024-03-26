@@ -92,10 +92,6 @@ def calc_vehicle_enter_time(vehicle_odom_df, encroachment_zone):
             return time
 
 
-def calc_post_encroachment_time():
-    pass
-
-
 parser = ArgumentParser(
     prog="calc_post_encroachment_time",
     description="",
