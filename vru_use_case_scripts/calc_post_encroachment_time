@@ -111,7 +111,11 @@ parser.add_argument(
     required=True,
 )
 
-parser.add_argument("--show-plot", action="store_true")
+parser.add_argument(
+    "--show-plot",
+    help="Plot vehicle and pedestrian paths and the encroachment zone (debugging only)",
+    action="store_true",
+)
 
 cli_args = parser.parse_args()
 
