@@ -159,6 +159,13 @@ parser.add_argument(
     required=True,
 )
 
+parser.add_argument(
+    "--plots-dir",
+    type=Path,
+    default=Path("plots"),
+    help="Directory to store generated plots (default ./plots)",
+)
+
 cli_args = parser.parse_args()
 
 detections_df = parse_positions_from_detection_csv(cli_args.vehicle_detection_csv)
@@ -168,8 +175,7 @@ sensor_map_position = parse_infrastructure_sensor_position_from_json(
     cli_args.infrastructure_sensors_json
 )
 
-figures_dir = Path("figures")
-figures_dir.mkdir(exist_ok=True)
+plots_dir = cli_args.plots_dir
 
 for detection_id in get_unique_object_ids(detections_df):
     object_detection = detections_df.loc[detections_df["Object ID"] == detection_id]
@@ -196,7 +202,7 @@ for detection_id in get_unique_object_ids(detections_df):
 
     ax.set_aspect("equal")
 
-    plt.savefig(figures_dir / f"object_trace_{detection_id}.png")
+    plt.savefig(plots_dir / f"object_trace_{detection_id}.png")
 
 for detection_id in get_unique_object_ids(detections_df):
     object_detection = detections_df.loc[detections_df["Object ID"] == detection_id]
@@ -206,6 +212,10 @@ for detection_id in get_unique_object_ids(detections_df):
         "Message Time (ms)"
     )
     object_sdsm_unique_times = object_sdsm.drop_duplicates("Message Time (ms)")
+
+    if object_sdsm_unique_times.empty:
+        print(f"No SDSMs found for detection '{detection_id}'")
+        continue
 
     times = np.arange(
         object_detection_unique_times["Message Time (ms)"].iloc[0],
@@ -288,7 +298,7 @@ for detection_id in get_unique_object_ids(detections_df):
     suptitle = fig.suptitle(f"Object Position v. Simulation Time - {detection_id}")
 
     plt.savefig(
-        figures_dir / f"object_position_v_simulation_time_{detection_id}.png",
+        plots_dir / f"object_position_v_simulation_time_{detection_id}.png",
         bbox_extra_artists=(lgd, suptitle),
         bbox_inches="tight",
     )
