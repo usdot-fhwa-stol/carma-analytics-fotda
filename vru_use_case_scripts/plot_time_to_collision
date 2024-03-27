@@ -125,6 +125,8 @@ parser.add_argument(
     required=True,
 )
 
+parser.add_argument("--plot-dir", type=Path, required=True)
+
 cli_args = parser.parse_args()
 
 vehicle_odometry_df = parse_vehicle_odometry_from_csv(cli_args.vehicle_odometry_csv)
@@ -150,6 +152,10 @@ plt.ylabel("Time-to-collision (TTC) [s]")
 plt.xlabel("CDASim Time [s]")
 
 figures_dir = Path("figures")
+
+if cli_args.plot_dir is not None:
+    figures_dir = cli_args.plot_dir
+
 figures_dir.mkdir(exist_ok=True)
 
 plt.savefig(figures_dir / f"ttc.png")
