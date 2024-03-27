@@ -23,10 +23,8 @@ def filter_df_for_object_id(df: pd.DataFrame, id_: str):
 def get_unique_object_ids(df: pd.DataFrame):
     return list(set(df["Object ID"]))
 
-def plot_missing(df: pd.DataFrame):
+def plot_missing(df: pd.DataFrame, figures_dir):
     # plot duplicate durations of each Object over time
-    figures_dir = Path("missing_objects_plots")
-    figures_dir.mkdir(exist_ok=True)
     grouped = df.groupby('Object ID')
 
     # Plot duration over Message Time for each Object ID
@@ -72,10 +70,22 @@ parser.add_argument(
     required=True,
 )
 
+parser.add_argument(
+    "--figures-dir",
+    type=Path,
+)
+
 cli_args = parser.parse_args()
 
 detections_df = parse_df(cli_args.vehicle_detection_csv)
 
 missing_duration_df = get_missing_duration(detections_df)
 
-plot_missing(missing_duration_df)
+figures_dir = Path("missing_objects_plots")
+
+if cli_args.figures_dir is not None:
+    figures_dir = cli_args.figures_dir
+
+figures_dir.mkdir(exist_ok=True)
+
+plot_missing(missing_duration_df, figures_dir)
