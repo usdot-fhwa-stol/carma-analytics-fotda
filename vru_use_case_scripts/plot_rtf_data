@@ -19,8 +19,9 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--plot-dir",
+    "--plots-dir",
     type=Path,
+    help="Directory to store the generated plot"
 )
 
 if sys.stdin.isatty():
@@ -78,8 +79,8 @@ ax.set_ylabel("Real Time Factor (RTF) [%]")
 ax.set_xlabel("Simulation Time [s]")
 ax.legend(loc="lower right")
 
-if cli_args.plot_dir is None:
+if cli_args.plots_dir is None:
     plt.show()
 else:
-    cli_args.plot_dir.mkdir(exist_ok=True, parents=True)
-    plt.savefig(cli_args.plot_dir / "rtf.png")
+    cli_args.plots_dir.mkdir(exist_ok=True, parents=True)
+    plt.savefig(cli_args.plots_dir / "rtf.png")
