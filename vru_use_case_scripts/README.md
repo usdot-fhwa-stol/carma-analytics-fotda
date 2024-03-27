@@ -144,7 +144,7 @@ Plot the data:
 ![](docs/plot_time_to_collision_example.png)
 
 
-## `plot_deceleration_rate`
+## `plot_deceleration`
 
 This script takes in one argument - rosbag and plots the deceleration rate between each twist msgs of the platform.
 
@@ -156,7 +156,7 @@ This script takes in one argument - rosbag and plots the deceleration rate betwe
 Plot the data:
 
 ```console
-./plot_deceleration_rate \
+./plot_deceleration \
   --rosbag <dir-to-rosbag>
 ```
 
