@@ -174,7 +174,15 @@ parser.add_argument(
     required=True,
 )
 
+parser.add_argument(
+    "--plots-dir",
+    type=Path,
+    required=True
+)
+
 cli_args = parser.parse_args()
+
+cli_args.plots_dir.mkdir(exist_ok=True, parents=True)
 
 detections_df = parse_positions_from_detection_csv(cli_args.detection_csv)
 sdsm_df = parse_positions_from_sdsm_csv(cli_args.sdsm_csv)
@@ -184,4 +192,4 @@ position_distances = calc_position_distances(detections_df, sdsm_df)
 for object_id, distance_data in position_distances.items():
     distances_np = np.asarray(distance_data).transpose()
     plot_positions(distances_np[0], distances_np[1], title=object_id)
-    plt.show()
+    plt.savefig(cli_args.plots_dir / f"{object_id}.png")
