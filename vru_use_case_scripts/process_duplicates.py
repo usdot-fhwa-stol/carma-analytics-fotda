@@ -19,7 +19,7 @@ class ObjectType(Enum):
         return self.name
 
 
-def plot_duplicates(input_file, figures_dir):
+def plot_duplicates(input_file, plots_dir):
     # plot duplicate durations of each Object over time
     df = pd.read_csv(input_file)
     grouped = df.groupby('ObjID')
@@ -36,8 +36,7 @@ def plot_duplicates(input_file, figures_dir):
         plt.ylabel('Duration')
         plt.title(f'Duration over Message Time for ObjID: {obj_id} with type: {obj_type}')
         plt.legend()
-        # plt.show()
-        plt.savefig(figures_dir / f"duplicates_{obj_id}.png")
+        plt.savefig(plots_dir / f"duplicates_{obj_id}.png")
 
 def get_duplicate_duration(input_file, output_file):
     # Calculate the duration each duplicate lasts
@@ -95,20 +94,15 @@ def main():
     parser = argparse.ArgumentParser(description='Script to parse ROS Bags into CSV data')
     parser.add_argument('--ros-bag-file', help='ROS Bags File.', type=str, required=True)
     parser.add_argument('--csv-dir', help='Directory to write csv file to.', type=Path, required=True)
-    parser.add_argument('--plot-dir', type=Path)
+    parser.add_argument('--plot-dir', type=Path, default=Path("plots"))
     args = parser.parse_args()
 
-    figures_dir = Path("duplicates_plots")
-
-    if args.plot_dir is not None:
-        figures_dir = args.plot_dir
-
-    figures_dir.mkdir(exist_ok=True)
+    args.plots_dir.mkdir(exist_ok=True)
 
     get_detected_objects_id_and_type(args.ros_bag_file, args.csv_dir/'all_detected_objects.csv')
     remove_main_obj(args.csv_dir/'all_detected_objects.csv', args.csv_dir/'duplicates.csv')
     get_duplicate_duration(args.csv_dir/'duplicates.csv', args.csv_dir/'duplicates_durations.csv')
-    plot_duplicates(args.csv_dir/'duplicates_durations.csv', figures_dir)
+    plot_duplicates(args.csv_dir/'duplicates_durations.csv', args.plots_dir)
 
 
 if __name__ == '__main__':
