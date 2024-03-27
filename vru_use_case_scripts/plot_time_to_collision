@@ -125,7 +125,7 @@ parser.add_argument(
     required=True,
 )
 
-parser.add_argument("--plots-dir", type=Path, default=Path("plots"), required=True)
+parser.add_argument("--plots-dir", type=Path, default=Path("plots"))
 
 cli_args = parser.parse_args()
 
