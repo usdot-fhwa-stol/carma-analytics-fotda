@@ -11,7 +11,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.interpolate import splrep, BSpline
-
+import math
 
 def parse_positions_from_sdsm_csv(file_path: Path):
     def get_timestamp(csv_row: list):
@@ -223,7 +223,7 @@ for detection_id in get_unique_object_ids(detections_df):
         0.01,
     )
 
-    fig, (position_x, error_x, position_y, error_y) = plt.subplots(4, sharex=True)
+    fig, (position_x, position_y, error) = plt.subplots(3, sharex=True)
 
     position_x.plot(
         object_detection["Message Time (ms)"] / 1e3,
@@ -238,7 +238,7 @@ for detection_id in get_unique_object_ids(detections_df):
     )
 
     position_x.set_ylabel("$x$ (map) [m]")
-    # position_x.legend()
+
     lgd = position_x.legend(bbox_to_anchor=(1.04, 1), borderaxespad=0)
 
     det_tck_x = splrep(
@@ -254,11 +254,6 @@ for detection_id in get_unique_object_ids(detections_df):
         ),
         k=5,
     )
-
-    error_x.plot(
-        times / 1e3, abs(BSpline(*det_tck_x)(times) - BSpline(*sdsm_tck_x)(times))
-    )
-    error_x.set_ylabel("$x$ Error [m]")
 
     position_y.plot(
         object_detection["Message Time (ms)"] / 1e3,
@@ -288,12 +283,16 @@ for detection_id in get_unique_object_ids(detections_df):
         k=5,
     )
 
-    error_y.plot(
-        times / 1e3, abs(BSpline(*det_tck_y)(times) - BSpline(*sdsm_tck_y)(times))
-    )
-    error_y.set_ylabel("$y$ Error [m]")
+    # Plot the total error
+    x_list = abs(BSpline(*det_tck_x)(times) - BSpline(*sdsm_tck_x)(times))
+    y_list = abs(BSpline(*det_tck_y)(times) - BSpline(*sdsm_tck_y)(times))
 
-    error_y.set_xlabel("CDASim Time [s]")
+    error_list = [math.sqrt(x**2 + y**2) for x, y in zip(x_list, y_list)]
+    error.set_xlabel("CDASim Time [s]")
+    error.set_ylabel("Error [m]")
+    error.plot(
+        times / 1e3, error_list
+    )
 
     suptitle = fig.suptitle(f"Object Position v. Simulation Time - {detection_id}")
 
