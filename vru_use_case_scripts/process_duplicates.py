@@ -94,7 +94,7 @@ def main():
     parser = argparse.ArgumentParser(description='Script to parse ROS Bags into CSV data')
     parser.add_argument('--ros-bag-file', help='ROS Bags File.', type=str, required=True)
     parser.add_argument('--csv-dir', help='Directory to write csv file to.', type=Path, required=True)
-    parser.add_argument('--plot-dir', type=Path, default=Path("plots"))
+    parser.add_argument('--plots-dir', type=Path, default=Path("plots"))
     args = parser.parse_args()
 
     args.plots_dir.mkdir(exist_ok=True)
