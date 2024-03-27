@@ -5,8 +5,11 @@ import matplotlib.pyplot as plt
 import rosbag
 import more_itertools
 import numpy as np
+from enum import Enum
+
 
 EPSILON = 0.01
+# Lanelets specific to an intersection (SumoId: 785) in Town04
 intersection_lanelets = {
         61629,
         61499,
@@ -22,53 +25,155 @@ intersection_lanelets = {
         62215
 }
 
+# Class representing direction of pedestrians when they finish crossing the road
+class PedestrianCrossingDirection(Enum):
+    NORTH = 1
+    EAST = 2
+    SOUTH = 3
+    WEST = 4
+    NORTH_EAST = 5
+    SOUTH_EAST = 6
+    SOUTH_WEST = 7
+    NORTH_WEST = 8
+
+# A point representing where the pedestrian FINISHED crossing the crosswalk
+# and the direction it was facing at the time
+PED_CROSSING_X = 261.34
+PED_CROSSING_Y = 178.99
+PED_CROSSING_DIR = PedestrianCrossingDirection.EAST
+
+# Max decel value threshold to plot on the decel vs time graph (m/s^2)
+MAX_DECEL_VALUE = -3.0
+
 def moving_average(data, window_size):
     return np.convolve(data, np.ones(window_size)/window_size, mode='valid')
 
 
+# currently not used, but can be enabled for debug purposes
 def get_intersection_entry_exit_times(ros_bag_file, intersection_lanelets):
 
     with rosbag.Bag(ros_bag_file, "r") as bag:
         route_state_msgs = list(bag.read_messages(topics=['/guidance/route_state']))
 
-        print(f"Reached here: {len(route_state_msgs)}")
-        entry_t = None
-        exit_t = None
+        entry_t_sec = None
+        exit_t_sec = None
 
         for _, msg, t in route_state_msgs:
-            if (entry_t is None and msg.lanelet_id in intersection_lanelets):
+            if (entry_t_sec is None and msg.lanelet_id in intersection_lanelets):
                 print(f"Detected entry time into the intersection (lanelet id: {msg.lanelet_id}) at: {t.to_sec()}")
-                entry_t = t
+                entry_t_sec = t
 
-            if (entry_t is not None and msg.lanelet_id not in intersection_lanelets):
+            if (entry_t_sec is not None and msg.lanelet_id not in intersection_lanelets):
                 print(f"Detected exit time out of the intersection (from lanelet id: {msg.lanelet_id}) at: {t.to_sec()}")
-                exit_t = t
+                exit_t_sec = t
                 break
 
-    return (entry_t, exit_t)
+    return (entry_t_sec.to_sec(), exit_t_sec.to_sec())
 
 
+def get_pedestrian_times_of_interest(ros_bag_file, ped_crossing_x, ped_crossing_y, ped_crossing_dir):
+    detected_t_sec = 0.0
+    started_moving_t_sec = 0.0
+    exited_crosswalk_t_sec = 0.0
+    ped_odometry = []
+    detected_objects = []
 
-def plot_deceleration(ros_bag_file, window_size=5):
+    with rosbag.Bag(ros_bag_file, "r") as bag:
+        ped_odometry = list(bag.read_messages(topics=['/carla/crossing_person/odometry']))
+        detected_objects = list(bag.read_messages(topics=['/environment/fused_external_objects']))
+
+    if not ped_odometry:
+        print(f"No pedestrian odometry found! Returning")
+        return
+
+    # Determine when the pedestrian finished crossing the cross walk
+    for _, msg, t in ped_odometry:
+
+        if ped_crossing_dir == PedestrianCrossingDirection.NORTH and msg.pose.pose.position.y >= ped_crossing_y:
+            exited_crosswalk_t_sec = t.to_sec()
+            break
+        elif ped_crossing_dir == PedestrianCrossingDirection.SOUTH and msg.pose.pose.position.y <= ped_crossing_y:
+            exited_crosswalk_t_sec = t.to_sec()
+            break
+        elif ped_crossing_dir == PedestrianCrossingDirection.EAST and msg.pose.pose.position.x >= ped_crossing_x:
+            exited_crosswalk_t_sec = t.to_sec()
+            break
+        elif ped_crossing_dir == PedestrianCrossingDirection.WEST and msg.pose.pose.position.x <= ped_crossing_x:
+            exited_crosswalk_t_sec = t.to_sec()
+            break
+        elif ped_crossing_dir == PedestrianCrossingDirection.NORTH_EAST \
+            and msg.pose.pose.position.x >= ped_crossing_x              \
+            and msg.pose.pose.position.y >= ped_crossing_y:
+            exited_crosswalk_t_sec = t.to_sec()
+            break
+        elif ped_crossing_dir == PedestrianCrossingDirection.SOUTH_EAST \
+            and msg.pose.pose.position.x >= ped_crossing_x              \
+            and msg.pose.pose.position.y <= ped_crossing_y:
+            exited_crosswalk_t_sec = t.to_sec()
+            break
+        elif ped_crossing_dir == PedestrianCrossingDirection.SOUTH_WEST \
+            and msg.pose.pose.position.x <= ped_crossing_x              \
+            and msg.pose.pose.position.y <= ped_crossing_y:
+            exited_crosswalk_t_sec = t.to_sec()
+            break
+        elif ped_crossing_dir == PedestrianCrossingDirection.NORTH_WEST \
+            and msg.pose.pose.position.x <= ped_crossing_x              \
+            and msg.pose.pose.position.y >= ped_crossing_y:
+            exited_crosswalk_t_sec = t.to_sec()
+            break
+
+    # Get the time when pedestrian started moving
+    for _, msg, t in ped_odometry:
+        if (msg.twist.twist.linear.x**2 + msg.twist.twist.linear.y**2 + msg.twist.twist.linear.z**2)**0.5 > 0.25:
+            started_moving_t_sec = t.to_sec()
+            break
+
+    if not detected_objects:
+        print(f"No detected objects found! Returning")
+        return
+
+    # Get the time when pedestrian started moving
+    for _, msg, t in detected_objects:
+        found_first_ped_detection = False
+        for object in msg.objects:
+            if object.object_type == 4: #Pedestrian
+                detected_t_sec = t.to_sec()
+                found_first_ped_detection = True
+                break
+
+        if found_first_ped_detection:
+            break
+
+    print(f"Detected pedestrian detected_t_sec: {detected_t_sec}")
+    print(f"Detected pedestrian started_moving_t_sec: {started_moving_t_sec}")
+    print(f"Detected pedestrian exited_crosswalk_t_sec: {exited_crosswalk_t_sec}")
+
+    return (detected_t_sec, started_moving_t_sec, exited_crosswalk_t_sec)
+
+def plot_deceleration_and_speed(ros_bag_file, show_plot, figure_dir, max_deceleration_value = MAX_DECEL_VALUE, window_size=5):
     decel_values = []
     time_stamps = []
     plotting_time_stamps = []
-    speeds = []
+    raw_speeds = []
+    speeds_for_plotting = []
 
-    entry_t, exit_t = get_intersection_entry_exit_times(ros_bag_file, intersection_lanelets)
+    entry_t_sec, exit_t_sec = get_intersection_entry_exit_times(ros_bag_file, intersection_lanelets)
+    detected_t_sec, started_moving_t_sec, exited_crosswalk_t_sec = get_pedestrian_times_of_interest(ros_bag_file, PED_CROSSING_X, PED_CROSSING_Y, PED_CROSSING_DIR)
 
     with rosbag.Bag(ros_bag_file, "r") as bag:
         twist_msgs = list(bag.read_messages(topics=['/hardware_interface/vehicle/twist']))
 
     for _, msg, t in twist_msgs:
-        speeds.append(msg.twist.linear.x)
-        time_stamps.append(t.to_sec())
+        if (msg.twist.linear.x > EPSILON):
+            raw_speeds.append(msg.twist.linear.x)
+            time_stamps.append(t.to_sec())
 
      # Apply moving average filter
-    filtered_speeds = moving_average(speeds, window_size)
+    filtered_speeds = moving_average(raw_speeds, window_size)
     # Adjust time_stamps length to match the filtered_speeds length
     adjusted_time_stamps = time_stamps[int(window_size/2):int(-window_size/2)+1]
     speed_time_pair = zip(filtered_speeds, adjusted_time_stamps)
+
 
     for current, next_ in more_itertools.pairwise(speed_time_pair):
         curr_speed, current_log_timestamp = current
@@ -81,34 +186,55 @@ def plot_deceleration(ros_bag_file, window_size=5):
 
         instant_decel = (next_speed - curr_speed) / delta_time
 
-        if (curr_speed > EPSILON):
-            # Store deceleration and timestamp for plotting
-            decel_values.append(instant_decel)
-            plotting_time_stamps.append(current_log_timestamp)
+        # Store speed, deceleration, and timestamp for plotting
+        speeds_for_plotting.append(curr_speed)
+        decel_values.append(instant_decel)
+        plotting_time_stamps.append(current_log_timestamp)
+
 
     # Plotting
-    plt.figure(figsize=(10, 5))
-    plt.plot(plotting_time_stamps, decel_values, 'o')
-    plt.title('Instantaneous Deceleration over Time')
-    plt.xlabel('Time (s)')
-    plt.ylabel('Deceleration (m/s^2)')
+    fig, axs = plt.subplots(2, 1, figsize=(30, 10))
 
-    # Add intersection entry and exit timestamps as vertical lines
-    plt.axvline(x=entry_t.to_sec(), color='g', linestyle='--', label='Intersection Entry Time')
-    plt.axvline(x=exit_t.to_sec(), color='r', linestyle='--', label='Intersection Exit Time')
+    # Plot deceleration
+    axs[0].plot(plotting_time_stamps, decel_values, 'o')
+    axs[0].set_title('Instantaneous Deceleration over Time')
+    axs[0].set_xlabel('Time (s)')
+    axs[0].set_ylabel('Deceleration (m/s^2)')
 
-    # Creating legend without duplicate labels
-    handles, labels = plt.gca().get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))
-    plt.legend(by_label.values(), by_label.keys())
+    # Plot speed
+    axs[1].plot(plotting_time_stamps, speeds_for_plotting, '-')
+    axs[1].set_title('Speed over Time')
+    axs[1].set_xlabel('Time (s)')
+    axs[1].set_ylabel('Speed (m/s)')
 
-    plt.grid(True)
+    # NOTE: Object can get detected very early on due to CP
+    # therefore, for better plotting we take the max of first time platform engaged and object detected
+    detected_t_sec = max(detected_t_sec, adjusted_time_stamps[0])
 
-    plt.savefig(
-        figures_dir / f"deceleration.png",
-    )
-    plt.show()
+    # Adding vertical lines to both subplots for important timestamps
+    for i, ax in enumerate(axs):
+        ax.axvline(x=detected_t_sec, color='b', linestyle='--', label='Pedestrian Detected Time')
+        ax.axvline(x=started_moving_t_sec, color='g', linestyle='--', label='Pedestrian Started Moving Time')
+        ax.axvline(x=exited_crosswalk_t_sec, color='r', linestyle='--', label='Pedestrian Exited Intersection Time')
+        ax.axvline(x=entry_t_sec, color='purple', linestyle='-', linewidth=2, label="Vehicle's Intersection Entry Time")
+        ax.axvline(x=exit_t_sec, color='pink', linestyle='-', linewidth=2, label="Vehicle's Intersection Exit Time")
+        if (i == 0):
+            ax.axhline(y=max_deceleration_value, color='red', linestyle='--', label="Max Decel for Comfortable Travel")
 
+        ax.grid(True)
+        ax.legend()
+
+    plt.tight_layout()
+
+    if figure_dir is None:
+        figure_dir = Path("figures")
+
+    figure_dir.mkdir(exist_ok=True)
+
+    plt.savefig(figure_dir / "deceleration_and_speed.png")
+
+    if show_plot:
+        plt.show()
 
 parser = ArgumentParser(
     prog="plot deceleration",
@@ -122,10 +248,20 @@ parser.add_argument(
     required=True,
 )
 
-figures_dir = Path("figures")
-figures_dir.mkdir(exist_ok=True)
+parser.add_argument(
+    "--show-plot",
+    help="Plot vehicle and pedestrian paths and the encroachment zone (debugging only)",
+    action="store_true",
+)
+
+parser.add_argument(
+    "--plots-dir",
+    type=Path,
+    help="Directory to store generated plots",
+)
+
 
 cli_args = parser.parse_args()
 
-plot_deceleration(cli_args.rosbag)
+plot_deceleration_and_speed(cli_args.rosbag, cli_args.show_plot, cli_args.plots_dir)
 

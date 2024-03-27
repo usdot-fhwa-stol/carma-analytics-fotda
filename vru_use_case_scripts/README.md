@@ -196,9 +196,10 @@ It takes in one CSV files containing vehicle's cp objects respective detected si
 
 ![](docs/example_missing_object_duration.png)
 
-## `plot_deceleration`
+## `plot_deceleration_and_speed`
 
-This script takes in one argument - rosbag and plots the deceleration rate between each twist msgs of the platform.
+This script takes in one required argument - rosbag and plots the deceleration value between each twist msgs of the platform and corresponding speeds used to generate the decel graph. Other optional arguments are to `--show-plot` which shows the plot
+and `--plots-dir` which specified the directory to save the graph (by default, it creates `figures` folder in the current directory)
 
 > [!NOTE]
 > This script low pass filters the speed before plotting to filter the short term noise
@@ -208,13 +209,20 @@ This script takes in one argument - rosbag and plots the deceleration rate betwe
 Plot the data:
 
 ```console
-./plot_deceleration \
+./plot_deceleration_and_speed \
   --rosbag <dir-to-rosbag>
+```
+or:
+```console
+./plot_deceleration_and_speed \
+  --rosbag <dir-to-rosbag>
+  --show-plot
+  --plots-dir <dir-to-save-image>
 ```
 
 ### Example output
 
-![](docs/example-deceleration-rate.png)
+![](docs/example-deceleration-and-speed.png)
 
 
 ## `calc_post_encroachment_time`
