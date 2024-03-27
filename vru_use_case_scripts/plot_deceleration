@@ -37,7 +37,8 @@ class PedestrianCrossingDirection(Enum):
     NORTH_WEST = 8
 
 # A point representing where the pedestrian FINISHED crossing the crosswalk
-# and the direction it was facing at the time
+# and the direction it was facing at the time. Empirically found from
+# carla's ground truth data about the crossing_pedestrian
 PED_CROSSING_X = 261.34
 PED_CROSSING_Y = 178.99
 PED_CROSSING_DIR = PedestrianCrossingDirection.EAST
