@@ -159,6 +159,12 @@ parser.add_argument(
     required=True,
 )
 
+parser.add_argument(
+    "--plots-dir",
+    type=Path,
+    help="Directory to store generated plots",
+)
+
 cli_args = parser.parse_args()
 
 detections_df = parse_positions_from_detection_csv(cli_args.vehicle_detection_csv)
@@ -169,6 +175,10 @@ sensor_map_position = parse_infrastructure_sensor_position_from_json(
 )
 
 figures_dir = Path("figures")
+
+if cli_args.plots_dir is not None:
+    figures_dir = cli_args.plots_dir
+
 figures_dir.mkdir(exist_ok=True)
 
 for detection_id in get_unique_object_ids(detections_df):
@@ -206,6 +216,10 @@ for detection_id in get_unique_object_ids(detections_df):
         "Message Time (ms)"
     )
     object_sdsm_unique_times = object_sdsm.drop_duplicates("Message Time (ms)")
+
+    if object_sdsm_unique_times.empty:
+        print(f"No SDSMs found for detection '{detection_id}'")
+        continue
 
     times = np.arange(
         object_detection_unique_times["Message Time (ms)"].iloc[0],
