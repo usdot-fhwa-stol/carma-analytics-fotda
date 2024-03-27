@@ -261,13 +261,13 @@ for detection_id in get_unique_object_ids(detections_df):
     position_y.plot(
         object_detection["Message Time (ms)"] / 1e3,
         object_detection["Map Position Y (m)"],
-        label="Vehicle",
+        label="Vehicle Detected",
     )
 
     position_y.plot(
         object_sdsm["Message Time (ms)"] / 1e3,
         object_sdsm["Relative Position Y (m)"] + sensor_map_position["y"],
-        label="SDSM",
+        label="SDSM Reported",
     )
 
     position_y.set_ylabel("$y$ (map) [m]")
