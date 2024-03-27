@@ -125,7 +125,7 @@ parser.add_argument(
     required=True,
 )
 
-parser.add_argument("--plot-dir", type=Path, required=True)
+parser.add_argument("--plots-dir", type=Path, default=Path("plots"), required=True)
 
 cli_args = parser.parse_args()
 
@@ -151,11 +151,6 @@ plt.title("Time-to-collision (TTC) v. Simulation Time")
 plt.ylabel("Time-to-collision (TTC) [s]")
 plt.xlabel("CDASim Time [s]")
 
-figures_dir = Path("figures")
+cli_args.plots_dir.mkdir(exist_ok=True)
 
-if cli_args.plot_dir is not None:
-    figures_dir = cli_args.plot_dir
-
-figures_dir.mkdir(exist_ok=True)
-
-plt.savefig(figures_dir / f"ttc.png")
+plt.savefig(cli_args.plots_dir / f"ttc.png")
