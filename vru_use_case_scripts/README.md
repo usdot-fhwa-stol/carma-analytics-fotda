@@ -234,3 +234,16 @@ vehicle enter time [ms]: 57130.000002
 pedestrian exit time [ms]: 51800.0007
 post-encroachment time (PET) [ms]: 5329.999302000004
 ```
+
+## `run_all_analysis_scripts
+
+This scripts runs the above scripts for all VRU scenarios in a directory.
+
+> [!NOTE]
+> This script assumes each subdirectory within the specified directory contains all the data for that specific run
+
+### Usage examples
+
+```console
+./run_all_analysis_scripts --input-dir <path_to_run_subdirs>
+```
