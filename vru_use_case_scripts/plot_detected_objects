@@ -11,7 +11,10 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.interpolate import splrep, BSpline
+import math
 
+# Adds a red horizontal line on the error plot between detected positions by sdsm and vehicle
+MAX_ERROR_BETWEEN_SDSM_AND_VEH_DETECTED_OBJECTS_IN_METER = 1.0
 
 def parse_positions_from_sdsm_csv(file_path: Path):
     def get_timestamp(csv_row: list):
@@ -223,7 +226,7 @@ for detection_id in get_unique_object_ids(detections_df):
         0.01,
     )
 
-    fig, (position_x, error_x, position_y, error_y) = plt.subplots(4, sharex=True)
+    fig, (position_x, position_y, error) = plt.subplots(3, sharex=True)
 
     position_x.plot(
         object_detection["Message Time (ms)"] / 1e3,
@@ -238,8 +241,8 @@ for detection_id in get_unique_object_ids(detections_df):
     )
 
     position_x.set_ylabel("$x$ (map) [m]")
-    # position_x.legend()
-    lgd = position_x.legend(bbox_to_anchor=(1.04, 1), borderaxespad=0)
+
+    lgd_x = position_x.legend(bbox_to_anchor=(1.04, 1), borderaxespad=0)
 
     det_tck_x = splrep(
         object_detection_unique_times["Message Time (ms)"].tolist(),
@@ -255,24 +258,21 @@ for detection_id in get_unique_object_ids(detections_df):
         k=5,
     )
 
-    error_x.plot(
-        times / 1e3, abs(BSpline(*det_tck_x)(times) - BSpline(*sdsm_tck_x)(times))
-    )
-    error_x.set_ylabel("$x$ Error [m]")
-
     position_y.plot(
         object_detection["Message Time (ms)"] / 1e3,
         object_detection["Map Position Y (m)"],
-        label="Vehicle",
+        label="Vehicle Detected",
     )
 
     position_y.plot(
         object_sdsm["Message Time (ms)"] / 1e3,
         object_sdsm["Relative Position Y (m)"] + sensor_map_position["y"],
-        label="SDSM",
+        label="SDSM Reported",
     )
 
     position_y.set_ylabel("$y$ (map) [m]")
+
+    lgd_y = position_y.legend(bbox_to_anchor=(1.04, 1), borderaxespad=0)
 
     det_tck_y = splrep(
         object_detection_unique_times["Message Time (ms)"].tolist(),
@@ -288,17 +288,23 @@ for detection_id in get_unique_object_ids(detections_df):
         k=5,
     )
 
-    error_y.plot(
-        times / 1e3, abs(BSpline(*det_tck_y)(times) - BSpline(*sdsm_tck_y)(times))
-    )
-    error_y.set_ylabel("$y$ Error [m]")
+    # Plot the total error
+    x_list = abs(BSpline(*det_tck_x)(times) - BSpline(*sdsm_tck_x)(times))
+    y_list = abs(BSpline(*det_tck_y)(times) - BSpline(*sdsm_tck_y)(times))
 
-    error_y.set_xlabel("CDASim Time [s]")
+    error_list = [math.sqrt(x**2 + y**2) for x, y in zip(x_list, y_list)]
+    error.set_xlabel("CDASim Time [s]")
+    error.set_ylabel("Error [m]")
+    error.axhline(y=MAX_ERROR_BETWEEN_SDSM_AND_VEH_DETECTED_OBJECTS_IN_METER, color='r', linestyle='--', label= "Expected Max Error")
+    lgd_error = error.legend(bbox_to_anchor=(1.04, 1), borderaxespad=0)
+    error.plot(
+        times / 1e3, error_list
+    )
 
     suptitle = fig.suptitle(f"Object Position v. Simulation Time - {detection_id}")
 
     plt.savefig(
         plots_dir / f"object_position_v_simulation_time_{detection_id}.png",
-        bbox_extra_artists=(lgd, suptitle),
+        bbox_extra_artists=(lgd_x, lgd_y, lgd_error, suptitle),
         bbox_inches="tight",
     )
