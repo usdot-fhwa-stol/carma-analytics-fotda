@@ -259,6 +259,22 @@ def run_plot_time_to_collision(
         ]
     )
 
+def run_plot_deceleration(rosbag_file, plots_dir):
+    script_path = Path(os.path.realpath(__file__)).parent / "plot_deceleration"
+
+    if not script_path.exists():
+        print(f"could not find script '{script_path}'")
+        exit(1)
+
+    subprocess.run(
+        [
+            str(script_path),
+            "--rosbag",
+            str(rosbag_file),
+            "--plots-dir",
+            str(plots_dir),
+        ]
+    )
 
 def run_process_duplicates(rosbag_file, plots_dir):
     script_path = Path(os.path.realpath(__file__)).parent / "process_duplicates.py"
@@ -350,4 +366,9 @@ for data_dir in [
     run_process_duplicates(
         rosbag_file=next(data_dir.glob("*.bag")),
         plots_dir=output_dir / "process_duplicates",
+    )
+
+    run_plot_deceleration(
+        rosbag_file=next(data_dir.glob("*.bag")),
+        plots_dir=output_dir / "plot_deceleration",
     )
