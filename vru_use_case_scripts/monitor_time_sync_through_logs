@@ -20,9 +20,9 @@ IS_SYNCED_PLOT_NAME = 'Is Synced?'
 # stores how long (in system wall time) it took for the tool receive the next simulation time step
 # since MOSAIC commanded its first co-simulation tool to the next time step
 tool_activation_delay_since_last_cdasim_step = {}
+tool_activation_delay_timestamp_recorded = []
 
 PATTERN_TO_MATCH = 'Simulation Time: (\d+) where current system time is: (\d+)'
-PATTERN_TO_MATCH1 = 'Simulation Time: (\d+) here current system time is: (\d+)'
 
 
 # Main class that tracks and processes log lines retrieved from multiple files and observers
@@ -30,7 +30,6 @@ class LogMonitor:
     def __init__(self, files):
         # Pattern to match "Simulation Time: X where current system time is: Y"
         self.log_pattern = re.compile(PATTERN_TO_MATCH)
-        self.log_pattern1 = re.compile(PATTERN_TO_MATCH1)
 
         # Store system times by simulation time, across all files {simulation_time, list({system_time, file_name})}
         self.simulation_times = {}
@@ -62,15 +61,9 @@ class LogMonitor:
         global IS_SYNCED_PLOT_NAME
 
         match = self.log_pattern.search(line)
-        #if ('Traffic.log' in file_path):
-        #    print(f"Processing: {line}")
-        if not match:
-            match = self.log_pattern1.search(line)
         if match:
             simulation_time = int(match.group(1))
             system_time = int(match.group(2))
-            #print(f"Detected a match file_path: {file_path} and simulation_time: {simulation_time} and system_time: {system_time}")
-
 
             if simulation_time in self.simulation_times:
                 # Already have an entry for this simulation time
@@ -117,6 +110,7 @@ class LogMonitor:
                             tool_activation_delay_since_last_cdasim_step[cached_file_path].append(tool_system_time_when_T1_received - min_T1_system_time)
 
                     tool_activation_delay_since_last_cdasim_step[IS_SYNCED_PLOT_NAME].append(is_synced) #
+                    tool_activation_delay_timestamp_recorded.append(T1 / 1e3) #convert to sec
 
                     #already checked this simulation time, so del to save space
                     del self.simulation_times[T1]
@@ -226,11 +220,11 @@ def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, f
                 continue  # Skip plotting MOSAIC.log here
 
             ax.clear()  # Clear the current subplot
-            iterations = list(range(1, len(delay_list) + 1))
-            ax.plot(iterations, delay_list, label=file_name)
+            #iterations = list(range(1, len(delay_list) + 1))
+            ax.plot(tool_activation_delay_timestamp_recorded, delay_list, label=file_name)
             ax.set_title(file_name)
-            ax.set_xlabel('Iteration Times')
-            ax.set_ylabel('Duration between sim steps, ms')
+            ax.set_xlabel('Simulation Times [s]')
+            ax.set_ylabel('Duration between sim steps [ms]')
             if (delay_list):
                 ax.set_ylim(max(-500, min(delay_list)), min(500, max(delay_list))) #sometimes the delay is spiking due to other windows starting etc
             ax.legend()
@@ -238,10 +232,10 @@ def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, f
 
         # After plotting all tools, overlay MOSAIC.log data on each subplot
         if mosaic_data is not None:
-            iterations = list(range(1, len(mosaic_data) + 1))
+            #iterations = list(range(1, len(mosaic_data) + 1))
             for ax in axs:
                 # Differentiate red with line
-                ax.plot(iterations, mosaic_data, label='MOSAIC.log', linestyle='--', color='red')
+                ax.plot(tool_activation_delay_timestamp_recorded, mosaic_data, label='MOSAIC.log', linestyle='--', color='red')
                 ax.legend()  # Update the legend to include MOSAIC.log
 
             plt.tight_layout()
@@ -259,7 +253,7 @@ def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, f
     try:
         while True:
             time.sleep(2) #only plot every 2 sec
-            #update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step)
+            update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step)
 
     except KeyboardInterrupt:
         for observer in observers:
