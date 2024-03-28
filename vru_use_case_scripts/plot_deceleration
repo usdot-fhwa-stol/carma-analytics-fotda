@@ -62,20 +62,20 @@ def get_intersection_entry_exit_times(ros_bag_file, intersection_lanelets):
         for _, msg, t in route_state_msgs:
             if (entry_t_sec is None and msg.lanelet_id in intersection_lanelets):
                 print(f"Detected entry time into the intersection (lanelet id: {msg.lanelet_id}) at: {t.to_sec()}")
-                entry_t_sec = t
+                entry_t_sec = t.to_sec()
 
             if (entry_t_sec is not None and msg.lanelet_id not in intersection_lanelets):
                 print(f"Detected exit time out of the intersection (from lanelet id: {msg.lanelet_id}) at: {t.to_sec()}")
-                exit_t_sec = t
+                exit_t_sec = t.to_sec()
                 break
 
-    return (entry_t_sec.to_sec(), exit_t_sec.to_sec())
+    return (entry_t_sec, exit_t_sec)
 
 
 def get_pedestrian_times_of_interest(ros_bag_file, ped_crossing_x, ped_crossing_y, ped_crossing_dir):
-    detected_t_sec = 0.0
-    started_moving_t_sec = 0.0
-    exited_crosswalk_t_sec = 0.0
+    detected_t_sec = None
+    started_moving_t_sec = None
+    exited_crosswalk_t_sec = None
     ped_odometry = []
     detected_objects = []
 
@@ -210,7 +210,13 @@ def plot_deceleration_and_speed(ros_bag_file, show_plot, figure_dir, max_deceler
 
     # NOTE: Object can get detected very early on due to CP
     # therefore, for better plotting we take the max of first time platform engaged and object detected
-    detected_t_sec = max(detected_t_sec, adjusted_time_stamps[0])
+    detected_t_sec = adjusted_time_stamps[0] if detected_t_sec is None else detected_t_sec
+
+    # Also if the actors never achieved the events we are tracking, move the line to the end of the plot
+    started_moving_t_sec = adjusted_time_stamps[-1] if started_moving_t_sec is None else started_moving_t_sec
+    exited_crosswalk_t_sec = adjusted_time_stamps[-1] if exited_crosswalk_t_sec is None else exited_crosswalk_t_sec
+    entry_t_sec = adjusted_time_stamps[-1] if entry_t_sec is None else entry_t_sec
+    exit_t_sec = adjusted_time_stamps[-1] if exit_t_sec is None else exit_t_sec
 
     # Adding vertical lines to both subplots for important timestamps
     for i, ax in enumerate(axs):
