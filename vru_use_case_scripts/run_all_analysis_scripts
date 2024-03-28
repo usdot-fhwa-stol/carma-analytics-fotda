@@ -179,7 +179,7 @@ def run_plot_detected_objects(sdsm_csv, vehicle_detection_csv, sensors_json, plo
     )
 
 
-def run_plot_missing_object_durations(vehicle_detection_csv, figures_dir):
+def run_plot_missing_object_durations(vehicle_detection_csv, plots_dir):
     script_path = (
         Path(os.path.realpath(__file__)).parent / "plot_missing_object_durations"
     )
@@ -193,13 +193,13 @@ def run_plot_missing_object_durations(vehicle_detection_csv, figures_dir):
             str(script_path),
             "--vehicle-detection-csv",
             str(vehicle_detection_csv),
-            "--figures-dir",
-            str(figures_dir),
+            "--plots-dir",
+            str(plots_dir),
         ]
     )
 
 
-def run_plot_rtf_data(rtf_csv, plot_dir, min_required):
+def run_plot_rtf_data(rtf_csv, plots_dir, min_required):
     script_path = Path(os.path.realpath(__file__)).parent / "plot_rtf_data"
 
     if not script_path.exists():
@@ -212,8 +212,8 @@ def run_plot_rtf_data(rtf_csv, plot_dir, min_required):
             str(rtf_csv),
             "--min-required",
             str(min_required),
-            "--plot-dir",
-            str(plot_dir),
+            "--plots-dir",
+            str(plots_dir),
         ]
     )
 
@@ -238,7 +238,9 @@ def run_plot_sdsm_position_error(sdsm_csv, detection_csv, plots_dir):
     )
 
 
-def run_plot_time_to_collision(vehicle_odometry_csv, pedestrian_odometry_csv, plot_dir):
+def run_plot_time_to_collision(
+    vehicle_odometry_csv, pedestrian_odometry_csv, plots_dir
+):
     script_path = Path(os.path.realpath(__file__)).parent / "plot_time_to_collision"
 
     if not script_path.exists():
@@ -252,13 +254,13 @@ def run_plot_time_to_collision(vehicle_odometry_csv, pedestrian_odometry_csv, pl
             str(vehicle_odometry_csv),
             "--pedestrian-odometry-csv",
             str(pedestrian_odometry_csv),
-            "--plot-dir",
-            str(plot_dir),
+            "--plots-dir",
+            str(plots_dir),
         ]
     )
 
 
-def run_process_duplicates(rosbag_file, plot_dir):
+def run_process_duplicates(rosbag_file, plots_dir):
     script_path = Path(os.path.realpath(__file__)).parent / "process_duplicates.py"
 
     if not script_path.exists():
@@ -276,8 +278,8 @@ def run_process_duplicates(rosbag_file, plot_dir):
             str(rosbag_file),
             "--csv-dir",
             str(tmp_dir),
-            "--plot-dir",
-            str(plot_dir),
+            "--plots-dir",
+            str(plots_dir),
         ]
     )
 
@@ -324,12 +326,12 @@ for data_dir in [
 
     run_plot_missing_object_durations(
         vehicle_detection_csv=rosbag_csv_dir / "vehicle_detected_objects.csv",
-        figures_dir=output_dir / "plot_missing_object_durations"
+        plots_dir=output_dir / "plot_missing_object_durations"
     )
 
     run_plot_rtf_data(
         rtf_csv=data_dir / next(data_dir.glob("cdasim_rtf_data*.csv")),
-        plot_dir=output_dir / "plot_rtf_data",
+        plots_dir=output_dir / "plot_rtf_data",
         min_required=0.25
     )
 
@@ -342,10 +344,10 @@ for data_dir in [
     run_plot_time_to_collision(
         vehicle_odometry_csv=rosbag_csv_dir / "vehicle_odometry.csv",
         pedestrian_odometry_csv=rosbag_csv_dir / "pedestrian_odometry.csv",
-        plot_dir=output_dir / "plot_time_to_collision"
+        plots_dir=output_dir / "plot_time_to_collision",
     )
 
     run_process_duplicates(
         rosbag_file=next(data_dir.glob("*.bag")),
-        plot_dir=output_dir / "process_duplicates"
+        plots_dir=output_dir / "process_duplicates",
     )
