@@ -240,7 +240,28 @@ post-encroachment time (PET) [ms]: 5329.999302000004
 This scripts runs the above scripts for all VRU scenarios in a directory.
 
 > [!NOTE]
-> This script assumes each subdirectory within the specified directory contains all the data for that specific run
+> This script assumes each subdirectory within the specified directory contains all the data for that specific run.
+> For example:
+```
+simulation_data
+├── run1
+│   ├── _2024-03-22-16-56-19.bag
+│   ├── carma_streets_kafka_2024-03-22_12-48-53.zip
+│   ├── cdasim_rtf_data_2024-03-22_12-49-11.csv
+│   ├── sensors.json
+│   ├── simulation_logs_20240322-20240325
+│   ├── v2xhub_logs_20240322-20240325.zip
+│   ├── VulnerableRoadUserCollision_ThreeTrucks-1.json
+│   └── ...
+│ 
+└── run2
+    ├── _2024-03-22-17-44-20.bag
+    ├── carma_streets_kafka_2024-03-22_12-58-10.zip
+    ├── cdasim_rtf_data_2024-03-22_12-58-27.csv
+    ├── sensors.json
+    ├── VulnerableRoadUserCollision_ThreeTrucks-2.json
+    └── ...
+```
 
 ### Usage examples
 
