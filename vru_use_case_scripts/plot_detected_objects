@@ -179,6 +179,7 @@ sensor_map_position = parse_infrastructure_sensor_position_from_json(
 )
 
 plots_dir = cli_args.plots_dir
+plots_dir.mkdir(exist_ok=True, parents=True)
 
 for detection_id in get_unique_object_ids(detections_df):
     object_detection = detections_df.loc[detections_df["Object ID"] == detection_id]

@@ -1,0 +1,353 @@
+#!/usr/bin/env python3
+
+from argparse import ArgumentParser
+import shutil
+import os
+from pathlib import Path
+import subprocess
+
+
+parser = ArgumentParser(
+    prog="calc_post_encroachment_time",
+    description="",
+)
+
+parser.add_argument(
+    "--input-dir",
+    type=Path,
+    help="Directory containing data directories to analyze",
+    required=True,
+)
+
+cli_args = parser.parse_args()
+
+
+def run_parse_ros_bags(data_dir, output_dir):
+    bag_file_path = next(data_dir.glob("*.bag"))
+
+    output_dir.mkdir(exist_ok=True, parents=True)
+
+    script_path = (
+        Path(os.path.realpath(__file__)).parent
+        / "../src/carma-platform/parse_ros_bags.py"
+    )
+
+    if not script_path.exists():
+        print(f"could not find script '{script_path}'")
+        exit(1)
+
+    subprocess.run(
+        [
+            "python3",
+            str(script_path),
+            "--ros-bag-file",
+            str(bag_file_path),
+            "--csv-dir",
+            str(output_dir),
+        ]
+    )
+
+
+def run_parse_kafka_logs(data_dir, output_dir):
+    kafka_logs_zip_path = next(data_dir.glob("carma_streets_kafka*.zip"))
+
+    output_dir.mkdir(exist_ok=True, parents=True)
+
+    tmp_dir = Path("/tmp/kafka_logs_dir")
+    shutil.unpack_archive(kafka_logs_zip_path, tmp_dir)
+
+    script_path = (
+        Path(os.path.realpath(__file__)).parent
+        / "../src/carma-streets/parse_kafka_logs.py"
+    )
+
+    if not script_path.exists():
+        print(f"could not find script '{script_path}'")
+        exit(1)
+
+    subprocess.run(
+        [
+            "python3",
+            str(script_path),
+            "--kafka-log-dir",
+            str(tmp_dir),
+            "--csv-dir",
+            str(output_dir),
+            "--simulation",
+        ]
+    )
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def run_plot_message_frequencies(csv_dir, plots_dir):
+    script_path = (
+        Path(os.path.realpath(__file__)).parent
+        / "../src/carma-streets/plot_message_frequencies.py"
+    )
+
+    if not script_path.exists():
+        print(f"could not find script '{script_path}'")
+        exit(1)
+
+    subprocess.run(
+        [
+            "python3",
+            str(script_path),
+            "--csv-dir",
+            str(csv_dir),
+            "--plots-dir",
+            str(plots_dir),
+            "--simulation",
+        ]
+    )
+
+
+def run_cal_post_encroachment_time(
+    vehicle_odometry_csv, pedestrian_odometry_csv, output_file_path
+):
+    script_path = (
+        Path(os.path.realpath(__file__)).parent / "calc_post_encroachment_time"
+    )
+
+    if not script_path.exists():
+        print(f"could not find script '{script_path}'")
+        exit(1)
+
+    result = subprocess.run(
+        [
+            str(script_path),
+            "--vehicle-odometry-csv",
+            str(vehicle_odometry_csv),
+            "--pedestrian-odometry-csv",
+            str(pedestrian_odometry_csv),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    with open(output_file_path, "w") as file:
+        file.write(result.stdout)
+
+
+def run_extract_cp_stack_processing_time(
+    sdsm_csv, vehicle_detection_csv, output_file_path
+):
+    script_path = (
+        Path(os.path.realpath(__file__)).parent / "extract_cp_stack_processing_time"
+    )
+
+    if not script_path.exists():
+        print(f"could not find script '{script_path}'")
+        exit(1)
+
+    result = subprocess.run(
+        [
+            str(script_path),
+            "--sdsm-csv",
+            str(sdsm_csv),
+            "--vehicle-detection-csv",
+            str(vehicle_detection_csv),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    with open(output_file_path, "w") as file:
+        file.write(result.stdout)
+
+
+def run_plot_detected_objects(sdsm_csv, vehicle_detection_csv, sensors_json, plots_dir):
+    script_path = Path(os.path.realpath(__file__)).parent / "plot_detected_objects"
+
+    if not script_path.exists():
+        print(f"could not find script '{script_path}'")
+        exit(1)
+
+    subprocess.run(
+        [
+            str(script_path),
+            "--sdsm-csv",
+            str(sdsm_csv),
+            "--vehicle-detection-csv",
+            str(vehicle_detection_csv),
+            "--infrastructure-sensors-json",
+            str(sensors_json),
+            "--plots-dir",
+            str(plots_dir),
+        ]
+    )
+
+
+def run_plot_missing_object_durations(vehicle_detection_csv, plots_dir):
+    script_path = (
+        Path(os.path.realpath(__file__)).parent / "plot_missing_object_durations"
+    )
+
+    if not script_path.exists():
+        print(f"could not find script '{script_path}'")
+        exit(1)
+
+    subprocess.run(
+        [
+            str(script_path),
+            "--vehicle-detection-csv",
+            str(vehicle_detection_csv),
+            "--plots-dir",
+            str(plots_dir),
+        ]
+    )
+
+
+def run_plot_rtf_data(rtf_csv, plots_dir, min_required):
+    script_path = Path(os.path.realpath(__file__)).parent / "plot_rtf_data"
+
+    if not script_path.exists():
+        print(f"could not find script '{script_path}'")
+        exit(1)
+
+    subprocess.run(
+        [
+            str(script_path),
+            str(rtf_csv),
+            "--min-required",
+            str(min_required),
+            "--plots-dir",
+            str(plots_dir),
+        ]
+    )
+
+
+def run_plot_sdsm_position_error(sdsm_csv, detection_csv, plots_dir):
+    script_path = Path(os.path.realpath(__file__)).parent / "plot_sdsm_position_error"
+
+    if not script_path.exists():
+        print(f"could not find script '{script_path}'")
+        exit(1)
+
+    subprocess.run(
+        [
+            str(script_path),
+            "--sdsm-csv",
+            str(sdsm_csv),
+            "--detection-csv",
+            str(detection_csv),
+            "--plots-dir",
+            str(plots_dir),
+        ]
+    )
+
+
+def run_plot_time_to_collision(
+    vehicle_odometry_csv, pedestrian_odometry_csv, plots_dir
+):
+    script_path = Path(os.path.realpath(__file__)).parent / "plot_time_to_collision"
+
+    if not script_path.exists():
+        print(f"could not find script '{script_path}'")
+        exit(1)
+
+    subprocess.run(
+        [
+            str(script_path),
+            "--vehicle-odometry-csv",
+            str(vehicle_odometry_csv),
+            "--pedestrian-odometry-csv",
+            str(pedestrian_odometry_csv),
+            "--plots-dir",
+            str(plots_dir),
+        ]
+    )
+
+
+def run_process_duplicates(rosbag_file, plots_dir):
+    script_path = Path(os.path.realpath(__file__)).parent / "process_duplicates.py"
+
+    if not script_path.exists():
+        print(f"could not find script '{script_path}'")
+        exit(1)
+
+    tmp_dir = Path("/tmp/process_duplicates")
+    tmp_dir.mkdir(exist_ok=True, parents=True)
+
+    subprocess.run(
+        [
+            "python3",
+            str(script_path),
+            "--ros-bag-file",
+            str(rosbag_file),
+            "--csv-dir",
+            str(tmp_dir),
+            "--plots-dir",
+            str(plots_dir),
+        ]
+    )
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+for data_dir in [
+    dir_ for dir_ in cli_args.input_dir.iterdir() if cli_args.input_dir.is_dir()
+]:
+    print(f"Analyzing '{data_dir.name}'")
+
+    output_dir = data_dir / "analysis_results"
+
+    rosbag_csv_dir = output_dir / "parsed_files/rosbag"
+    kafka_csv_dir = output_dir / "parsed_files/kafka"
+
+    run_parse_ros_bags(data_dir, rosbag_csv_dir)
+    run_parse_kafka_logs(data_dir, kafka_csv_dir)
+
+    run_plot_message_frequencies(
+        csv_dir=kafka_csv_dir,
+        plots_dir=output_dir / "plot_message_frequencies",
+    )
+
+    run_cal_post_encroachment_time(
+        vehicle_odometry_csv=rosbag_csv_dir / "vehicle_odometry.csv",
+        pedestrian_odometry_csv=rosbag_csv_dir / "pedestrian_odometry.csv",
+        output_file_path=output_dir / "calc_post_encroachment_time.txt",
+    )
+
+    run_extract_cp_stack_processing_time(
+        sdsm_csv=rosbag_csv_dir / "detected_objects_from_incoming_sdsm.csv",
+        vehicle_detection_csv=rosbag_csv_dir
+        / "detected_objects_with_sim_received_time.csv",
+        output_file_path=output_dir / "extract_cp_stack_processing_time.txt",
+    )
+
+    run_plot_detected_objects(
+        sdsm_csv=kafka_csv_dir / "sdsm.csv",
+        vehicle_detection_csv=rosbag_csv_dir / "vehicle_detected_objects.csv",
+        sensors_json=data_dir / "sensors.json",
+        plots_dir=output_dir / "plot_detected_objects",
+    )
+
+    run_plot_missing_object_durations(
+        vehicle_detection_csv=rosbag_csv_dir / "vehicle_detected_objects.csv",
+        plots_dir=output_dir / "plot_missing_object_durations"
+    )
+
+    run_plot_rtf_data(
+        rtf_csv=data_dir / next(data_dir.glob("cdasim_rtf_data*.csv")),
+        plots_dir=output_dir / "plot_rtf_data",
+        min_required=0.25
+    )
+
+    run_plot_sdsm_position_error(
+        sdsm_csv=kafka_csv_dir / "sdsm.csv",
+        detection_csv=kafka_csv_dir / "detected_object.csv",
+        plots_dir=output_dir / "plot_sdsm_position_error",
+    )
+
+    run_plot_time_to_collision(
+        vehicle_odometry_csv=rosbag_csv_dir / "vehicle_odometry.csv",
+        pedestrian_odometry_csv=rosbag_csv_dir / "pedestrian_odometry.csv",
+        plots_dir=output_dir / "plot_time_to_collision",
+    )
+
+    run_process_duplicates(
+        rosbag_file=next(data_dir.glob("*.bag")),
+        plots_dir=output_dir / "process_duplicates",
+    )
