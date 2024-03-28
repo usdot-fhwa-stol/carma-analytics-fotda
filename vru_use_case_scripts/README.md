@@ -142,7 +142,6 @@ Plot the data:
 
 ![](docs/plot_time_to_collision_example.png)
 
-
 ## `extract_cp_stack_processing_time`
 
 This script takes in two CSV files containing vehicle's cp objects and objects from incoming_sdsm with
@@ -193,11 +192,52 @@ It takes in one CSV files containing vehicle's cp objects respective detected si
 ./plot_missing_object_durations
   --vehicle-detection-csv <path_to_csv_dir>/vehicle_detected_objects.csv.csv
 ```
-
 ### Example output
 
 ![](docs/example_missing_object_duration.png)
 
+## `plot_deceleration_and_speed`
+
+This script takes in one required argument - rosbag and plots the deceleration value between each twist msgs of the platform and corresponding speeds used to generate the decel graph. Other optional arguments are to `--show-plot` which shows the plot
+and `--plots-dir` which specified the directory to save the graph (by default, it creates `figures` folder in the current directory)
+
+Furthermore, the graph contains timestamps when the pedestrian was detected, started moving, and exited the crosswalk (using positional values only valid for intersection SumoID 785 in Town04). It also has timestamps when the vehicle entered the intersection and exited.
+
+> [!NOTE]
+> This script low pass filters the speed before plotting to filter the short term noise
+
+> [!NOTE]
+> If the pedestrian was detected very early on, the plot will show a vertical line at the time when platform starts moving for better plotting. The terminal output will have a correct timestam when the pedestrian was detected by the CP stack.
+
+### Usage examples
+
+Plot the data:
+
+```console
+./plot_deceleration_and_speed \
+  --rosbag <dir-to-rosbag>
+```
+or:
+```console
+./plot_deceleration_and_speed \
+  --rosbag <dir-to-rosbag>
+  --show-plot
+  --plots-dir <dir-to-save-image>
+```
+
+### Example output
+
+![](docs/example-deceleration-and-speed.png)
+
+in terminal:
+
+```
+Detected entry time into the intersection (lanelet id: 61405) at: 106.525044967
+Detected exit time out of the intersection (from lanelet id: 11568) at: 117.525045131
+Detected pedestrian detected_t_sec: 28.325043802
+Detected pedestrian started_moving_t_sec: 103.225044918
+Detected pedestrian exited_crosswalk_t_sec: 112.625045058
+```
 
 ## `calc_post_encroachment_time`
 
