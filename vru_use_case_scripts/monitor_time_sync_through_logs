@@ -185,7 +185,7 @@ def get_full_file_path(file_name, rosout_base_path, sim_base_path, carma_streets
     return file_path
 
 # Function to update plots for each file
-def update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step):
+def update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step, debug_mode):
     # The function treats MOSAIC log special because it overlays it on top of all other tool's subplots
     mosaic_data = None  # Placeholder for MOSAIC.log data
 
@@ -199,6 +199,9 @@ def update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step):
 
         if 'MOSAIC.log' in file_name:
             continue  # Skip plotting MOSAIC.log here
+
+        if not debug_mode and IS_SYNCED_PLOT_NAME not in file_name:
+            continue # only plot all delay graphs if debug_mode is on
 
         ax.clear()  # Clear the current subplot to replot
         ax.plot(tool_activation_delay_timestamp_recorded, delay_list, label=file_name)
@@ -233,7 +236,7 @@ def update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step):
         fig.canvas.draw_idle()
         plt.pause(0.1)  # Pause to update the chart
 
-def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, files_to_monitor):
+def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, files_to_monitor, debug_mode = False):#
     global tool_activation_delay_since_last_cdasim_step
     tool_activation_delay_since_last_cdasim_step[IS_SYNCED_PLOT_NAME] = []
     log_monitor = LogMonitor(files_to_monitor)
@@ -253,17 +256,24 @@ def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, f
             observer = monitor_file(file_path, log_monitor)
             observers.append(observer)
 
-    # Setup figure and subplots for dynamic updating
     num_plots = len(files_to_monitor)
-    fig, axs = plt.subplots(num_plots, 1, figsize=(20, 10))  # Ensure space for MOSAIC.log
 
-    if num_plots == 1:  # Ensure axs is iterable for a single subplot
+    fig = None
+    axs = None
+
+    # Only plot is_synced plot if not debug mode
+    if not debug_mode:
+        fig, axs = plt.subplots(1, 1, figsize=(10, 5))
         axs = [axs]
+    else:
+        fig, axs = plt.subplots(num_plots, 1, figsize=(20, 10))  # Ensure space for MOSAIC.log
+        if num_plots == 1:  # Ensure axs is iterable for a single subplot
+            axs = [axs]
 
     try:
         while True:
             time.sleep(2) #only plot every 2 sec
-            update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step)
+            update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step, debug_mode)
 
     except KeyboardInterrupt:
         for observer in observers:
