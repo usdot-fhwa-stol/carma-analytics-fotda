@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 import subprocess
 
-
 parser = ArgumentParser(
     prog="calc_post_encroachment_time",
     description="",
@@ -103,7 +102,7 @@ def run_plot_message_frequencies(csv_dir, plots_dir):
     )
 
 
-def run_cal_post_encroachment_time(
+def run_calc_post_encroachment_time(
     vehicle_odometry_csv, pedestrian_odometry_csv, output_file_path
 ):
     script_path = (
@@ -125,6 +124,12 @@ def run_cal_post_encroachment_time(
         capture_output=True,
         text=True,
     )
+
+    #ensure the result.stdout is filled. sometimes it is empty not sure why
+    if not result.stdout or result.stdout is "":
+        print(f"!!!!!!!!!!!!! \nDid not get any results for calc_post_encroachment_time at {output_file_path} \n!!!!!!!!!!!!!!")
+
+    print(result.stdout)
 
     with open(output_file_path, "w") as file:
         file.write(result.stdout)
@@ -152,6 +157,12 @@ def run_extract_cp_stack_processing_time(
         capture_output=True,
         text=True,
     )
+
+    #ensure the result.stdout is filled. sometimes it is empty not sure why
+    if not result.stdout or result.stdout is "":
+        print(f"!!!!!!!!!!!!! \nDid not get any results for extract_cp_stack_processing_time at {output_file_path} \n!!!!!!!!!!!!!!")
+
+    print(result.stdout)
 
     with open(output_file_path, "w") as file:
         file.write(result.stdout)
@@ -309,6 +320,13 @@ for data_dir in [
 
     output_dir = data_dir / "analysis_results"
 
+    #if (Path(output_dir).exists()):
+    #    print(f"Skipping {data_dir.name} because already analysis exists")
+    #    continue
+
+    if ("complete" not in data_dir.name):
+        print(f"Skipping incomplete folder {data_dir.name}")
+        continue
     rosbag_csv_dir = output_dir / "parsed_files/rosbag"
     kafka_csv_dir = output_dir / "parsed_files/kafka"
 
@@ -320,7 +338,7 @@ for data_dir in [
         plots_dir=output_dir / "plot_message_frequencies",
     )
 
-    run_cal_post_encroachment_time(
+    run_calc_post_encroachment_time(
         vehicle_odometry_csv=rosbag_csv_dir / "vehicle_odometry.csv",
         pedestrian_odometry_csv=rosbag_csv_dir / "pedestrian_odometry.csv",
         output_file_path=output_dir / "calc_post_encroachment_time.txt",
