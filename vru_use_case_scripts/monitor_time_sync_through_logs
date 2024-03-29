@@ -184,6 +184,55 @@ def get_full_file_path(file_name, rosout_base_path, sim_base_path, carma_streets
 
     return file_path
 
+# Function to update plots for each file
+def update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step):
+    # The function treats MOSAIC log special because it overlays it on top of all other tool's subplots
+    mosaic_data = None  # Placeholder for MOSAIC.log data
+
+    # Check if MOSAIC.log data is present and extract it from the regular plotting loop
+    for file_name in tool_activation_delay_since_last_cdasim_step.keys():
+        if 'MOSAIC.log' in file_name:
+            mosaic_data = tool_activation_delay_since_last_cdasim_step[file_name]
+            break
+
+    for ax, (file_name, delay_list) in zip(axs, tool_activation_delay_since_last_cdasim_step.items()):
+
+        if 'MOSAIC.log' in file_name:
+            continue  # Skip plotting MOSAIC.log here
+
+        ax.clear()  # Clear the current subplot to replot
+        ax.plot(tool_activation_delay_timestamp_recorded, delay_list, label=file_name)
+        ax.set_title(file_name)
+        ax.set_xlabel('Simulation Times [s]')
+
+        if IS_SYNCED_PLOT_NAME in file_name:
+            ax.set_ylabel('Is synced? 1: Yes, 0: No')
+        else:
+            # Show exactly 500ms Y axis unless the tool's delay exceeds as sometimes the delay is spiking due to other windows starting
+            if (delay_list):
+                ax.set_ylim(0, min(max(max(delay_list), 500), 500))
+
+            ax.set_ylabel('Duration between sim steps [ms]')
+
+        ax.legend()
+        ax.grid(True)
+
+    # After plotting all tools, overlay MOSAIC.log data on each subplot
+    if mosaic_data is not None:
+
+        for ax in axs:
+            # Skip if is synced plot
+            if IS_SYNCED_PLOT_NAME in ax.get_title():
+                continue
+
+            # Overlay MOSAIC with red line
+            ax.plot(tool_activation_delay_timestamp_recorded, mosaic_data, label='MOSAIC.log', linestyle='--', color='red')
+            ax.legend()  # Update the legend to include MOSAIC.log
+
+        plt.tight_layout()
+        fig.canvas.draw_idle()
+        plt.pause(0.1)  # Pause to update the chart
+
 def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, files_to_monitor):
     global tool_activation_delay_since_last_cdasim_step
     tool_activation_delay_since_last_cdasim_step[IS_SYNCED_PLOT_NAME] = []
@@ -204,55 +253,7 @@ def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, f
             observer = monitor_file(file_path, log_monitor)
             observers.append(observer)
 
-    # Function to update plots for each file
-    def update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step):
-        # The function treats MOSAIC log special because it overlays it on top of all other tool's subplots
-        mosaic_data = None  # Placeholder for MOSAIC.log data
-
-        # Check if MOSAIC.log data is present and extract it from the regular plotting loop
-        for file_name in tool_activation_delay_since_last_cdasim_step.keys():
-            if 'MOSAIC.log' in file_name:
-                mosaic_data = tool_activation_delay_since_last_cdasim_step[file_name]
-                break
-
-        for ax, (file_name, delay_list) in zip(axs, tool_activation_delay_since_last_cdasim_step.items()):
-
-            if 'MOSAIC.log' in file_name:
-                continue  # Skip plotting MOSAIC.log here
-
-            ax.clear()  # Clear the current subplot to replot
-            ax.plot(tool_activation_delay_timestamp_recorded, delay_list, label=file_name)
-            ax.set_title(file_name)
-            ax.set_xlabel('Simulation Times [s]')
-
-            if IS_SYNCED_PLOT_NAME in file_name:
-                ax.set_ylabel('Is synced?')
-            else:
-                ax.set_ylabel('Duration between sim steps [ms]')
-
-            if (delay_list):
-                ax.set_ylim(max(-500, min(delay_list)), min(500, max(delay_list))) #sometimes the delay is spiking due to other windows starting etc
-            ax.legend()
-            ax.grid(True)
-
-        # After plotting all tools, overlay MOSAIC.log data on each subplot
-        if mosaic_data is not None:
-
-            for ax in axs:
-                # Skip if is synced plot
-                if IS_SYNCED_PLOT_NAME in ax.get_tite():
-                    continue
-
-                # Overlay MOSAIC with red line
-                ax.plot(tool_activation_delay_timestamp_recorded, mosaic_data, label='MOSAIC.log', linestyle='--', color='red')
-                ax.legend()  # Update the legend to include MOSAIC.log
-
-            plt.tight_layout()
-            fig.canvas.draw_idle()
-            plt.pause(0.1)  # Pause to update the chart
-
     # Setup figure and subplots for dynamic updating
-    plt.ion()  # Turn on interactive mode
     num_plots = len(files_to_monitor)
     fig, axs = plt.subplots(num_plots, 1, figsize=(20, 10))  # Ensure space for MOSAIC.log
 
@@ -291,9 +292,6 @@ def backup_and_clear_sdsm_log(file_path):
 
     with open(file_path, 'w'):
         pass
-
-
-
 
 ###############
 ##### MAIN ####
