@@ -202,7 +202,7 @@ def update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step):
 
         ax.clear()  # Clear the current subplot to replot
         ax.plot(tool_activation_delay_timestamp_recorded, delay_list, label=file_name)
-        ax.set_title(file_name)
+        ax.set_title(get_component_name(file_name))
         ax.set_xlabel('Simulation Times [s]')
 
         if IS_SYNCED_PLOT_NAME in file_name:
@@ -212,7 +212,7 @@ def update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step):
             if (delay_list):
                 ax.set_ylim(0, min(max(max(delay_list), 500), 500))
 
-            ax.set_ylabel('Duration between sim steps [ms]')
+            ax.set_ylabel('Delay between sim steps [ms]')
 
         ax.legend()
         ax.grid(True)
@@ -270,6 +270,19 @@ def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, f
             observer.stop()
         for observer in observers:
             observer.join()
+
+def get_component_name(file_path):
+
+    if 'Traffic.log' in file_path:
+        return 'Sumo and CARLA'
+    elif 'sensor_data_sharing_service' in file_path:
+        return 'CARMA Streets: Sensor Data Sharing Service'
+    elif 'rosout.log' in file_path:
+        return 'CARMA Platform'
+    elif 'v2xhub' in file_path:
+        return 'V2X Hub'
+    else:
+        return file_path
 
 def backup_and_clear_sdsm_log(file_path):
     # Split the file path into directory, basename, and extension

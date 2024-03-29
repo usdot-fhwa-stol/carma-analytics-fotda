@@ -157,8 +157,10 @@ After starting cdasim through carma start all, give few seconds before running:
 
 ### Example output
 Red line shows how long in system wall time it took for MOSAIC to step to the next simulation time step.
-Blue lines show how long it took for each tool to be called by MOSAIC to step to the next simulation time step.
-We should expect red lines under the blue so that all tools are moving forward at the same time.
+Blue lines show the delay of each tools experience when setting the simulation time step since MOSAIC commanded the first tool to advance.
+Therefore we consider the time is synchronized if every tool received the next timestep before next timestep was broadcasted by MOSAIC.
+This would translate to blue lines being under the red ones indicating no tool experienced significant
+delay more than MOSAIC allowed between each simulation timesteps.
 First subplot on the top indicates whether of all tools are synced or not according to above criteria where 1:Synced 0: Not.
 MOSAIC.log is mosaic time
 vx2hub.log is V2XHub time
