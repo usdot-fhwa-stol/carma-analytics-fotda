@@ -23,7 +23,7 @@ tool_activation_delay_since_last_cdasim_step = {}
 tool_activation_delay_timestamp_recorded = []
 
 PATTERN_TO_MATCH = 'Simulation Time: (\d+) where current system time is: (\d+)'
-
+DEBUG_MODE = True
 
 # Main class that tracks and processes log lines retrieved from multiple files and observers
 class LogMonitor:
@@ -352,4 +352,4 @@ files_to_monitor = [
     'MOSAIC.log',
 ]
 
-start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, files_to_monitor)
+start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, files_to_monitor, DEBUG_MODE)
