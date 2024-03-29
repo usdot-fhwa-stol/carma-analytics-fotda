@@ -23,7 +23,7 @@ tool_activation_delay_since_last_cdasim_step = {}
 tool_activation_delay_timestamp_recorded = []
 
 PATTERN_TO_MATCH = 'Simulation Time: (\d+) where current system time is: (\d+)'
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 # Main class that tracks and processes log lines retrieved from multiple files and observers
 class LogMonitor:
