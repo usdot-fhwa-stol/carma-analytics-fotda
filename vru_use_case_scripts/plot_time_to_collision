@@ -146,7 +146,7 @@ times_to_collision_s = [
     ttc / 1_000 if ttc is not None else None for ttc in times_to_collision_ms
 ]
 
-plt.scatter(vehicle_odometry_df["Message Time (ms)"] / 1_000.0, times_to_collision_s, label='Time to Collision [s]')
+plt.scatter(vehicle_odometry_df["Message Time (ms)"] / 1_000.0, times_to_collision_s, label='Time-to-Collision [s]')
 plt.title("Time-to-collision (TTC) v. Simulation Time")
 plt.ylabel("Time-to-collision (TTC) [s]")
 plt.xlabel("CDASim Time [s]")
