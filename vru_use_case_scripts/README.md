@@ -157,7 +157,7 @@ After starting cdasim through carma start all, give few seconds before running:
 
 ### Example output
 Red line shows how long in system wall time it took for MOSAIC to step to the next simulation time step.
-Blue lines show how long it took ofr each tool to be called by MOSAIC to step to the next simulation time step.
+Blue lines show how long it took for each tool to be called by MOSAIC to step to the next simulation time step.
 We should expect red lines under the blue so that all tools are moving forward at the same time.
 First subplot on the top indicates whether of all tools are synced or not according to above criteria where 1:Synced 0: Not.
 MOSAIC.log is mosaic time
