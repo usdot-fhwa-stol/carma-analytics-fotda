@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+
+from argparse import ArgumentParser
+from pathlib import Path
+
+from matplotlib import pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy.interpolate import splrep, BSpline
+from shapely import Point, LineString
+import shapely.geometry
+import shapely.plotting
+
+ENCROACHMENT_ZONE_WIDTH = 2
+
+
+def parse_vehicle_odometry_from_csv(odometry_csv):
+    return pd.read_csv(odometry_csv)
+
+
+def parse_pedestrian_odometry_from_csv(odometry_csv):
+    return pd.read_csv(odometry_csv)
+
+
+def get_encroachment_zone(vehicle_odom_df, pedestrian_odom_df):
+    vehicle_path = LineString(
+        [
+            Point(row["Map Position X (m)"], row["Map Position Y (m)"])
+            for _, row in vehicle_odom_df[
+                ["Map Position X (m)", "Map Position Y (m)"]
+            ].iterrows()
+        ]
+    )
+
+    pedestrian_path = LineString(
+        [
+            Point(row["Map Position X (m)"], row["Map Position Y (m)"])
+            for _, row in pedestrian_odom_df[
+                ["Map Position X (m)", "Map Position Y (m)"]
+            ].iterrows()
+        ]
+    )
+
+    intersect_point = vehicle_path.intersection(pedestrian_path)
+
+    plt.plot(*vehicle_path.xy)
+    plt.plot(*pedestrian_path.xy)
+
+    if intersect_point.is_empty:
+        return None
+
+    return shapely.geometry.box(
+        intersect_point.x - ENCROACHMENT_ZONE_WIDTH / 2,
+        intersect_point.y - ENCROACHMENT_ZONE_WIDTH / 2,
+        intersect_point.x + ENCROACHMENT_ZONE_WIDTH / 2,
+        intersect_point.y + ENCROACHMENT_ZONE_WIDTH / 2,
+    )
+
+
+def interpolate_trajectory(odometry_df):
+    times = odometry_df["Message Time (ms)"].tolist()
+    tck_x = splrep(times, odometry_df["Map Position X (m)"].tolist(), k=5)
+    tck_y = splrep(times, odometry_df["Map Position Y (m)"].tolist(), k=5)
+
+    return BSpline(*tck_x, extrapolate=False), BSpline(*tck_y, extrapolate=False)
+
+
+def calc_pedestrian_exit_time(pedestrian_odom_df, encroachment_zone):
+    traj_x, traj_y = interpolate_trajectory(pedestrian_odom_df)
+    start_time = pedestrian_odom_df["Message Time (ms)"].iloc[0]
+    end_time = pedestrian_odom_df["Message Time (ms)"].iloc[-1]
+
+    is_in_zone = False
+    for time in np.arange(start_time, end_time, 100):
+        if is_in_zone and not encroachment_zone.contains(
+            Point(traj_x(time), traj_y(time))
+        ):
+            plt.scatter(traj_x(time), traj_y(time))
+            return time
+
+        if not is_in_zone and encroachment_zone.contains(
+            Point(traj_x(time), traj_y(time))
+        ):
+            is_in_zone = True
+
+
+def calc_vehicle_enter_time(vehicle_odom_df, encroachment_zone):
+    traj_x, traj_y = interpolate_trajectory(vehicle_odom_df)
+    start_time = vehicle_odom_df["Message Time (ms)"].iloc[0]
+    end_time = vehicle_odom_df["Message Time (ms)"].iloc[-1]
+
+    for time in np.arange(start_time, end_time, 10):
+        if encroachment_zone.contains(Point(traj_x(time), traj_y(time))):
+            plt.scatter(traj_x(time), traj_y(time))
+            return time
+
+
+parser = ArgumentParser(
+    prog="calc_post_encroachment_time",
+    description="",
+)
+
+parser.add_argument(
+    "--vehicle-odometry-csv",
+    type=Path,
+    help="CSV file containing vehicle odometry data",
+    required=True,
+)
+
+parser.add_argument(
+    "--pedestrian-odometry-csv",
+    type=Path,
+    help="CSV file containing pedestrian odometry data",
+    required=True,
+)
+
+parser.add_argument(
+    "--show-plot",
+    help="Plot vehicle and pedestrian paths and the encroachment zone (debugging only)",
+    action="store_true",
+)
+
+cli_args = parser.parse_args()
+
+vehicle_odometry_df = parse_vehicle_odometry_from_csv(cli_args.vehicle_odometry_csv)
+
+pedestrian_odometry_df = parse_pedestrian_odometry_from_csv(
+    cli_args.pedestrian_odometry_csv
+)
+
+encroachment_zone = get_encroachment_zone(vehicle_odometry_df, pedestrian_odometry_df)
+
+if encroachment_zone is not None:
+    vehicle_enter_time = calc_vehicle_enter_time(vehicle_odometry_df, encroachment_zone)
+    pedestrian_exit_time = calc_pedestrian_exit_time(
+        pedestrian_odometry_df, encroachment_zone
+    )
+
+    shapely.plotting.plot_polygon(encroachment_zone, add_points=False)
+
+    print(f"vehicle enter time [ms]: {vehicle_enter_time}")
+    print(f"pedestrian exit time [ms]: {pedestrian_exit_time}")
+    print(
+        f"post-encroachment time (PET) [ms]: {vehicle_enter_time - pedestrian_exit_time}"
+    )
+else:
+    print("paths do not intersect")
+
+if cli_args.show_plot:
+    plt.show()

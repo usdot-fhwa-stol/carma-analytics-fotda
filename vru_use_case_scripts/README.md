@@ -137,7 +137,6 @@ Plot the data:
   --pedestrian-odometry-csv <path_to_csv_dir>/pedestrian_odometry.csv
 ```
 
-
 ### Example output
 
 ![](docs/plot_time_to_collision_example.png)
@@ -158,11 +157,187 @@ After starting cdasim through carma start all, give few seconds before running:
 
 ### Example output
 Red line shows how long in system wall time it took for MOSAIC to step to the next simulation time step.
+<<<<<<< HEAD
 Blue lines show how long it took ofr each tool to be called by MOSAIC to step to the next simulation time step.
 We should expect red lines under the blue so that all tools are moving forward at the same time.
+=======
+Blue lines show the delay of each tools experience when setting the simulation time step since MOSAIC commanded the first tool to advance.
+Therefore we consider the time is synchronized if every tool received the next timestep before next timestep was broadcasted by MOSAIC.
+This would translate to blue lines being under the red ones indicating no tool experienced significant
+delay more than MOSAIC allowed between each simulation timesteps.
+>>>>>>> release/lavida
 First subplot on the top indicates whether of all tools are synced or not according to above criteria where 1:Synced 0: Not.
 MOSAIC.log is mosaic time
 vx2hub.log is V2XHub time
 Traffic.log is sumo and carla time (since they are synced)
 rosout.log is ROS time
 ![](docs/time_sync_plot_example.png)
+<<<<<<< HEAD
+=======
+## `extract_cp_stack_processing_time`
+
+This script takes in two CSV files containing vehicle's cp objects and objects from incoming_sdsm with
+their respective simulation times generated from rosbags.
+It extracts the simulation time (ms) it takes for CP stack to process an object
+
+> [!NOTE]
+> Measuring processing time from ros bag is only possible for the pedestrian data in this use case
+> This is because pedestrian is occluded form the vehicle, its data only comes from sdsm
+> Therefore, from the first time pedestrian was detected in the sdsm and until it became available
+> on fused object topic is the processing time
+
+
+### Usage examples
+
+Extract the processing time to terminal:
+
+```console
+./extract_cp_stack_processing_time
+  --vehicle-detection-csv <path_to_csv_dir>/detected_objects_with_sim_received_time.csv
+  --sdsm-csv <path_to_csv_dir>/detected_objects_from_incoming_sdsm.csv
+```
+
+### Example Output
+
+```console
+Simulation Time (ms) processing for Cooperative Perception Stack (Input from SDSM to output on local perception): 400.0
+```
+
+## `plot_missing_object_durations`
+
+This script plots the duration of consecutive time the detected object is missing.
+It takes in one CSV files containing vehicle's cp objects respective detected simulation time in their messages generated from rosbags.
+
+> [!NOTE]
+> This script is tighly coupled with how to VRU use case scenario is setup. It assumes that the infrastructure sensor detects
+> all the objects in the intersection and feeds CP stack the info without fail at all time steps. Therefore, if an object is missing from
+> the output of the CP stack, it would be interpreted as CP stack's misbehavior although it can technically be just that infrastructure
+> did not send the object data for those times.
+
+> [!NOTE]
+> Missing duration is also tightly coupled with the CP stack's operation_period. Object will be missing minimum operation_period time and
+> has a resolution error of operation_period
+
+### Usage examples
+
+```console
+./plot_missing_object_durations
+  --vehicle-detection-csv <path_to_csv_dir>/vehicle_detected_objects.csv.csv
+```
+### Example output
+
+![](docs/example_missing_object_duration.png)
+
+## `plot_deceleration_and_speed`
+
+This script takes in one required argument - rosbag and plots the deceleration value between each twist msgs of the platform and corresponding speeds used to generate the decel graph. Other optional arguments are to `--show-plot` which shows the plot
+and `--plots-dir` which specified the directory to save the graph (by default, it creates `figures` folder in the current directory)
+
+Furthermore, the graph contains timestamps when the pedestrian was detected, started moving, and exited the crosswalk (using positional values only valid for intersection SumoID 785 in Town04). It also has timestamps when the vehicle entered the intersection and exited.
+
+> [!NOTE]
+> This script low pass filters the speed before plotting to filter the short term noise
+
+> [!NOTE]
+> If the pedestrian was detected very early on, the plot will show a vertical line at the time when platform starts moving for better plotting. The terminal output will have a correct timestam when the pedestrian was detected by the CP stack.
+
+### Usage examples
+
+Plot the data:
+
+```console
+./plot_deceleration_and_speed \
+  --rosbag <dir-to-rosbag>
+```
+or:
+```console
+./plot_deceleration_and_speed \
+  --rosbag <dir-to-rosbag>
+  --show-plot
+  --plots-dir <dir-to-save-image>
+```
+
+### Example output
+
+![](docs/example-deceleration-and-speed.png)
+
+in terminal:
+
+```
+Detected entry time into the intersection (lanelet id: 61405) at: 106.525044967
+Detected exit time out of the intersection (from lanelet id: 11568) at: 117.525045131
+Detected pedestrian detected_t_sec: 28.325043802
+Detected pedestrian started_moving_t_sec: 103.225044918
+Detected pedestrian exited_crosswalk_t_sec: 112.625045058
+```
+
+## `calc_post_encroachment_time`
+
+This script takes in two CSV files containing vehicle and pedestrian odometry generated from rosbags. It calculates
+the post-encroachment time (PET), which is the duration between the pedestrian leaving the encroachment zone and the
+vehicle entering it. The script optionally plots the odometry information and visualizes the encroachment.
+
+> [!NOTE]
+> This script assumes the vehicle and pedestrian are point masses, and the `ENCROACHMENT_ZONE_WIDTH` variable determines the size of the encroachment zone.
+
+### Usage examples
+
+Calculate the PET:
+
+```console
+./calc_post_encroachment_time \
+  --vehicle-odometry-csv <path_to_csv_dir>/vehicle_odometry.csv \
+  --pedestrian-odometry-csv <path_to_csv_dir>/pedestrian_odometry.csv
+```
+
+Calculate the PET (with plotting):
+
+```console
+./calc_post_encroachment_time \
+  --vehicle-odometry-csv <path_to_csv_dir>/vehicle_odometry.csv \
+  --pedestrian-odometry-csv <path_to_csv_dir>/pedestrian_odometry.csv \
+  --show-plot
+```
+
+### Example output
+
+```console
+vehicle enter time [ms]: 57130.000002
+pedestrian exit time [ms]: 51800.0007
+post-encroachment time (PET) [ms]: 5329.999302000004
+```
+
+## run_all_analysis_scripts
+
+This scripts runs the above scripts for all VRU scenarios in a directory.
+
+> [!NOTE]
+> This script assumes each subdirectory within the specified directory contains all the data for that specific run.
+> For example:
+```
+simulation_data
+├── run1
+│   ├── _2024-03-22-16-56-19.bag
+│   ├── carma_streets_kafka_2024-03-22_12-48-53.zip
+│   ├── cdasim_rtf_data_2024-03-22_12-49-11.csv
+│   ├── sensors.json
+│   ├── simulation_logs_20240322-20240325
+│   ├── v2xhub_logs_20240322-20240325.zip
+│   ├── VulnerableRoadUserCollision_ThreeTrucks-1.json
+│   └── ...
+│ 
+└── run2
+    ├── _2024-03-22-17-44-20.bag
+    ├── carma_streets_kafka_2024-03-22_12-58-10.zip
+    ├── cdasim_rtf_data_2024-03-22_12-58-27.csv
+    ├── sensors.json
+    ├── VulnerableRoadUserCollision_ThreeTrucks-2.json
+    └── ...
+```
+
+### Usage examples
+
+```console
+./run_all_analysis_scripts --input-dir <path_to_run_subdirs>
+```
+>>>>>>> release/lavida
