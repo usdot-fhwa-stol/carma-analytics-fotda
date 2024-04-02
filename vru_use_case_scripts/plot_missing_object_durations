@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 # object will be missing minimum of duration of the CP stack's operation period
 # For example, if CP stack is operating at 5 Hz, duration between detected objects
 # will be minimum 200 ms.
-COOPERATIVE_PERCEPTION_STACK_FREQUENCY_IN_HZ = 5
+COOPERATIVE_PERCEPTION_STACK_FREQUENCY_IN_HZ = 10
 
 
 def parse_df(file_path: Path):
@@ -43,16 +43,16 @@ def plot_missing(df: pd.DataFrame, plots_dir):
         )
         ax.set_xlim(left=0)  # Set x-axis to start at zero
         ax.set_ylim(bottom=0, top=1100)  # Set y-axis to start at zero
-        plt.axhline(y=1000, color="r", linestyle="--", label="Missing Duration Cutoff")
+        plt.axhline(y=1000, color="r", linestyle="--", label="missing duration cutoff")
         plt.axhline(
             y=round(1 / COOPERATIVE_PERCEPTION_STACK_FREQUENCY_IN_HZ * 1000),
             color="b",
-            linestyle="--",
+            linestyle="-.",
             label="CP stack operation period",
         )
-        plt.xlabel("Message Time (ms) of the Object that is Missing")
-        plt.ylabel("Missing Duration (ms) in CDASim Time")
-        plt.title(f"Missing Duration for Object ID: {obj_id}")
+        plt.xlabel("Message time of the object that is missing (ms)", fontsize=14)
+        plt.ylabel("Missing duration in CDASim time (ms)", fontsize=14)
+        plt.title(f"Missing duration for object ID: {obj_id}", fontsize=20)
         plt.legend()
         plt.savefig(plots_dir / f"missing_obj_duration_{obj_id}.png")
 

@@ -198,15 +198,19 @@ def plot_deceleration_and_speed(ros_bag_file, show_plot, figure_dir, max_deceler
 
     # Plot deceleration
     axs[0].plot(plotting_time_stamps, decel_values, 'o')
-    axs[0].set_title('Instantaneous Deceleration over Time')
-    axs[0].set_xlabel('Time (s)')
-    axs[0].set_ylabel('Deceleration (m/s^2)')
+    axs[0].set_title('Instantaneous acceleration over time', fontsize=20)
+    axs[0].set_xlabel('Time (s)', fontsize=16)
+    axs[0].set_ylabel('Acceleration (m/s^2)', fontsize=16)
+    axs[0].tick_params(axis="x", labelsize=16)
+    axs[0].tick_params(axis="y", labelsize=16)
 
     # Plot speed
-    axs[1].plot(plotting_time_stamps, speeds_for_plotting, '-')
-    axs[1].set_title('Speed over Time')
-    axs[1].set_xlabel('Time (s)')
-    axs[1].set_ylabel('Speed (m/s)')
+    axs[1].plot(plotting_time_stamps, speeds_for_plotting, '-', linewidth=3.0)
+    axs[1].set_title('Speed over time', fontsize=20)
+    axs[1].set_xlabel('Time (s)', fontsize=16)
+    axs[1].set_ylabel('Speed (m/s)', fontsize=16)
+    axs[1].tick_params(axis="x", labelsize=16)
+    axs[1].tick_params(axis="y", labelsize=16)
 
     # NOTE: Object can get detected very early on due to CP
     # therefore, for better plotting we take the max of first time platform engaged and object detected
@@ -220,16 +224,16 @@ def plot_deceleration_and_speed(ros_bag_file, show_plot, figure_dir, max_deceler
 
     # Adding vertical lines to both subplots for important timestamps
     for i, ax in enumerate(axs):
-        ax.axvline(x=detected_t_sec, color='b', linestyle='--', label='Pedestrian Detected Time')
-        ax.axvline(x=started_moving_t_sec, color='g', linestyle='--', label='Pedestrian Started Moving Time')
-        ax.axvline(x=exited_crosswalk_t_sec, color='r', linestyle='--', label='Pedestrian Exited Intersection Time')
-        ax.axvline(x=entry_t_sec, color='purple', linestyle='-', linewidth=2, label="Vehicle's Intersection Entry Time")
-        ax.axvline(x=exit_t_sec, color='pink', linestyle='-', linewidth=2, label="Vehicle's Intersection Exit Time")
+        ax.axvline(x=detected_t_sec, color='black', linestyle='--', linewidth=3.0, label='Pedestrian Detected Time')
+        ax.axvline(x=started_moving_t_sec, color='grey', linestyle='--', linewidth=3.0, label='Pedestrian Started Moving Time')
+        ax.axvline(x=exited_crosswalk_t_sec, color='lightgrey', linestyle='--', linewidth=3.0, label='Pedestrian Exited Intersection Time')
+        ax.axvline(x=entry_t_sec, color='black', linestyle='-.', linewidth=3.0, label="Vehicle's Intersection Entry Time")
+        ax.axvline(x=exit_t_sec, color='grey', linestyle='-.', linewidth=3.0, label="Vehicle's Intersection Exit Time")
         if (i == 0):
-            ax.axhline(y=max_deceleration_value, color='red', linestyle='--', label="Max Decel for Comfortable Travel")
+            ax.axhline(y=max_deceleration_value, color='red', linestyle=':', linewidth=3.0, label="Max Decel for Comfortable Travel")
 
         ax.grid(True)
-        ax.legend()
+        ax.legend(loc='lower right', fontsize=16)
 
     plt.tight_layout()
 
