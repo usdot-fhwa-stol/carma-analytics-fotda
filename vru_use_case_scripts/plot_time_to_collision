@@ -154,6 +154,6 @@ plt.axhline(y=NEAR_MISS_THRESHOLD_S, color='r', linestyle='--', label='Near Miss
 
 plt.legend()
 
-cli_args.plots_dir.mkdir(exist_ok=True)
+#cli_args.plots_dir.mkdir(exist_ok=True)
 
-plt.savefig(cli_args.plots_dir / f"ttc.png")
+plt.savefig(cli_args.plots_dir)

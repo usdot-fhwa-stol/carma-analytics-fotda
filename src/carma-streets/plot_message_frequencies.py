@@ -19,7 +19,7 @@ def plot_message_frequencies(csv_dir: Path, plots_dir: Path, simulation: bool = 
     if csv_dir.is_dir():
         if plots_dir.is_dir():
             print(f"WARNING: {plots_dir} already exists. Contents will be overwritten.")
-        plots_dir.mkdir(exist_ok=True)
+        #plots_dir.mkdir(exist_ok=True)
         # Read CSV data
         message_data = dict([])
         time_sync_data = None
@@ -28,7 +28,7 @@ def plot_message_frequencies(csv_dir: Path, plots_dir: Path, simulation: bool = 
             if KafkaLogMessageType.TimeSync.value in csv_file.name:
                 time_sync_data = pd.read_csv(csv_file)
             elif KafkaLogMessageType.DetectedObject.value in csv_file.name:
-                # Since Detected Object messages are sent for each individual object they 
+                # Since Detected Object messages are sent for each individual object they
                 # do not have a static target frequency
                 continue
             else:
@@ -56,8 +56,8 @@ def plot_message_frequencies(csv_dir: Path, plots_dir: Path, simulation: bool = 
         fig.supylabel('Message Frequency (Hz)')
         handles, labels = plots[-1].get_legend_handles_labels()
         fig.legend(handles, labels, loc='upper right')
-        fig.savefig(f'{plots_dir}/message_frequencies.png')
-        
+        fig.savefig(plots_dir)
+
 def plot_message_frequency( axes: axes.Axes, time: list, frequency: list , message_name: str, target_frequency: int = 10, absolute_error: int = 2) :
     """Generate subplots for each message frequency
 
@@ -123,8 +123,8 @@ def add_message_frequency_columns( messages: pd.DataFrame, window: int = 30) -> 
 
 def main():
     parser = argparse.ArgumentParser(description='Script to plot message frequency from CARMA Streets message csv data.')
-    parser.add_argument('--csv-dir', help='Directory to read csv data from.', type=Path, required=True)  
-    parser.add_argument('--plots-dir', help='Directory to save generated plots.', type=Path, required=True) 
+    parser.add_argument('--csv-dir', help='Directory to read csv data from.', type=Path, required=True)
+    parser.add_argument('--plots-dir', help='Directory to save generated plots.', type=Path, required=True)
     parser.add_argument('--simulation', help='Flag indicating data is from simulation', action='store_true', default=False)
 
     args = parser.parse_args()

@@ -6,7 +6,7 @@ import rosbag
 import more_itertools
 import numpy as np
 from enum import Enum
-
+import matplotlib.ticker as ticker
 
 EPSILON = 0.01
 # Lanelets specific to an intersection (SumoId: 785) in Town04
@@ -201,12 +201,14 @@ def plot_deceleration_and_speed(ros_bag_file, show_plot, figure_dir, max_deceler
     axs[0].set_title('Instantaneous Deceleration over Time')
     axs[0].set_xlabel('Time (s)')
     axs[0].set_ylabel('Deceleration (m/s^2)')
+    axs[0].xaxis.set_major_locator(ticker.MultipleLocator(0.5))  # Set major tick locator to every 0.5 sec
 
     # Plot speed
     axs[1].plot(plotting_time_stamps, speeds_for_plotting, '-')
     axs[1].set_title('Speed over Time')
     axs[1].set_xlabel('Time (s)')
     axs[1].set_ylabel('Speed (m/s)')
+    axs[1].xaxis.set_major_locator(ticker.MultipleLocator(0.5))  # Set major tick locator to every 0.5 sec
 
     # NOTE: Object can get detected very early on due to CP
     # therefore, for better plotting we take the max of first time platform engaged and object detected
@@ -233,12 +235,12 @@ def plot_deceleration_and_speed(ros_bag_file, show_plot, figure_dir, max_deceler
 
     plt.tight_layout()
 
-    if figure_dir is None:
-        figure_dir = Path("figures")
+    #if figure_dir is None:
+    #    figure_dir = Path("figures")
 
-    figure_dir.mkdir(exist_ok=True)
+    #figure_dir.mkdir(exist_ok=True)
 
-    plt.savefig(figure_dir / "deceleration_and_speed.png")
+    plt.savefig(figure_dir)
 
     if show_plot:
         plt.show()

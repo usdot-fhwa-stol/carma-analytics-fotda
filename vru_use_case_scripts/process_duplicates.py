@@ -36,7 +36,7 @@ def plot_duplicates(input_file, plots_dir):
         plt.ylabel('Duration')
         plt.title(f'Duration over Message Time for ObjID: {obj_id} with type: {obj_type}')
         plt.legend()
-        plt.savefig(plots_dir / f"duplicates_{obj_id}.png")
+        plt.savefig(f"{plots_dir}-{obj_id}.png")
 
 def get_duplicate_duration(input_file, output_file):
     # Calculate the duration each duplicate lasts
@@ -97,7 +97,7 @@ def main():
     parser.add_argument('--plots-dir', type=Path, default=Path("plots"))
     args = parser.parse_args()
 
-    args.plots_dir.mkdir(exist_ok=True)
+    #args.plots_dir.mkdir(exist_ok=True)
 
     get_detected_objects_id_and_type(args.ros_bag_file, args.csv_dir/'all_detected_objects.csv')
     remove_main_obj(args.csv_dir/'all_detected_objects.csv', args.csv_dir/'duplicates.csv')

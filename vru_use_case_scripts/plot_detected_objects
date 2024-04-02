@@ -179,7 +179,7 @@ sensor_map_position = parse_infrastructure_sensor_position_from_json(
 )
 
 plots_dir = cli_args.plots_dir
-plots_dir.mkdir(exist_ok=True, parents=True)
+#plots_dir.mkdir(exist_ok=True, parents=True)
 
 for detection_id in get_unique_object_ids(detections_df):
     object_detection = detections_df.loc[detections_df["Object ID"] == detection_id]
@@ -206,7 +206,7 @@ for detection_id in get_unique_object_ids(detections_df):
 
     ax.set_aspect("equal")
 
-    plt.savefig(plots_dir / f"object_trace_{detection_id}.png")
+    plt.savefig(f"{plots_dir}_{detection_id}.png")
 
 for detection_id in get_unique_object_ids(detections_df):
     object_detection = detections_df.loc[detections_df["Object ID"] == detection_id]
@@ -305,7 +305,7 @@ for detection_id in get_unique_object_ids(detections_df):
     suptitle = fig.suptitle(f"Object Position v. Simulation Time - {detection_id}")
 
     plt.savefig(
-        plots_dir / f"object_position_v_simulation_time_{detection_id}.png",
+        f"{plots_dir}_{detection_id}.png",
         bbox_extra_artists=(lgd_x, lgd_y, lgd_error, suptitle),
         bbox_inches="tight",
     )

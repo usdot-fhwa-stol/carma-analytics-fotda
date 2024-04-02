@@ -82,5 +82,5 @@ ax.legend(loc="lower right")
 if cli_args.plots_dir is None:
     plt.show()
 else:
-    cli_args.plots_dir.mkdir(exist_ok=True, parents=True)
-    plt.savefig(cli_args.plots_dir / "rtf.png")
+    #cli_args.plots_dir.mkdir(exist_ok=True, parents=True)
+    plt.savefig(cli_args.plots_dir)
