@@ -28,7 +28,7 @@ parser.add_argument(
     "--sdsm-csv",
     type=Path,
     help="CSV file containing SDSM message entries with 'Received CDASim Time (ms)' and 'Object Type' from rosbag file",
-    required=False, # TODO
+    required=T, # TODO
 )
 
 parser.add_argument(
@@ -93,30 +93,13 @@ def get_processing_time(df: pd.DataFrame):
 
     return df
 
-def get_processing_time_with_msg_time(df: pd.DataFrame):
-    df = df[["System Time (s)"]].drop_duplicates()
-
-    df.sort_values(by=["System Time (s)"], inplace=True)
-
-    print(df)
-    # Shift by -1 meaning move up so that each row
-    # indicates what timestamp the data started missing
-    # and how long did it last
-    df["Duration Between Msgs (s)"] = (
-        df["System Time (s)"].diff().shift(-1)
-    )
-    print(df)
-    # Reset the index of the DataFrame
-    df.reset_index(drop=True, inplace=True)
-
-    return df
 
 cli_args = parser.parse_args()
 
 detections_df = parse_df(cli_args.vehicle_detection_csv)
 if (cli_args.sdsm_csv):
     sdsm_df = parse_df(cli_args.sdsm_csv)
-#cli_args.plots_dir.mkdir(exist_ok=True, parents=True)
+cli_args.plots_dir.mkdir(exist_ok=True, parents=True)
 
 
 durations_df = get_processing_time(detections_df)
