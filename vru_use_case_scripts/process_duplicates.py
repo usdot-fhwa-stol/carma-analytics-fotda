@@ -33,7 +33,7 @@ def plot_duplicates(input_file, plots_dir):
         ax.set_ylim(bottom=0, top=1100)  # Set y-axis to start at zero
         plt.axhline(y=1000, color='r', linestyle='--', label='Cutoff')
         plt.xlabel('Message Time (ms)')
-        plt.ylabel('Duration')
+        plt.ylabel('Duration (ms)')
         plt.title(f'Duration over Message Time for ObjID: {obj_id} with type: {obj_type}')
         plt.legend()
         plt.savefig(plots_dir / f"duplicates_{obj_id}.png")
