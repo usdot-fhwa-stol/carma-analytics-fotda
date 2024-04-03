@@ -366,7 +366,7 @@ for data_dir in [
     run_plot_rtf_data(
         rtf_csv=data_dir / next(data_dir.glob("cdasim_rtf_data*.csv")),
         plots_dir=output_dir / "plot_rtf_data",
-        min_required=0.25
+        min_required=0.50
     )
 
     run_plot_sdsm_position_error(
