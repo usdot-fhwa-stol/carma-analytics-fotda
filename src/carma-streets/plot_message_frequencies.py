@@ -46,19 +46,19 @@ def plot_message_frequencies(csv_dir: Path, plots_dir: Path, simulation: bool = 
             if KafkaLogMessageType.MAP.value in message_name:
                 # Any message with 1 Hz as target frequency using window size 3 (3 s) for rolling average
                 add_message_frequency_columns(message_data_frame, 3)
-                plot_message_frequency(msg_plot,message_data_frame['Time (s)'], message_data_frame["Average Frequency (Hz)"] ,message_name,1, 1)
+                plot_message_frequency(msg_plot,message_data_frame['Time (s)'], message_data_frame["Average Frequency (Hz)"] ,message_name,1.0, 0.2)
             else:
                 # Any message with 10 Hz as target frequency uses window size 30 (3 s) for rolling average
                 add_message_frequency_columns(message_data_frame)
                 plot_message_frequency(msg_plot,message_data_frame['Time (s)'], message_data_frame["Average Frequency (Hz)"],message_name)
-        fig.suptitle('Message Frequency Plots')
-        fig.supxlabel('Time (s)')
-        fig.supylabel('Message Frequency (Hz)')
+        fig.suptitle('Message Frequency Plots', fontsize=20)
+        fig.supxlabel('Time (s)', fontsize=16)
+        fig.supylabel('Message Frequency (Hz)', fontsize=16)
         handles, labels = plots[-1].get_legend_handles_labels()
-        fig.legend(handles, labels, loc='upper right')
+        fig.legend(handles, labels, loc='upper right', fontsize=16)
         fig.savefig(f'{plots_dir}/message_frequencies.png')
         
-def plot_message_frequency( axes: axes.Axes, time: list, frequency: list , message_name: str, target_frequency: int = 10, absolute_error: int = 2) :
+def plot_message_frequency( axes: axes.Axes, time: list, frequency: list , message_name: str, target_frequency: float = 10.0, absolute_error: float = 2.0) :
     """Generate subplots for each message frequency
 
     Args:
@@ -73,7 +73,7 @@ def plot_message_frequency( axes: axes.Axes, time: list, frequency: list , messa
     # Add horizontal lines for differing freq requirements based on message type
     axes.axhline(y=target_frequency-absolute_error, color='r', linestyle='--', label="frequency lower bound")
     axes.axhline(y=target_frequency+absolute_error, color='r', linestyle='-', label="frequency upper bound")
-    axes.set_title(message_name)
+    axes.set_title(message_name, fontsize=18)
     axes.set_ylim(target_frequency-2*absolute_error, target_frequency+2*absolute_error)
     axes.minorticks_on()
     axes.grid(which='major', axis='both')
