@@ -68,9 +68,9 @@ def plot_duration(df: pd.DataFrame, show_plot, plots_dir):
         linestyle="-.",
         label="CP stack operation period",
     )
-    plt.xlabel("System Time (s) of the Object that is Missing", fontsize=16)
-    plt.ylabel("Duration (s) in CDASim Time", fontsize=16)
-    plt.title(f"Processing duration for CP", fontsize=18)
+    plt.xlabel("System Time of the Object that is Missing (s) ", fontsize=16)
+    plt.ylabel("Duration in CDASim Time (s)", fontsize=16)
+    plt.title(f"Processing Duration for CP", fontsize=18)
     plt.legend()
     plt.savefig(plots_dir / "cp_stack_processing_time.png")
     if (show_plot):
