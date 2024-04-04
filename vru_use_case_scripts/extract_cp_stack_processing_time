@@ -25,13 +25,6 @@ parser = ArgumentParser(
 )
 
 parser.add_argument(
-    "--sdsm-csv",
-    type=Path,
-    help="CSV file containing SDSM message entries with 'Received CDASim Time (ms)' and 'Object Type' from rosbag file",
-    required=T, # TODO
-)
-
-parser.add_argument(
     "--vehicle-detection-csv",
     type=Path,
     help="CSV file containing object detection entries with 'Received CDASim Time (ms)' and 'Object Type' from a rosbag file",
@@ -45,9 +38,16 @@ parser.add_argument(
     help="Directory to store the generated plots",
 )
 
+parser.add_argument(
+    "--show-plot",
+    help="Show cooperatave perception stack processing time plot ",
+    action="store_true",
+    required=False
+)
+
 # NEW
 
-def plot_duration(df: pd.DataFrame, plots_dir):
+def plot_duration(df: pd.DataFrame, show_plot, plots_dir):
 
     # Plot duration over Message Time for each Object ID
     fig, ax = plt.subplots()
@@ -58,22 +58,23 @@ def plot_duration(df: pd.DataFrame, plots_dir):
         markerfmt=" ",
         use_line_collection=True,
     )
+    operation_period = 1.0 / COOPERATIVE_PERCEPTION_STACK_FREQUENCY_IN_HZ
     ax.set_xlim(left=0)  # Set x-axis to start at zero
     ax.set_ylim(bottom=0, top=1.0)  # Set y-axis to start at zero
-    plt.axhline(y=0.2, color="r", linestyle="--", label="Operation Cutoff")
+    plt.axhline(y = operation_period * 2 , color="r", linestyle="--", label="Operation Cutoff") # Max can be only twice as the operation period
     plt.axhline(
-        y= 1.0 / COOPERATIVE_PERCEPTION_STACK_FREQUENCY_IN_HZ,
+        y= operation_period,
         color="b",
-        linestyle="--",
+        linestyle="-.",
         label="CP stack operation period",
     )
-    plt.xlabel("System Time (s) of the Object that is Missing")
-    plt.ylabel("Duration (s) in CDASim Time")
-    plt.title(f"Processing duration for CP")
+    plt.xlabel("System Time (s) of the Object that is Missing", fontsize=16)
+    plt.ylabel("Duration (s) in CDASim Time", fontsize=16)
+    plt.title(f"Processing duration for CP", fontsize=18)
     plt.legend()
-    print(plots_dir)
-    #plt.show()
-    plt.savefig(plots_dir)
+    plt.savefig(plots_dir / "cp_stack_processing_time.png")
+    if (show_plot):
+        plt.show()
 
 def get_processing_time(df: pd.DataFrame):
     df = df[["System Time (s)"]].drop_duplicates()
@@ -97,39 +98,8 @@ def get_processing_time(df: pd.DataFrame):
 cli_args = parser.parse_args()
 
 detections_df = parse_df(cli_args.vehicle_detection_csv)
-if (cli_args.sdsm_csv):
-    sdsm_df = parse_df(cli_args.sdsm_csv)
+
 cli_args.plots_dir.mkdir(exist_ok=True, parents=True)
 
-
 durations_df = get_processing_time(detections_df)
-plot_duration (durations_df, cli_args.plots_dir)
-
-# OLD
-"""
-# Measuring processing time from ros bag is only possible for the pedestrian data in this use case
-# This is because pedestrian is occluded form the vehicle, its data only comes from sdsm
-# Therefore, from the first time pedestrian was detected in the sdsm and until it became available
-# on fused object topic is the processing time
-pedestrian_df_from_cp = filter_df_for_object_type(detections_df, "PEDESTRIAN")
-
-pedestrian_df_from_cp = pedestrian_df_from_cp.drop_duplicates(
-  subset = ["Received CDASim Time (ms)", "Object Type"],
-  keep = 'last').reset_index(drop = True)
-
-pedestrian_df_from_sdsm = filter_df_for_object_type(sdsm_df, "PEDESTRIAN")
-
-pedestrian_df_from_sdsm = pedestrian_df_from_sdsm.drop_duplicates(
-  subset = ["Received CDASim Time (ms)", "Object Type"],
-  keep = 'last').reset_index(drop = True)
-
-result = (pedestrian_df_from_cp["Received CDASim Time (ms)"] - pedestrian_df_from_sdsm["Received CDASim Time (ms)"]).fillna(0)
-
-# Only first value is relevant because it shows the time
-# passed between first received pedestrian data from SDSM
-# and first reported pedestrian data in the cp objects
-processing_time = result.iloc[0]
-
-print(f"CDASim Time (ms) processing for Cooperative Perception Stack (Input from SDSM to output on local perception): {processing_time}")
-
-"""
+plot_duration(durations_df, cli_args.show_plot, cli_args.plots_dir)
