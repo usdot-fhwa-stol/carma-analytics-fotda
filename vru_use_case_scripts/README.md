@@ -177,8 +177,8 @@ It extracts the simulation time (s) it takes for CP stack to process an object
 > This is because the script's requirement is to measure processing time in simulation time, not wall time, and
 > currently CP stack's operation period is same (or more) as the minimum clock resolution of the simulation (step
 > duration, 0.1s)
-> Therefore, we should expect the processing time in simulation time to be no more than 0.1s if it took less than 0
-> 1s in wall time. And 0.2s in simulation time if it took 0.1s to 0.2s in wall time etc.
+> Therefore, we should expect the processing time in simulation time to be no more than 0.1s if it took less than
+> 0.1s in wall time. And 0.2s in simulation time if it took 0.1s to 0.2s in wall time etc.
 > However, due to ROS scheduling combined with a large step duration, sometimes the output can get reported on the
 > next next timestep.
 > For example if ROS scheduled first operation at wall time 97ms, and if processing took 2ms wall time, the output
