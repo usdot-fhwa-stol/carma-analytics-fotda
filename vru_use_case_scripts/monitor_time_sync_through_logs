@@ -24,9 +24,11 @@ tool_activation_delay_since_last_cdasim_step = {}
 tool_activation_delay_timestamp_recorded = []
 
 PATTERN_TO_MATCH = 'Simulation Time: (\d+) where current system time is: (\d+)'
-DEBUG_MODE = True
-POST_PROCESS_MODE = True
-SHOW_PLOT = True
+PATTERN_TO_MATCH1 = 'Simulation Time: (\d+) here current system time is: (\d+)'
+
+DEBUG_MODE = False
+POST_PROCESS_MODE = False
+SHOW_PLOT = False
 
 
 # Main class that tracks and processes log lines retrieved from multiple files and observers
@@ -34,6 +36,8 @@ class LogMonitor:
     def __init__(self, files):
         # Pattern to match "Simulation Time: X where current system time is: Y"
         self.log_pattern = re.compile(PATTERN_TO_MATCH)
+        self.log_pattern1 = re.compile(PATTERN_TO_MATCH1)
+
 
         # Store system times by simulation time, across all files {simulation_time, list({system_time, file_name})}
         self.simulation_times = {}
@@ -50,7 +54,7 @@ class LogMonitor:
         except docker.errors.NotFound:
             print(f"Container {container_name} not found.")
             return
-
+        print("Getting into the v2xhub!")
         # Stream the logs
         with open(file_path, 'w') as f:
             for line in container.logs(stream=True, follow=True):
@@ -65,6 +69,8 @@ class LogMonitor:
         global IS_SYNCED_PLOT_NAME
 
         match = self.log_pattern.search(line)
+        if not match:
+            match = self.log_pattern1.search(line)
         if match:
             simulation_time = int(match.group(1))
             system_time = int(match.group(2))
@@ -150,9 +156,10 @@ class FileEventHandler(FileSystemEventHandler):
 
 # Retrieves the most recent file with a pattern by recursively checking the search_path
 def find_most_recent_file(search_path, pattern):
-    list_of_files = glob.glob(os.path.join(search_path, '**', pattern), recursive=True)
+    list_of_files = glob.glob(os.path.join(search_path, '**', f'*{pattern}'), recursive=True)
     if not list_of_files:
         return None
+
     latest_file = max(list_of_files, key=os.path.getctime)
     return latest_file
 
@@ -166,7 +173,7 @@ def monitor_file(file_path, monitor):
     observer.start()
     return observer
 
-def get_full_file_path(file_name, rosout_base_path, sim_base_path, carma_streets_base_path):
+def get_full_file_path(file_name, rosout_base_path, sim_base_path, carma_streets_base_path, is_post_process = False):
 
     file_path = ''
     if 'rosout.log' in file_name:
@@ -180,7 +187,10 @@ def get_full_file_path(file_name, rosout_base_path, sim_base_path, carma_streets
             print(f"No recent {file_name} file found.")
             return None
     elif 'v2xhub.log' in file_name:
-        file_path = carma_streets_base_path + str(datetime.now().time()) + '-v2xhub.log'
+        if is_post_process:
+            file_path = find_most_recent_file(carma_streets_base_path, 'v2xhub.log')
+        else:
+            file_path = carma_streets_base_path + str(datetime.now().time()) + '-v2xhub.log'
         streets_dir = Path(carma_streets_base_path)
         streets_dir.mkdir(parents=True, exist_ok=True)
     else:
@@ -199,6 +209,8 @@ def get_component_name(file_path):
         return 'CARMA Platform'
     elif 'v2xhub' in file_path:
         return 'V2X Hub'
+    elif 'MOSAIC.log' in file_path:
+        return 'MOSAIC'
     else:
         return file_path
 
@@ -245,18 +257,18 @@ def update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step, debug_m
             continue # only plot all delay graphs if debug_mode is on
 
         ax.clear()  # Clear the current subplot to replot
-        ax.plot(tool_activation_delay_timestamp_recorded, delay_list, label=file_name)
-        ax.set_title(get_component_name(file_name))
-        ax.set_xlabel('Simulation Times [s]')
+        ax.plot(tool_activation_delay_timestamp_recorded, delay_list, label=get_component_name(file_name))
+        ax.set_title(get_component_name(file_name), fontsize=18)
+        ax.set_xlabel('Simulation Times [s]', fontsize=16)
 
         if IS_SYNCED_PLOT_NAME in file_name:
-            ax.set_ylabel('Is synced? 1: Yes, 0: No')
+            ax.set_ylabel('Is synced?\n1: Yes, 0: No', fontsize=16)
         else:
             # Show exactly 500ms Y axis unless the tool's delay exceeds as sometimes the delay is spiking due to other windows starting
             if (delay_list):
                 ax.set_ylim(0, min(max(max(delay_list), 500), 500))
 
-            ax.set_ylabel('Delay between sim steps [ms]')
+            ax.set_ylabel('Delay between\nsim steps [ms]',fontsize=16)
 
         ax.legend()
         ax.grid(True)
@@ -270,14 +282,14 @@ def update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step, debug_m
                 continue
 
             # Overlay MOSAIC with red line
-            ax.plot(tool_activation_delay_timestamp_recorded, mosaic_data, label='MOSAIC.log', linestyle='--', color='red')
+            ax.plot(tool_activation_delay_timestamp_recorded, mosaic_data, label=get_component_name('MOSAIC.log'), linestyle='--', color='red')
             ax.legend()  # Update the legend to include MOSAIC.log
 
         plt.tight_layout()
         fig.canvas.draw_idle()
         plt.pause(0.1)  # Pause to update the chart
 
-def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, files_to_monitor, debug_mode = False, is_post_process = False):
+def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, files_to_monitor, debug_mode = False, is_post_process = False, plots_dir = None):
     global tool_activation_delay_since_last_cdasim_step
     tool_activation_delay_since_last_cdasim_step[IS_SYNCED_PLOT_NAME] = []
     log_monitor = LogMonitor(files_to_monitor)
@@ -291,6 +303,7 @@ def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, f
             tool_activation_delay_since_last_cdasim_step[file_path] = []
 
             if ('v2xhub' in file_path):
+                print(f" inside capture_docker_container_log")
                 # Create a Thread to capture docker logging in the background and dont use watchdog library
                 log_thread = threading.Thread(target=log_monitor.capture_docker_container_log, args=(file_path, 'v2xhub'))
                 log_thread.start()
@@ -300,7 +313,7 @@ def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, f
     else:
         files_to_process = []
         for file_name in files_to_monitor:
-            file_path = get_full_file_path(file_name, rosout_base_path, sim_base_path, carma_streets_base_path)
+            file_path = get_full_file_path(file_name, rosout_base_path, sim_base_path, carma_streets_base_path, is_post_process)
             print(f"Post Processing detected file to monitor: {file_path}")
             tool_activation_delay_since_last_cdasim_step[file_path] = []
             files_to_process.append(file_path)
@@ -340,7 +353,14 @@ def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, f
                 observer.join()
     else:
         update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step, debug_mode)
-        plt.savefig("/home/carma/Desktop/time_sync.png")
+
+        if (show_plot):
+            plt.show()
+        if plots_dir is None:
+            plots_dir = Path("figures")
+
+        plots_dir.mkdir(exist_ok=True)
+        plt.savefig(plots_dir / "monitor_time_sync.png")
 
 
 
@@ -370,15 +390,22 @@ parser.add_argument(
 parser.add_argument(
     "--post-process-mode",
     help="Post process mode finds the log already generated. \
-        If --plots-dir is provided, it looks in that folder. Default False.",
+        If --input-logs-dir is provided, it looks in that folder. Default False.",
     action="store_true",
 )
 
 parser.add_argument(
-    "--plots-dir",
-    action="store_true",
+    "--input-logs-dir",
+    type=Path,
     required=False,
-    help="Directory to store generated plots. Default folders are where each tool normally generates logs.",
+    help="Directory to look for input logs. Default folders are where each tool normally generates logs.",
+)
+
+parser.add_argument(
+    "--plots-dir",
+    type=Path,
+    required=False,
+    help="Directory to store generated plots.",
 )
 
 cli_args = parser.parse_args()
@@ -402,11 +429,11 @@ post_process_mode = POST_PROCESS_MODE
 show_plot = SHOW_PLOT
 
 # Modify the path if plots_dir is given
-if (cli_args.plots_dir):
-    sensor_data_sharing_service_file_base_path = cli_args.plots_dir
-    rosout_base_path = cli_args.plots_dir
-    sim_base_path = cli_args.plots_dir
-    carma_streets_base_path =cli_args.plots_dir
+if (cli_args.input_logs_dir):
+    sensor_data_sharing_service_file_base_path = str(cli_args.input_logs_dir)
+    rosout_base_path = str(cli_args.input_logs_dir)
+    sim_base_path = str(cli_args.input_logs_dir)
+    carma_streets_base_path = str(cli_args.input_logs_dir)
 
 if (cli_args.post_process_mode):
     post_process_mode = True
@@ -436,4 +463,4 @@ files_to_monitor = [
     'MOSAIC.log',
 ]
 
-start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, files_to_monitor, debug_mode, post_process_mode)
+start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, files_to_monitor, debug_mode, post_process_mode, cli_args.plots_dir)
