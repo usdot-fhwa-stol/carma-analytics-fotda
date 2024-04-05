@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 
 COOPERATIVE_PERCEPTION_STACK_FREQUENCY_IN_HZ = 10.0
 SIM_TIME_TO_USE = "System Time (s)"
-#SIM_TIME_TO_USE = "Message Time (ms)"
 
 def parse_df(file_path: Path):
     df = pd.read_csv(file_path, header=0)
