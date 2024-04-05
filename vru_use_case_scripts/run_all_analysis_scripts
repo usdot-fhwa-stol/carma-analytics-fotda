@@ -144,15 +144,27 @@ def run_plot_cp_stack_processing_time(
         print(f"could not find script '{script_path}'")
         exit(1)
 
-    subprocess.run(
+    result = subprocess.run(
         [
             str(script_path),
             "--vehicle-detection-csv",
             str(vehicle_detection_csv),
             "--plots-dir",
             str(plots_dir),
-        ]
+        ],
+        capture_output=True,
+        text=True,
     )
+    print(f"Returns code: {result.returncode}")
+    txt_file_result_file_path = Path(plots_dir) / "cp_stack_processing_time.txt"
+    #ensure the result.stdout is filled. sometimes it is empty not sure why
+    if not result.stdout or result.stdout is "":
+        print(f"!!!!!!!!!!!!! \nDid not get any mean results for plot_cp_stack_processing_time at {str(txt_file_result_file_path)} \n!!!!!!!!!!!!!!")
+
+    print(result.stdout)
+
+    with open(txt_file_result_file_path, "w") as file:
+        file.write(result.stdout)
 
 
 def run_plot_detected_objects(sdsm_csv, vehicle_detection_csv, sensors_json, plots_dir):
