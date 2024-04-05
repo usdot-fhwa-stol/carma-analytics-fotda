@@ -169,15 +169,15 @@ rosout.log is ROS time
 ![](docs/time_sync_plot_example.png)
 ## `plot_cp_stack_processing_time`
 
-This script takes in two CSV files containing vehicle's cp objects and objects from incoming_sdsm with
-their respective simulation times generated from rosbags.
-It extracts the simulation time (ms) it takes for CP stack to process an object
+This script takes in one CSV files containing vehicle's cp objects with simulation received time generated from rosbags.
+It extracts the simulation time (s) it takes for CP stack to process an object
 
 > [!NOTE]
-> Measuring processing time from ros bag is only possible for the pedestrian data in this use case
-> This is because pedestrian is occluded form the vehicle, its data only comes from sdsm
-> Therefore, from the first time pedestrian was detected in the sdsm and until it became available
-> on fused object topic is the processing time
+> Processing time is limited with the minimum clock resolution (or simulation step duiration) of the simulation.
+> CP stack is scheduled to work certain operatin period regardless of the inputs
+> However, due to ROS scheduling working with large step duration, sometimes the scheduling
+> can miss and be reported in the next time step. So it is appropriate to expect
+> expected_cp_processing_time + 1 simulation_step_duration, which is highlited with red line
 
 
 ### Usage examples
