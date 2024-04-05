@@ -135,37 +135,24 @@ def run_calc_post_encroachment_time(
         file.write(result.stdout)
 
 
-def run_extract_cp_stack_processing_time(
-    sdsm_csv, vehicle_detection_csv, output_file_path
+def run_plot_cp_stack_processing_time(
+    vehicle_detection_csv, plots_dir
 ):
-    script_path = (
-        Path(os.path.realpath(__file__)).parent / "extract_cp_stack_processing_time"
-    )
+    script_path = Path(os.path.realpath(__file__)).parent / "plot_cp_stack_processing_time"
 
     if not script_path.exists():
         print(f"could not find script '{script_path}'")
         exit(1)
 
-    result = subprocess.run(
+    subprocess.run(
         [
             str(script_path),
-            "--sdsm-csv",
-            str(sdsm_csv),
             "--vehicle-detection-csv",
             str(vehicle_detection_csv),
-        ],
-        capture_output=True,
-        text=True,
+            "--plots-dir",
+            str(plots_dir),
+        ]
     )
-
-    #ensure the result.stdout is filled. sometimes it is empty not sure why
-    if not result.stdout or result.stdout is "":
-        print(f"!!!!!!!!!!!!! \nDid not get any results for extract_cp_stack_processing_time at {output_file_path} \n!!!!!!!!!!!!!!")
-
-    print(result.stdout)
-
-    with open(output_file_path, "w") as file:
-        file.write(result.stdout)
 
 
 def run_plot_detected_objects(sdsm_csv, vehicle_detection_csv, sensors_json, plots_dir):
@@ -328,65 +315,64 @@ for data_dir in [
         print(f"Skipping incomplete folder {data_dir.name}")
         continue
     rosbag_csv_dir = output_dir / "parsed_files/rosbag"
-    kafka_csv_dir = output_dir / "parsed_files/kafka"
+#    kafka_csv_dir = output_dir / "parsed_files/kafka"
 
     run_parse_ros_bags(data_dir, rosbag_csv_dir)
-    run_parse_kafka_logs(data_dir, kafka_csv_dir)
+#    run_parse_kafka_logs(data_dir, kafka_csv_dir)
 
-    run_plot_message_frequencies(
-        csv_dir=kafka_csv_dir,
-        plots_dir=output_dir / "plot_message_frequencies",
-    )
-
-    run_calc_post_encroachment_time(
-        vehicle_odometry_csv=rosbag_csv_dir / "vehicle_odometry.csv",
-        pedestrian_odometry_csv=rosbag_csv_dir / "pedestrian_odometry.csv",
-        output_file_path=output_dir / "calc_post_encroachment_time.txt",
-    )
-
-    run_extract_cp_stack_processing_time(
-        sdsm_csv=rosbag_csv_dir / "detected_objects_from_incoming_sdsm.csv",
+#    run_plot_message_frequencies(
+#        csv_dir=kafka_csv_dir,
+#        plots_dir=output_dir / "plot_message_frequencies",
+#    )
+#
+#    run_calc_post_encroachment_time(
+#        vehicle_odometry_csv=rosbag_csv_dir / "vehicle_odometry.csv",
+#        pedestrian_odometry_csv=rosbag_csv_dir / "pedestrian_odometry.csv",
+#        output_file_path=output_dir / "calc_post_encroachment_time.txt",
+#    )
+#
+    run_plot_cp_stack_processing_time(
         vehicle_detection_csv=rosbag_csv_dir
         / "detected_objects_with_sim_received_time.csv",
-        output_file_path=output_dir / "extract_cp_stack_processing_time.txt",
+        plots_dir=output_dir / "plot_cp_stack_processing_time",
     )
-
-    run_plot_detected_objects(
-        sdsm_csv=kafka_csv_dir / "sdsm.csv",
-        vehicle_detection_csv=rosbag_csv_dir / "vehicle_detected_objects.csv",
-        sensors_json=data_dir / "sensors.json",
-        plots_dir=output_dir / "plot_detected_objects",
-    )
-
-    run_plot_missing_object_durations(
-        vehicle_detection_csv=rosbag_csv_dir / "vehicle_detected_objects.csv",
-        plots_dir=output_dir / "plot_missing_object_durations"
-    )
-
-    run_plot_rtf_data(
-        rtf_csv=data_dir / next(data_dir.glob("cdasim_rtf_data*.csv")),
-        plots_dir=output_dir / "plot_rtf_data",
-        min_required=0.50
-    )
-
-    run_plot_sdsm_position_error(
-        sdsm_csv=kafka_csv_dir / "sdsm.csv",
-        detection_csv=kafka_csv_dir / "detected_object.csv",
-        plots_dir=output_dir / "plot_sdsm_position_error",
-    )
-
-    run_plot_time_to_collision(
-        vehicle_odometry_csv=rosbag_csv_dir / "vehicle_odometry.csv",
-        pedestrian_odometry_csv=rosbag_csv_dir / "pedestrian_odometry.csv",
-        plots_dir=output_dir / "plot_time_to_collision",
-    )
-
-    run_process_duplicates(
-        rosbag_file=next(data_dir.glob("*.bag")),
-        plots_dir=output_dir / "process_duplicates",
-    )
-
-    run_plot_deceleration(
-        rosbag_file=next(data_dir.glob("*.bag")),
-        plots_dir=output_dir / "plot_deceleration",
-    )
+#
+#    run_plot_detected_objects(
+#        sdsm_csv=kafka_csv_dir / "sdsm.csv",
+#        vehicle_detection_csv=rosbag_csv_dir / "vehicle_detected_objects.csv",
+#        sensors_json=data_dir / "sensors.json",
+#        plots_dir=output_dir / "plot_detected_objects",
+#    )
+#
+#    run_plot_missing_object_durations(
+#        vehicle_detection_csv=rosbag_csv_dir / "vehicle_detected_objects.csv",
+#        plots_dir=output_dir / "plot_missing_object_durations"
+#    )
+#
+#    run_plot_rtf_data(
+#        rtf_csv=data_dir / next(data_dir.glob("cdasim_rtf_data*.csv")),
+#        plots_dir=output_dir / "plot_rtf_data",
+#        min_required=0.50
+#    )
+#
+#    run_plot_sdsm_position_error(
+#        sdsm_csv=kafka_csv_dir / "sdsm.csv",
+#        detection_csv=kafka_csv_dir / "detected_object.csv",
+#        plots_dir=output_dir / "plot_sdsm_position_error",
+#    )
+#
+#    run_plot_time_to_collision(
+#        vehicle_odometry_csv=rosbag_csv_dir / "vehicle_odometry.csv",
+#        pedestrian_odometry_csv=rosbag_csv_dir / "pedestrian_odometry.csv",
+#        plots_dir=output_dir / "plot_time_to_collision",
+#    )
+#
+#    run_process_duplicates(
+#        rosbag_file=next(data_dir.glob("*.bag")),
+#        plots_dir=output_dir / "process_duplicates",
+#    )
+#
+#    run_plot_deceleration(
+#        rosbag_file=next(data_dir.glob("*.bag")),
+#        plots_dir=output_dir / "plot_deceleration",
+#    )

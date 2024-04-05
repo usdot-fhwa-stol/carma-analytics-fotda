@@ -167,7 +167,7 @@ vx2hub.log is V2XHub time
 Traffic.log is sumo and carla time (since they are synced)
 rosout.log is ROS time
 ![](docs/time_sync_plot_example.png)
-## `extract_cp_stack_processing_time`
+## `plot_cp_stack_processing_time`
 
 This script takes in two CSV files containing vehicle's cp objects and objects from incoming_sdsm with
 their respective simulation times generated from rosbags.
@@ -185,16 +185,15 @@ It extracts the simulation time (ms) it takes for CP stack to process an object
 Extract the processing time to terminal:
 
 ```console
-./extract_cp_stack_processing_time
+./plot_cp_stack_processing_time
   --vehicle-detection-csv <path_to_csv_dir>/detected_objects_with_sim_received_time.csv
-  --sdsm-csv <path_to_csv_dir>/detected_objects_from_incoming_sdsm.csv
+  --show-plot
+  --plots-dir <dir-to-save-image>
 ```
 
 ### Example Output
 
-```console
-Simulation Time (ms) processing for Cooperative Perception Stack (Input from SDSM to output on local perception): 400.0
-```
+![](docs/example_cp_stack_processing_time.png)
 
 ## `plot_missing_object_durations`
 

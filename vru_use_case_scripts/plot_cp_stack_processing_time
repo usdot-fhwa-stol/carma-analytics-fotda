@@ -6,7 +6,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 COOPERATIVE_PERCEPTION_STACK_FREQUENCY_IN_HZ = 10.0
-
+SIM_TIME_TO_USE = "System Time (s)"
+#SIM_TIME_TO_USE = "Message Time (ms)"
 
 def parse_df(file_path: Path):
     df = pd.read_csv(file_path, header=0)
@@ -20,7 +21,7 @@ def get_unique_object_ids(df: pd.DataFrame):
     return list(set(df["Object ID"]))
 
 parser = ArgumentParser(
-    prog="extract_cp_stack_processing_time",
+    prog="plot_cp_stack_processing_time",
     description="Extract the cdasim time (ms) it takes for CP stack to process an object",
 )
 
@@ -45,14 +46,12 @@ parser.add_argument(
     required=False
 )
 
-# NEW
-
 def plot_duration(df: pd.DataFrame, show_plot, plots_dir):
 
     # Plot duration over Message Time for each Object ID
     fig, ax = plt.subplots()
     ax.stem(
-        df["System Time (s)"],
+        df[SIM_TIME_TO_USE],
         df["Duration Between Msgs (s)"],
         basefmt=" ",
         markerfmt=" ",
@@ -60,7 +59,7 @@ def plot_duration(df: pd.DataFrame, show_plot, plots_dir):
     )
     operation_period = 1.0 / COOPERATIVE_PERCEPTION_STACK_FREQUENCY_IN_HZ
     ax.set_xlim(left=0)  # Set x-axis to start at zero
-    ax.set_ylim(bottom=0, top=1.0)  # Set y-axis to start at zero
+    ax.set_ylim(bottom=0, top=0.4)  # Set y-axis to start at zero
     plt.axhline(y = operation_period * 2 , color="r", linestyle="--", label="Operation Cutoff") # Max can be only twice as the operation period
     plt.axhline(
         y= operation_period,
@@ -68,6 +67,7 @@ def plot_duration(df: pd.DataFrame, show_plot, plots_dir):
         linestyle="-.",
         label="CP stack operation period",
     )
+    ax.axhline(y=df["Duration Between Msgs (s)"].mean(), linestyle="dotted", color="k", label="Mean Processing Time")
     plt.xlabel("System Time of the Object that is Missing (s) ", fontsize=16)
     plt.ylabel("Duration in CDASim Time (s)", fontsize=16)
     plt.title(f"Processing Duration for CP", fontsize=18)
@@ -77,20 +77,21 @@ def plot_duration(df: pd.DataFrame, show_plot, plots_dir):
         plt.show()
 
 def get_processing_time(df: pd.DataFrame):
-    df = df[["System Time (s)"]].drop_duplicates()
+    df = df[[SIM_TIME_TO_USE]].drop_duplicates()
 
-    df.sort_values(by=["System Time (s)"], inplace=True)
+    df.sort_values(by=[SIM_TIME_TO_USE], inplace=True)
 
     print(df)
     # Shift by -1 meaning move up so that each row
     # indicates what timestamp the data started missing
     # and how long did it last
     df["Duration Between Msgs (s)"] = (
-        df["System Time (s)"].diff().shift(-1)
+        df[SIM_TIME_TO_USE].diff().shift(-1) #/ 1e3
     )
     print(df)
     # Reset the index of the DataFrame
     df.reset_index(drop=True, inplace=True)
+
 
     return df
 
