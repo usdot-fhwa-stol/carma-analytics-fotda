@@ -173,10 +173,19 @@ This script takes in one CSV files containing vehicle's cp objects with simulati
 It extracts the simulation time (s) it takes for CP stack to process an object
 
 > [!NOTE]
-> Processing time is limited with the minimum clock resolution (or simulation step duiration) of the simulation.
-> CP stack is scheduled to work certain operatin period regardless of the inputs
-> However, due to ROS scheduling working with large step duration, sometimes the scheduling
-> can miss and be reported in the next time step. So it is appropriate to expect
+> First, this script extracts processing time from the how frequent is the stack's output.
+> This is because the script's requirement is to measure processing time in simulation time, not wall time, and
+> currently CP stack's operation period is same (or more) as the minimum clock resolution of the simulation (step
+> duration, 0.1s)
+> Therefore, we should expect the processing time in simulation time to be no more than 0.1s if it took less than 0
+> 1s in wall time. And 0.2s in simulation time if it took 0.1s to 0.2s in wall time etc.
+> However, due to ROS scheduling combined with a large step duration, sometimes the output can get reported on the
+> next next timestep.
+> For example if ROS scheduled first operation at wall time 97ms, and if processing took 2ms wall time, the output
+> will be at wall time 99ms (which is stil simulation time 0.0s). Next if ROS scheduled slightly later at 199ms
+> (instead of 197ms wall time) the output maybe reported at simulation time 2.0s instead of 1.0s just because it was
+> reported at all wall time 201ms despite taking only 2ms to process.
+> So it is appropriate to expect:
 > expected_cp_processing_time + 1 simulation_step_duration, which is highlited with red line
 
 
