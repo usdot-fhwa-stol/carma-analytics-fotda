@@ -181,10 +181,12 @@ It extracts the simulation time (s) it takes for CP stack to process an object
 > 0.1s in wall time. And 0.2s in simulation time if it took 0.1s to 0.2s in wall time etc.
 > However, due to ROS scheduling combined with a large step duration, sometimes the output can get reported on the
 > next next timestep.
-> For example if ROS scheduled first operation at wall time 97ms, and if processing took 2ms wall time, the output
-> will be at wall time 99ms (which is stil simulation time 0.0s). Next if ROS scheduled slightly later at 199ms
-> (instead of 197ms wall time) the output maybe reported at simulation time 2.0s instead of 1.0s just because it was
-> reported at all wall time 201ms despite taking only 2ms to process.
+> For example, if ROS scheduled first operation at wall time 97ms, and if processing took 2ms wall time, the output
+> will be at wall time 99ms (which is stil simulation time 0.0s and is expected). Next if ROS scheduled slightly
+> later at 199ms
+> (instead of 197ms wall time) the output maybe reported at simulation time 0.2s instead of 0.1s just because it was
+> reported at all wall time 201ms. So the output jumped from 0.0s to 0.2s in simulation time, despite only taking 2ms
+> wall time to process.
 > So it is appropriate to expect:
 > expected_cp_processing_time + 1 simulation_step_duration, which is highlited with red line
 
