@@ -168,17 +168,28 @@ Traffic.log is sumo and carla time (since they are synced)
 rosout.log is ROS time
 ![](docs/time_sync_plot_example.png)
 
-## `extract_cp_stack_processing_time`
+## `plot_cp_stack_processing_time`
 
-This script takes in two CSV files containing vehicle's cp objects and objects from incoming_sdsm with
-their respective simulation times generated from rosbags.
-It extracts the simulation time (ms) it takes for CP stack to process an object
+This script takes in one CSV files containing vehicle's cp objects with simulation received time generated from rosbags.
+It extracts the simulation time (s) it takes for CP stack to process an object
 
 > [!NOTE]
-> Measuring processing time from ros bag is only possible for the pedestrian data in this use case
-> This is because pedestrian is occluded form the vehicle, its data only comes from sdsm
-> Therefore, from the first time pedestrian was detected in the sdsm and until it became available
-> on fused object topic is the processing time
+> First, this script extracts processing time from the how frequent is the stack's output.
+> This is because the script's requirement is to measure processing time in simulation time, not wall time, and
+> currently CP stack's operation period is same (or more) as the minimum clock resolution of the simulation (step
+> duration, 0.1s)
+> Therefore, we should expect the processing time in simulation time to be no more than 0.1s if it took less than
+> 0.1s in wall time. And 0.2s in simulation time if it took 0.1s to 0.2s in wall time etc.
+> However, due to ROS scheduling combined with a large step duration, sometimes the output can get reported on the
+> next next timestep.
+> For example, if ROS scheduled first operation at wall time 97ms, and if processing took 2ms wall time, the output
+> will be at wall time 99ms (which is stil simulation time 0.0s and is expected). Next if ROS scheduled slightly
+> later at 199ms
+> (instead of 197ms wall time) the output maybe reported at simulation time 0.2s instead of 0.1s just because it was
+> reported at all wall time 201ms. So the output jumped from 0.0s to 0.2s in simulation time, despite only taking 2ms
+> wall time to process.
+> So it is appropriate to expect:
+> expected_cp_processing_time + 1 simulation_step_duration, which is highlited with red line
 
 
 ### Usage examples
@@ -186,16 +197,15 @@ It extracts the simulation time (ms) it takes for CP stack to process an object
 Extract the processing time to terminal:
 
 ```console
-./extract_cp_stack_processing_time
+./plot_cp_stack_processing_time
   --vehicle-detection-csv <path_to_csv_dir>/detected_objects_with_sim_received_time.csv
-  --sdsm-csv <path_to_csv_dir>/detected_objects_from_incoming_sdsm.csv
+  --show-plot
+  --plots-dir <dir-to-save-image>
 ```
 
 ### Example Output
 
-```console
-Simulation Time (ms) processing for Cooperative Perception Stack (Input from SDSM to output on local perception): 400.0
-```
+![](docs/example_cp_stack_processing_time.png)
 
 ## `plot_missing_object_durations`
 
