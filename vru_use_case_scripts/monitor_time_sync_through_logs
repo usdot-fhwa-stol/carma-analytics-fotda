@@ -24,7 +24,6 @@ tool_activation_delay_since_last_cdasim_step = {}
 tool_activation_delay_timestamp_recorded = []
 
 PATTERN_TO_MATCH = 'Simulation Time: (\d+) where current system time is: (\d+)'
-PATTERN_TO_MATCH1 = 'Simulation Time: (\d+) here current system time is: (\d+)'
 
 
 DEBUG_MODE = False
@@ -37,7 +36,6 @@ class LogMonitor:
     def __init__(self, files):
         # Pattern to match "Simulation Time: X where current system time is: Y"
         self.log_pattern = re.compile(PATTERN_TO_MATCH)
-        self.log_pattern1 = re.compile(PATTERN_TO_MATCH1)
 
         # Store system times by simulation time, across all files {simulation_time, list({system_time, file_name})}
         self.simulation_times = {}
@@ -71,8 +69,6 @@ class LogMonitor:
         global IS_SYNCED_PLOT_NAME
 
         match = self.log_pattern.search(line)
-        if not match:
-            match = self.log_pattern1.search(line)
 
         if match:
             simulation_time = int(match.group(1))
