@@ -104,6 +104,7 @@ def get_unique_object_ids(df: pd.DataFrame):
 def plot_positions(times, distances, marker="o", title=None, axis=plt):
     axis.plot(times, distances, marker=marker, linewidth=0)
     axis.axhline(y=0.1415, linestyle="dashed", color="tab:red", label="Max Required")
+    axis.ylim([0.0, 0.2])
 
     if axis == plt:
         if title is not None:
