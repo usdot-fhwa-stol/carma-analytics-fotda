@@ -391,13 +391,15 @@ def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, f
         missing_timestamps = find_missing_timestamp_corrected(tool_activation_delay_timestamp_recorded)
         update_plots(fig, axs, tool_activation_delay_timestamp_recorded, tool_activation_delay_since_last_cdasim_step, missing_timestamps, debug_mode)
 
-        if (show_plot):
-            plt.show()
         if plots_dir is None:
             plots_dir = Path("figures")
 
         plots_dir.mkdir(exist_ok=True)
         plt.savefig(plots_dir / "monitor_time_sync.png")
+
+        if (show_plot):
+            plt.show()
+
 
 
 
