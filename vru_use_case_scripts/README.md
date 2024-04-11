@@ -143,16 +143,27 @@ Plot the data:
 
 ## `monitor_time_sync_through_logs`
 
-This script monitors real-time whether if all components are stepping in synchronization ensuring their simulation time synchronization.
+This script monitors real-time or in post-process whether if all components are stepping in synchronization ensuring their simulation time synchronization.
+Default mode shows a simulation timestamp vs is_synced boolean value graph to indicate whether if all the specified tools in the cdasim is synchronized
 > [!NOTE]
-> This script relies on python libraries watchdog and docker
+> This script relies on python libraries watchdog and docker for real-time
 
 > [!NOTE]
-> Graph is not automatically saved, please be sure to save it before closing if needed
+> Graph is not automatically saved, please be sure to save it before closing if needed when using real-time
 
 After starting cdasim through carma start all, give few seconds before running:
 ```console
 ./monitor_time_sync_through_logs
+```
+other options:
+```
+  --show-plot           Show plot of the time synchronization monitoring process. Default True
+  --debug-mode          Debug mode turns on additional graphs displaying each tool's delay. Default False.
+  --post-process-mode   Post process mode finds the log already generated. If --input-logs-dir is provided, it looks in that folder. Default False.
+  --input-logs-dir INPUT_LOGS_DIR
+                        Directory to look for input logs. Default folders are where each tool normally generates logs.
+  --plots-dir PLOTS_DIR
+                        Directory to store generated plots.
 ```
 
 ### Example output
@@ -162,11 +173,17 @@ Therefore we consider the time is synchronized if every tool received the next t
 This would translate to blue lines being under the red ones indicating no tool experienced significant
 delay more than MOSAIC allowed between each simulation timesteps.
 First subplot on the top indicates whether of all tools are synced or not according to above criteria where 1:Synced 0: Not.
-MOSAIC.log is mosaic time
+MOSAIC.log is MOSAIC time
 vx2hub.log is V2XHub time
 Traffic.log is sumo and carla time (since they are synced)
 rosout.log is ROS time
 ![](docs/time_sync_plot_example.png)
+
+The synchronization boolean and timestamp on the graph is saved only when all tools report their respective delays on given timestamp.
+Here is an example if one of the timestamp is missing an entry from one of the tool.
+Black dotted vertical lines indicated the missing timestamp, which shows up as NOT synchronized:
+![](docs/time_sync_plot_not_synced_example.png)
+
 ## `plot_cp_stack_processing_time`
 
 This script takes in one CSV files containing vehicle's cp objects with simulation received time generated from rosbags.
