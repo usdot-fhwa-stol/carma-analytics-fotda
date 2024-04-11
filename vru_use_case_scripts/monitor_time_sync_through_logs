@@ -24,6 +24,8 @@ tool_activation_delay_since_last_cdasim_step = {}
 tool_activation_delay_timestamp_recorded = []
 
 PATTERN_TO_MATCH = 'Simulation Time: (\d+) where current system time is: (\d+)'
+PATTERN_TO_MATCH1 = 'Simulation Time: (\d+) here current system time is: (\d+)'
+
 
 DEBUG_MODE = False
 POST_PROCESS_MODE = False
@@ -35,7 +37,7 @@ class LogMonitor:
     def __init__(self, files):
         # Pattern to match "Simulation Time: X where current system time is: Y"
         self.log_pattern = re.compile(PATTERN_TO_MATCH)
-
+        self.log_pattern1 = re.compile(PATTERN_TO_MATCH1)
 
         # Store system times by simulation time, across all files {simulation_time, list({system_time, file_name})}
         self.simulation_times = {}
@@ -64,9 +66,13 @@ class LogMonitor:
 
     def process_line(self, line, file_path):
         global tool_activation_delay_since_last_cdasim_step
+        global tool_activation_delay_timestamp_recorded
+
         global IS_SYNCED_PLOT_NAME
 
         match = self.log_pattern.search(line)
+        if not match:
+            match = self.log_pattern1.search(line)
 
         if match:
             simulation_time = int(match.group(1))
@@ -233,17 +239,45 @@ def backup_and_clear_sdsm_log(file_path):
 
     with open(file_path, 'w'):
         pass
+def find_missing_timestamp_corrected(timestamps):
+    sorted_timestamps = timestamps.copy()
+    sorted_timestamps.sort()  # Ensure the list is sorted
+    missing_timestamps = []
+    # Avoiding last timestamp which may not be ready
+    for i in range(len(sorted_timestamps) - 2):
+        if (sorted_timestamps[i + 1] - sorted_timestamps[i]) > 0.101: #with EPSILON error
+            missing_timestamps.append(sorted_timestamps[i] + 0.1)
+
+    #for t in missing_timestamps:
+    #    print(f"Missing timestamps: {t}")
+    return missing_timestamps  # In case there's no missing timestamp
 
 # Function to update plots for each file
-def update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step, debug_mode):
+def update_plots(fig, axs, tool_activation_delay_timestamp_recorded, tool_activation_delay_since_last_cdasim_step, missing_timestamps, debug_mode):
     # The function treats MOSAIC log special because it overlays it on top of all other tool's subplots
     mosaic_data = None  # Placeholder for MOSAIC.log data
 
+
     # Check if MOSAIC.log data is present and extract it from the regular plotting loop
+
     for file_name in tool_activation_delay_since_last_cdasim_step.keys():
         if 'MOSAIC.log' in file_name:
             mosaic_data = tool_activation_delay_since_last_cdasim_step[file_name]
-            break
+
+    # Modify sync indicators based on missing_timestamps
+    for missing_timestamp in missing_timestamps:
+        print(f"Adding missing timestep {missing_timestamp}")
+        tool_activation_delay_timestamp_recorded.append(missing_timestamp)
+        for file_name in tool_activation_delay_since_last_cdasim_step.keys():
+            tool_activation_delay_since_last_cdasim_step[file_name].append(0.0)
+
+    # Sort to plot timestamps in correct order
+    if missing_timestamps:
+        for file_name in tool_activation_delay_since_last_cdasim_step.keys():
+            zipped = zip(tool_activation_delay_timestamp_recorded, tool_activation_delay_since_last_cdasim_step[file_name])
+            # Sort the zipped list based on the timestamps
+            sorted_zipped = sorted(zipped, key=lambda x: x[0])
+            tool_activation_delay_timestamp_recorded, tool_activation_delay_since_last_cdasim_step[file_name] = zip(*sorted_zipped)
 
     for ax, (file_name, delay_list) in zip(axs, tool_activation_delay_since_last_cdasim_step.items()):
 
@@ -258,12 +292,16 @@ def update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step, debug_m
         ax.set_title(get_component_name(file_name), fontsize=18)
         ax.set_xlabel('Simulation Times [s]', fontsize=16)
 
+
         if IS_SYNCED_PLOT_NAME in file_name:
             ax.set_ylabel('Is synced?\n1: Yes, 0: No', fontsize=16)
         else:
             # Show exactly 500ms Y axis unless the tool's delay exceeds as sometimes the delay is spiking due to other windows starting
             if (delay_list):
                 ax.set_ylim(0, min(max(max(delay_list), 500), 500))
+
+            for missing_t in missing_timestamps:
+                ax.axvline(x=missing_t, color='black', linestyle='dotted', linewidth=3.0, label='Missing Simulation Time Stamp')
 
             ax.set_ylabel('Delay between\nsim steps [ms]',fontsize=16)
 
@@ -341,7 +379,8 @@ def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, f
         try:
             while True:
                 time.sleep(2) #only plot every 2 sec
-                update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step, debug_mode)
+                missing_timestamps = find_missing_timestamp_corrected(tool_activation_delay_timestamp_recorded)
+                update_plots(fig, axs, tool_activation_delay_timestamp_recorded, tool_activation_delay_since_last_cdasim_step, missing_timestamps, debug_mode)
 
         except KeyboardInterrupt:
             for observer in observers:
@@ -349,7 +388,8 @@ def start_monitoring(rosout_base_path, sim_base_path, carma_streets_base_path, f
             for observer in observers:
                 observer.join()
     else:
-        update_plots(fig, axs, tool_activation_delay_since_last_cdasim_step, debug_mode)
+        missing_timestamps = find_missing_timestamp_corrected(tool_activation_delay_timestamp_recorded)
+        update_plots(fig, axs, tool_activation_delay_timestamp_recorded, tool_activation_delay_since_last_cdasim_step, missing_timestamps, debug_mode)
 
         if (show_plot):
             plt.show()
