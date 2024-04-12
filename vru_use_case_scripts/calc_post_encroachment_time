@@ -141,10 +141,10 @@ def get_expected_post_encroachment_time(vehicle_odometry_df, vehicle_enter_time,
 
     if dist_from_stationary_to_max_speed >= dist_to_conflict_point:
         expected_encroachment_time += ( 2 * dist_to_conflict_point / HARDCODED_MAX_ACCEL_MS2) ** 0.5
-        print(f"A: initial expected_encroachment_time [s]: {expected_encroachment_time:.2f}")
+        print(f"initial expected_encroachment_time [s]: {expected_encroachment_time:.2f}")
     else:
         expected_encroachment_time += max_vehicle_speed_ms / HARDCODED_MAX_ACCEL_MS2 + (dist_to_conflict_point - dist_from_stationary_to_max_speed) / max_vehicle_speed_ms
-        print(f"B: initial expected_encroachment_time [s]: {expected_encroachment_time:.2f}")
+        print(f"initial expected_encroachment_time [s]: {expected_encroachment_time:.2f}")
 
     return (expected_encroachment_time + PET_EXPECTED_TIME_BUFFER_S) * SEC_TO_MILLISEC
 
