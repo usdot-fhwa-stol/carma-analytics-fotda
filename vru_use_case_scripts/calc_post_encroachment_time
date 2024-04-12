@@ -122,10 +122,10 @@ def get_expected_post_encroachment_time(vehicle_odometry_df, vehicle_enter_time,
     print(f"Calculating expected post-encroachment time with buffer [ms]: {PET_EXPECTED_TIME_BUFFER_S * SEC_TO_MILLISEC:.0f}")
     traj_x, traj_y = interpolate_trajectory(vehicle_odometry_df)
 
-    # 10 sec more for buffer
-    dist_to_conflict_point = ENCROACHMENT_ZONE_WIDTH / 2
+    dist_to_conflict_point = 0.0
 
-    # iterate over 10ms to accumulate dist over trajectory
+    # iterate over 10 milliseconds of increment time durations
+    # to accumulate distance to find remaining distance to conflict point
     for time_ms in np.arange(pedestrian_exit_time + 10, vehicle_enter_time, 10):
         segment = ((traj_x(time_ms) - traj_x(time_ms - 10)) ** 2 + (traj_y(time_ms) - traj_y(time_ms - 10)) ** 2) ** 0.5
         dist_to_conflict_point += segment
