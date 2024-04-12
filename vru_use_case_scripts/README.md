@@ -302,9 +302,9 @@ vehicle entering it. The script optionally plots the odometry information and vi
 
 > [!NOTE]
 > This script uses several hardcoded values to generate expected post-encroachment time. This includes
-> HARDCODED_MAX_ACCEL_MS2: 3.0 mps^2 is used as a safe comfortable acceleration value
-> HARDCODED_MAX_VEHICLE_SPEED_MS: 30mph is use d as a limit, but actual speed used to generate is determined from the vehicle's whole odometry profile.
-> PET_EXPECTED_TIME_BUFFER_S: 3.0 sec is allocated to account for controller reaction issues such as CARLA shifting gears from stopped to going.
+> `HARDCODED_MAX_ACCEL_MS2`: 3.0 mps^2 is used as a safe comfortable acceleration value\n
+> `HARDCODED_MAX_VEHICLE_SPEED_MS`: 30mph is used as a limit, but actual speed used to generate is determined from the vehicle's whole odometry profile.\n
+> `PET_EXPECTED_TIME_BUFFER_S`: 3.0 sec is allocated to account for controller reaction issues such as CARLA shifting gears from stopped to going.\n
 
 ### Usage examples
 
