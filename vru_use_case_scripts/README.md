@@ -300,6 +300,12 @@ vehicle entering it. The script optionally plots the odometry information and vi
 > [!NOTE]
 > This script assumes the vehicle and pedestrian are point masses, and the `ENCROACHMENT_ZONE_WIDTH` variable determines the size of the encroachment zone.
 
+> [!NOTE]
+> This script uses several hardcoded values to generate expected post-encroachment time. This includes <br>
+> `HARDCODED_MAX_ACCEL_MS2`: 3.0 mps^2 is used as a safe comfortable acceleration value<br>
+> `HARDCODED_MAX_VEHICLE_SPEED_MS`: 30mph is used as a limit, but actual speed used to generate is determined from the vehicle's whole odometry profile.<br>
+> `PET_EXPECTED_TIME_BUFFER_S`: 3.0 sec is allocated to account for controller reaction issues such as CARLA shifting gears from stopped to going.<br>
+
 ### Usage examples
 
 Calculate the PET:
@@ -322,9 +328,16 @@ Calculate the PET (with plotting):
 ### Example output
 
 ```console
-vehicle enter time [ms]: 57130.000002
-pedestrian exit time [ms]: 51800.0007
-post-encroachment time (PET) [ms]: 5329.999302000004
+Calculating expected post-encroachment time with buffer [ms]: 3000
+dist_to_conflict_point [meters]: 11.16
+Max velocity [mps] found from vehicle odometry: 5.24
+dist_from_stationary_to_max_speed [meters]: 4.57
+initial expected_encroachment_time [s]: 3.00
+vehicle enter time [ms]: 75490
+pedestrian exit time [ms]: 69900
+post-encroachment time (PET) [ms]: 5590
+expected post-encroachment time [ms]: 6005
+Satisfied expected PET?: True, with difference [ms]: 415
 ```
 
 ## run_all_analysis_scripts
