@@ -329,15 +329,15 @@ Calculate the PET (with plotting):
 
 ```console
 Calculating expected post-encroachment time with buffer [ms]: 3000
-dist_to_conflict_point [meters]: 12.16
+dist_to_conflict_point [meters]: 11.16
 Max velocity [mps] found from vehicle odometry: 5.24
 dist_from_stationary_to_max_speed [meters]: 4.57
-initial expected_encroachment_time [s]: 3.20
+initial expected_encroachment_time [s]: 3.00
 vehicle enter time [ms]: 75490
 pedestrian exit time [ms]: 69900
 post-encroachment time (PET) [ms]: 5590
-expected post-encroachment time [ms]: 6196
-Satisfied expected PET?: True, with difference [ms]: 606
+expected post-encroachment time [ms]: 6005
+Satisfied expected PET?: True, with difference [ms]: 415
 ```
 
 ## run_all_analysis_scripts
