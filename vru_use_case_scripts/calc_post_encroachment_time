@@ -12,6 +12,7 @@ import shapely.geometry
 import shapely.plotting
 
 ENCROACHMENT_ZONE_WIDTH = 2
+HARDCODED_MAX_ACCEL_MS2 = 3.0
 
 
 def parse_vehicle_odometry_from_csv(odometry_csv):
@@ -20,6 +21,22 @@ def parse_vehicle_odometry_from_csv(odometry_csv):
 
 def parse_pedestrian_odometry_from_csv(odometry_csv):
     return pd.read_csv(odometry_csv)
+
+def get_max_speed_from_odometry(df):
+    # Calculate differences in position and time
+    df['dx'] = df['Map Position X (m)'].diff()
+    df['dy'] = df['Map Position Y (m)'].diff()
+    df['dt'] = df['Message Time (ms)'].diff()
+
+    # Calculate Euclidean distance and velocity (distance/time)
+    df['distance'] = np.sqrt(df['dx']**2 + df['dy']**2)
+    df['time_s'] = df['dt'] / 1000  # convert time from ms to seconds
+    df['velocity'] = df['distance'] / df['time_s']
+
+    # Find the maximum velocity
+    max_velocity = df['velocity'].max()
+    print(f"Max velocity found form vehicle odometry: {max_velocity}")
+
 
 
 def get_encroachment_zone(vehicle_odom_df, pedestrian_odom_df):
