@@ -301,7 +301,7 @@ vehicle entering it. The script optionally plots the odometry information and vi
 > This script assumes the vehicle and pedestrian are point masses, and the `ENCROACHMENT_ZONE_WIDTH` variable determines the size of the encroachment zone.
 
 > [!NOTE]
-> This script uses several hardcoded values to generate expected post-encroachment time. This includes
+> This script uses several hardcoded values to generate expected post-encroachment time. This includes <br>
 > `HARDCODED_MAX_ACCEL_MS2`: 3.0 mps^2 is used as a safe comfortable acceleration value<br>
 > `HARDCODED_MAX_VEHICLE_SPEED_MS`: 30mph is used as a limit, but actual speed used to generate is determined from the vehicle's whole odometry profile.<br>
 > `PET_EXPECTED_TIME_BUFFER_S`: 3.0 sec is allocated to account for controller reaction issues such as CARLA shifting gears from stopped to going.<br>
