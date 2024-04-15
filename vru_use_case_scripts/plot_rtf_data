@@ -1,0 +1,86 @@
+#!/usr/bin/python3
+
+from argparse import ArgumentParser
+from pathlib import Path
+import sys
+
+from matplotlib import pyplot as plt
+import pandas as pd
+
+parser = ArgumentParser(
+    prog="plot_rtf",
+    description="Plot MOSAIC realtime factor (RTF) from a comma-separate values (CSV) file",
+)
+
+parser.add_argument(
+    "--min-required",
+    type=float,
+    help="Minimum required RTF value. This will add a line in the generated plot",
+)
+
+parser.add_argument(
+    "--plots-dir",
+    type=Path,
+    help="Directory to store the generated plot"
+)
+
+if sys.stdin.isatty():
+    parser.add_argument("filepath", type=Path)
+
+cli_args = parser.parse_args()
+
+csv_source = None
+if sys.stdin.isatty():
+    if not cli_args.filepath.exists():
+        print(f"fatal: '{cli_args.filepath}' does not exist")
+        sys.exit(1)
+
+    if not cli_args.filepath.is_file():
+        print(f"fatal: '{cli_args.filepath}' is not a file")
+        sys.exit(1)
+
+    csv_source = cli_args.filepath
+
+else:
+    csv_source = sys.stdin
+
+if not csv_source:
+    print("plot_rtf_data: no csv data source")
+    sys.exit(1)
+
+try:
+    df = pd.read_csv(
+        csv_source,
+        dtype={"sim_time_ns": int, "rtf": float},
+    )
+except ValueError:
+    print("plot_rtf_data: malformed csv data")
+    sys.exit(1)
+
+if list(df.columns) != ["sim_time_ns", "rtf"]:
+    print("plot_rtf_data: missing or incorrect csv header")
+    sys.exit(1)
+
+_, ax = plt.subplots()
+
+ax.plot(df["sim_time_ns"] / 1e9, df["rtf"], label="Instantaneous")
+ax.axhline(y=df["rtf"].mean(), linestyle="dotted", color="k", label="Mean")
+
+if cli_args.min_required is not None:
+    ax.axhline(
+        y=cli_args.min_required,
+        linestyle="dashed",
+        color="tab:red",
+        label="Min Required",
+    )
+
+ax.set_title("Real Time Factor v. Simulation Time")
+ax.set_ylabel("Real Time Factor (RTF) [%]")
+ax.set_xlabel("Simulation Time [s]")
+ax.legend(loc="lower right")
+
+if cli_args.plots_dir is None:
+    plt.show()
+else:
+    cli_args.plots_dir.mkdir(exist_ok=True, parents=True)
+    plt.savefig(cli_args.plots_dir / "rtf.png")

@@ -1,0 +1,311 @@
+#!/usr/bin/env python3
+
+from argparse import ArgumentParser
+from collections import defaultdict
+import csv
+import json
+from pathlib import Path
+import sys
+
+from matplotlib import pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy.interpolate import splrep, BSpline
+import math
+
+# Adds a red horizontal line on the error plot between detected positions by sdsm and vehicle
+MAX_ERROR_BETWEEN_SDSM_AND_VEH_DETECTED_OBJECTS_IN_METER = 1.0
+
+def parse_positions_from_sdsm_csv(file_path: Path):
+    def get_timestamp(csv_row: list):
+        return round(float(csv_row[1]))
+
+    def get_json_payload(csv_row: list):
+        json_string = csv_row[8]
+
+        # JSON string needs double quotes
+        return json_string.replace("'", '"')
+
+    sdsm_data = []
+    with open(file_path) as file:
+        csv_data = csv.reader(file)
+
+        # We don't need the CSV header
+        next(csv_data, None)
+
+        for row in csv_data:
+            detected_objects = json.loads(get_json_payload(row))
+            timestamp = get_timestamp(row)
+
+            for object_ in detected_objects:
+                object_data = object_["detected_object_data"]
+                common_data = object_data["detected_object_common_data"]
+
+                id_ = str(common_data["object_id"])
+
+                # The detection messages' position entries are offsets from the detection source,
+                # but the message does not provide the detection source's position.
+                position_offset = np.array(list(common_data["pos"].values())[:2]) / 10.0
+
+                position_offset[0], position_offset[1] = (
+                    position_offset[1],
+                    position_offset[0],
+                )
+
+                sdsm_data.append(
+                    [timestamp - common_data["measurement_time"], id_, *position_offset]
+                )
+
+    return pd.DataFrame(
+        sdsm_data,
+        columns=[
+            "Message Time (ms)",
+            "Object ID",
+            "Relative Position X (m)",
+            "Relative Position Y (m)",
+        ],
+    )
+
+
+def parse_positions_from_detection_csv(file_path: Path):
+    df = pd.read_csv(file_path, header=0)
+
+    df["Object ID"] = df["Object ID"].astype(str)
+
+    return df
+
+
+def filter_df_for_object_id(df: pd.DataFrame, id_: str):
+    return df.loc[df["Object ID"] == id_]
+
+
+def filter_df_for_timestamp(df: pd.DataFrame, timestamp: int):
+    return df.loc[df["timestamp"] == timestamp]
+
+
+def get_unique_object_ids(df: pd.DataFrame):
+    return list(set(df["Object ID"]))
+
+
+def get_distance(a, b):
+    return np.linalg.norm(np.array([a["x"], a["y"]]) - np.array([b["x"], b["y"]]))
+
+
+def calc_position_distances(detections_df: pd.DataFrame, sdsm_df: pd.DataFrame):
+    distances = defaultdict(list)
+    for detection_id in get_unique_object_ids(detections_df):
+        sdsm_df_object_id = filter_df_for_object_id(sdsm_df, detection_id)
+
+        for _, detection_row in filter_df_for_object_id(
+            detections_df, detection_id
+        ).iterrows():
+            timestamp = detection_row["timestamp"]
+            sdsm_row = filter_df_for_timestamp(sdsm_df_object_id, timestamp)
+
+            if sdsm_row.empty:
+                # We assume there are more detection entries than SDSM entries,
+                # so a missing SDSM entry is not an issue
+                continue
+
+            if len(sdsm_row) > 1:
+                print(
+                    f"fatal: Multiple SDSMs for object '{detection_id}'"
+                    f" at timestamp '{timestamp}'"
+                )
+                sys.exit(1)
+
+            distances[detection_id].append(
+                (timestamp / 1_000, get_distance(detection_row, sdsm_row.iloc[0]))
+            )
+
+    return distances
+
+
+def parse_infrastructure_sensor_position_from_json(file_path: Path):
+    if not file_path.exists():
+        print(f"plot_detected_objects: path '{file_path}' does not exist")
+        exit(1)
+
+    if not file_path.is_file():
+        print(f"plot_detected_objects: path '{file_path}' is not a file")
+        exit(1)
+
+    with open(file_path) as file:
+        json_data = json.load(file)
+
+    return json_data[0]["location"]
+
+
+parser = ArgumentParser(
+    prog="plot_sdsm_position_error",
+    description="Plot the error between detected object positions and their associated SDSM positions",
+)
+
+parser.add_argument(
+    "--sdsm-csv",
+    type=Path,
+    help="CSV file containing SDSM message entries from Kafka logs",
+    required=True,
+)
+
+parser.add_argument(
+    "--vehicle-detection-csv",
+    type=Path,
+    help="CSV file containing object detection entries from a rosbag file",
+    required=True,
+)
+
+parser.add_argument(
+    "--infrastructure-sensors-json",
+    type=Path,
+    help="JSON file containing infrastructure sensor positions",
+    required=True,
+)
+
+parser.add_argument(
+    "--plots-dir",
+    type=Path,
+    default=Path("plots"),
+    help="Directory to store generated plots (default ./plots)",
+)
+
+cli_args = parser.parse_args()
+
+detections_df = parse_positions_from_detection_csv(cli_args.vehicle_detection_csv)
+sdsm_df = parse_positions_from_sdsm_csv(cli_args.sdsm_csv)
+
+sensor_map_position = parse_infrastructure_sensor_position_from_json(
+    cli_args.infrastructure_sensors_json
+)
+
+plots_dir = cli_args.plots_dir
+plots_dir.mkdir(exist_ok=True, parents=True)
+
+for detection_id in get_unique_object_ids(detections_df):
+    object_detection = detections_df.loc[detections_df["Object ID"] == detection_id]
+    object_sdsm = sdsm_df.loc[sdsm_df["Object ID"] == detection_id]
+
+    _, ax = plt.subplots()
+
+    ax.plot(
+        object_detection["Map Position X (m)"],
+        object_detection["Map Position Y (m)"],
+        label="Vehicle Detected", linestyle='-'
+    )
+
+    ax.plot(
+        object_sdsm["Relative Position X (m)"] + sensor_map_position["x"],
+        object_sdsm["Relative Position Y (m)"] + sensor_map_position["y"],
+        label="SDSM Reported", linestyle='--'
+    )
+
+    ax.set_title(f"Object Trace - {detection_id}", fontsize=20)
+    ax.set_ylabel("$y$ map (m)", fontsize=14)
+    ax.set_xlabel("$x$ map (m)", fontsize=14)
+    ax.legend()
+
+    ax.set_aspect("equal")
+
+    plt.savefig(plots_dir / f"object_trace_{detection_id}.png")
+
+for detection_id in get_unique_object_ids(detections_df):
+    object_detection = detections_df.loc[detections_df["Object ID"] == detection_id]
+    object_sdsm = sdsm_df.loc[sdsm_df["Object ID"] == detection_id]
+
+    object_detection_unique_times = object_detection.drop_duplicates(
+        "Message Time (ms)"
+    )
+    object_sdsm_unique_times = object_sdsm.drop_duplicates("Message Time (ms)")
+
+    if object_sdsm_unique_times.empty:
+        print(f"No SDSMs found for detection '{detection_id}'")
+        continue
+
+    times = np.arange(
+        object_detection_unique_times["Message Time (ms)"].iloc[0],
+        object_sdsm_unique_times["Message Time (ms)"].iloc[-1],
+        0.01,
+    )
+
+    fig, (position_x, position_y, error) = plt.subplots(3, sharex=True)
+
+    position_x.plot(
+        object_detection["Message Time (ms)"] / 1e3,
+        object_detection["Map Position X (m)"],
+        label="Vehicle Detected", linestyle='-'
+    )
+
+    position_x.plot(
+        object_sdsm["Message Time (ms)"] / 1e3,
+        object_sdsm["Relative Position X (m)"] + sensor_map_position["x"],
+        label="SDSM Reported", linestyle='--'
+    )
+
+    position_x.set_ylabel("$x$ map (m)", fontsize=14)
+
+    lgd_x = position_x.legend(bbox_to_anchor=(1.04, 1), borderaxespad=0)
+
+    det_tck_x = splrep(
+        object_detection_unique_times["Message Time (ms)"].tolist(),
+        object_detection_unique_times["Map Position X (m)"].tolist(),
+        k=5,
+    )
+    sdsm_tck_x = splrep(
+        object_sdsm_unique_times["Message Time (ms)"].tolist(),
+        (
+            object_sdsm_unique_times["Relative Position X (m)"]
+            + sensor_map_position["x"]
+        ),
+        k=5,
+    )
+
+    position_y.plot(
+        object_detection["Message Time (ms)"] / 1e3,
+        object_detection["Map Position Y (m)"],
+        label="Vehicle Detected", linestyle='-'
+    )
+
+    position_y.plot(
+        object_sdsm["Message Time (ms)"] / 1e3,
+        object_sdsm["Relative Position Y (m)"] + sensor_map_position["y"],
+        label="SDSM Reported", linestyle='--'
+    )
+
+    position_y.set_ylabel("$y$ map (m)", fontsize=14)
+
+    lgd_y = position_y.legend(bbox_to_anchor=(1.04, 1), borderaxespad=0)
+
+    det_tck_y = splrep(
+        object_detection_unique_times["Message Time (ms)"].tolist(),
+        object_detection_unique_times["Map Position Y (m)"].tolist(),
+        k=5,
+    )
+    sdsm_tck_y = splrep(
+        object_sdsm_unique_times["Message Time (ms)"].tolist(),
+        (
+            object_sdsm_unique_times["Relative Position Y (m)"]
+            + sensor_map_position["y"]
+        ),
+        k=5,
+    )
+
+    # Plot the total error
+    x_list = abs(BSpline(*det_tck_x)(times) - BSpline(*sdsm_tck_x)(times))
+    y_list = abs(BSpline(*det_tck_y)(times) - BSpline(*sdsm_tck_y)(times))
+
+    error_list = [math.sqrt(x**2 + y**2) for x, y in zip(x_list, y_list)]
+    error.set_xlabel("CDASim Time (s)", fontsize=14)
+    error.set_ylabel("Error (m)", fontsize=14)
+    error.axhline(y=MAX_ERROR_BETWEEN_SDSM_AND_VEH_DETECTED_OBJECTS_IN_METER, color='r', linestyle='--', label= "Expected Max Error")
+    lgd_error = error.legend(bbox_to_anchor=(1.04, 1), borderaxespad=0)
+    error.plot(
+        times / 1e3, error_list
+    )
+
+    suptitle = fig.suptitle(f"Object Position v. Simulation Time - {detection_id}", fontsize=20)
+
+    plt.savefig(
+        plots_dir / f"object_position_v_simulation_time_{detection_id}.png",
+        bbox_extra_artists=(lgd_x, lgd_y, lgd_error, suptitle),
+        bbox_inches="tight",
+    )
