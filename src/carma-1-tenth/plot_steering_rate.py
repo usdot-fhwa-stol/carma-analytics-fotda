@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import datetime as dt
 import os
 
+# from ackermann_to_vesc_node parameters in c1t_bringup/params/params.yaml
 STEERING_TO_SERVO_OFFSET = 0.425
 STEERING_TO_SERVO_GAIN = -0.55
 
@@ -48,12 +49,10 @@ def plot_steering_rate(bag_dir, label, start_offset=0.0):
     with open(metadatafile, "r") as f:
         metadata_dict : dict = yaml.load(f, Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
     storage_id = metadata_dict['storage_identifier']
-    topic_types, type_map, topic_metadata_map, reader = open_bagfile(bag_dir, storage_id=storage_id)
+    _, type_map, _, reader = open_bagfile(bag_dir, storage_id=storage_id)
     servo_topic = '/commands/servo/position'
     topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
-    topic_counts = np.array( list(topic_count_dict.values()) ) 
-    total_msgs = np.sum( topic_counts )
-    msg_dict = {key : [] for key in topic_count_dict.keys()}
+    topic_counts = np.array( list(topic_count_dict.values()) )
     filt = rosbag2_py.StorageFilter([servo_topic])
     reader.set_filter(filt)
     timestamps = np.zeros(topic_count_dict[servo_topic],)
@@ -72,20 +71,22 @@ def plot_steering_rate(bag_dir, label, start_offset=0.0):
     steering_rates = np.gradient(steering_angles, times)
     plt.plot(times, steering_rates, label=label)
     print("Standard Deviation:", np.std(steering_rates[:-5]))
-            
+
 
 if __name__=="__main__":
     import argparse, argcomplete
     parser = argparse.ArgumentParser(description="Plot steering rate of C1T trucks")
-    parser.add_argument("bag_in", type=str, help="Bag to load")
-    parser.add_argument("--bag_in_2", type=str, help="Second bag to load")
+    parser.add_argument("filtered_bag", type=str, help="Bag with filtered steering")
+    parser.add_argument("--filtered_bag_offset", type=float, default=0.0, help="Time offset for start of bag with filtered steering")
+    parser.add_argument("--unfiltered_bag", type=str, help="Bag with unfiltered steering")
+    parser.add_argument("--unfiltered_bag_offset", type=float, default=0.0, help="Time offset for start of bag with unfiltered steering")
     parser.add_argument("--png_out", type=str, help="Output file")
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
     argdict : dict = vars(args)
-    plot_steering_rate(os.path.normpath(os.path.abspath(argdict["bag_in"])), "Unfiltered Steering")
-    if argdict["bag_in_2"]:
-        plot_steering_rate(os.path.normpath(os.path.abspath(argdict["bag_in_2"])), "Filtered Steering", 6.7)
+    plot_steering_rate(os.path.normpath(os.path.abspath(argdict["filtered_bag"])), "Filtered Steering", argdict["filtered_bag_offset"])
+    if argdict["unfiltered_bag"]:
+        plot_steering_rate(os.path.normpath(os.path.abspath(argdict["unfiltered_bag"])), "Unfiltered Steering", argdict["unfiltered_bag_offset"])
     plt.xlim([0,16])
     plt.ylim([-10, 10])
     plt.xlabel("Time (s)")
@@ -94,4 +95,3 @@ if __name__=="__main__":
     if argdict["png_out"]:
         plt.savefig(argdict["png_out"])
     plt.show()
-
