@@ -1,67 +1,40 @@
-import sys
-import rosbag2_py
+from rosbag_utils import open_bagfile
 import numpy as np
 import yaml
 import tqdm
 from rosidl_runtime_py.utilities import get_message
 from rclpy.serialization import deserialize_message
-import matplotlib.pyplot as plt
 import datetime as dt
+import matplotlib.pyplot as plt
 from scipy.interpolate import make_interp_spline
 import os
 
-def get_rosbag_options(path, serialization_format="cdr", storage_id="sqlite3"):
-    storage_options = rosbag2_py.StorageOptions(uri=path, storage_id=storage_id)
-
-    converter_options = rosbag2_py.ConverterOptions(
-        input_serialization_format=serialization_format,
-        output_serialization_format=serialization_format)
-
-    return storage_options, converter_options
-
-def open_bagfile(filepath: str, serialization_format="cdr", storage_id="sqlite3"):
-    storage_options, converter_options = get_rosbag_options(filepath, serialization_format=serialization_format, storage_id=storage_id)
-
-    reader = rosbag2_py.SequentialReader()
-    reader.open(storage_options, converter_options)
-
-    topic_types = reader.get_all_topics_and_types()
-    # Create maps for quicker lookup
-    type_map = {topic_types[i].name: topic_types[i].type for i in range(len(topic_types))}
-    topic_metadata_map = {topic_types[i].name: topic_types[i] for i in range(len(topic_types))}
-    return topic_types, type_map, topic_metadata_map, reader
-
-def open_bagfile_writer(filepath: str, serialization_format="cdr", storage_id="sqlite3"):
-    storage_options, converter_options = get_rosbag_options(filepath, serialization_format=serialization_format, storage_id=storage_id)
-
-    writer = rosbag2_py.SequentialWriter()
-    writer.open(storage_options, converter_options)
-    return writer
 
 def find_closest_point(point_arr, point):
     difference_arr = np.linalg.norm(point_arr - point, axis=1)
     min_index = difference_arr.argmin()
-    if min_index == 0 or min_index == len(difference_arr) - 1:   # don't want to count deviations if we have not yet reached the route or completed it
+    # Don't want to include deviations if we have not yet reached the route or have completed it
+    if min_index == 0 or min_index == len(difference_arr) - 1:
         return None
     return point_arr[min_index]
 
-def calc_absolute_route_deviation(bag_dir, start_offset=0.0):
+
+def plot_absolute_route_deviation(bag_dir, start_offset=0.0):
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
         raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
     with open(metadatafile, "r") as f:
         metadata_dict : dict = yaml.load(f, Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
     storage_id = metadata_dict['storage_identifier']
-    _, type_map, _, reader = open_bagfile(bag_dir, storage_id=storage_id)
     odom_topic = '/amcl_pose'
     route_topic = '/route_graph'
+    reader, type_map = open_bagfile(bag_dir, topics=[odom_topic, route_topic], storage_id=storage_id)
     topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
-    topic_counts = np.array( list(topic_count_dict.values()) )
-    filt = rosbag2_py.StorageFilter([odom_topic, route_topic])
-    reader.set_filter(filt)
+
     route_graph = None
     odom_count = 0
     odometry = np.zeros((topic_count_dict[odom_topic], 2))
+    odometry_times = np.zeros((topic_count_dict[odom_topic],))
     # Iterate through bag and store odometry + route_graph messages
     for idx in tqdm.tqdm(iterable=range(topic_count_dict[odom_topic] + topic_count_dict[route_topic])):
         if(reader.has_next()):
@@ -73,6 +46,7 @@ def calc_absolute_route_deviation(bag_dir, start_offset=0.0):
                 route_graph = msg
             else:
                 odometry[odom_count] = [-msg.pose.pose.position.y, msg.pose.pose.position.x]
+                odometry_times[odom_count] = t_
                 odom_count += 1
     route_coordinates = []
     # Rotate the route_graph coordinates 90 degrees to match C1T coordinates (x-forward, y-left)
@@ -94,15 +68,22 @@ def calc_absolute_route_deviation(bag_dir, start_offset=0.0):
     route_x_points = x_spline(samples)
     route_y_points = y_spline(samples)
     route_deviations = []
+    route_times = []
     # For each odometry message, compute the deviation from the closest point along the route
     for i in range(1, len(odometry)):
         closest_point = find_closest_point(np.array([route_x_points, route_y_points]).T, odometry[i])
         if closest_point is not None and np.linalg.norm(odometry[i]- odometry[i-1]) >= 0.005:
             route_deviations.append(np.linalg.norm(odometry[i] - closest_point))
+            route_times.append(odometry_times[i])
+
+    dates = np.array([dt.datetime.fromtimestamp(ts * 1e-9) for ts in route_times])
+    start_time = dates[0]
+    times = np.array([(date - start_time).total_seconds() - start_offset for date in dates])
 
     print("Average Deviation:", np.mean(route_deviations))
     print("Maximum Deviation:", np.max(route_deviations))
-    plt.plot(range(len(route_deviations)), route_deviations)
+    plt.plot(times, route_deviations)
+
 
 if __name__=="__main__":
     import argparse, argcomplete
@@ -112,8 +93,8 @@ if __name__=="__main__":
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
     argdict : dict = vars(args)
-    calc_absolute_route_deviation(os.path.normpath(os.path.abspath(argdict["bag_in"])))
-    plt.xlabel("Index")
+    plot_absolute_route_deviation(os.path.normpath(os.path.abspath(argdict["bag_in"])))
+    plt.xlabel("Time (s)")
     plt.ylabel("Deviation from Route (m)")
     if argdict["png_out"]:
         plt.savefig(argdict["png_out"])

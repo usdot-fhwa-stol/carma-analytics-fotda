@@ -1,41 +1,11 @@
-import sys
-import rosbag2_py
+from rosbag_utils import open_bagfile
 import numpy as np
 import yaml
 import tqdm
 from rosidl_runtime_py.utilities import get_message
 from rclpy.serialization import deserialize_message
 import matplotlib.pyplot as plt
-import datetime as dt
 import os
-
-def get_rosbag_options(path, serialization_format="cdr", storage_id="sqlite3"):
-    storage_options = rosbag2_py.StorageOptions(uri=path, storage_id=storage_id)
-
-    converter_options = rosbag2_py.ConverterOptions(
-        input_serialization_format=serialization_format,
-        output_serialization_format=serialization_format)
-
-    return storage_options, converter_options
-
-def open_bagfile(filepath: str, serialization_format="cdr", storage_id="sqlite3"):
-    storage_options, converter_options = get_rosbag_options(filepath, serialization_format=serialization_format, storage_id=storage_id)
-
-    reader = rosbag2_py.SequentialReader()
-    reader.open(storage_options, converter_options)
-
-    topic_types = reader.get_all_topics_and_types()
-    # Create maps for quicker lookup
-    type_map = {topic_types[i].name: topic_types[i].type for i in range(len(topic_types))}
-    topic_metadata_map = {topic_types[i].name: topic_types[i] for i in range(len(topic_types))}
-    return topic_types, type_map, topic_metadata_map, reader
-
-def open_bagfile_writer(filepath: str, serialization_format="cdr", storage_id="sqlite3"):
-    storage_options, converter_options = get_rosbag_options(filepath, serialization_format=serialization_format, storage_id=storage_id)
-
-    writer = rosbag2_py.SequentialWriter()
-    writer.open(storage_options, converter_options)
-    return writer
 
 
 def plot_route_driven(bag_dir):
@@ -45,12 +15,10 @@ def plot_route_driven(bag_dir):
     with open(metadatafile, "r") as f:
         metadata_dict : dict = yaml.load(f, Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
     storage_id = metadata_dict['storage_identifier']
-    _, type_map, _, reader = open_bagfile(bag_dir, storage_id=storage_id)
     odom_topic = '/amcl_pose'
     route_topic = '/route_graph'
     topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
-    filt = rosbag2_py.StorageFilter([odom_topic, route_topic])
-    reader.set_filter(filt)
+    reader, type_map = open_bagfile(bag_dir, topics=[odom_topic, route_topic], storage_id=storage_id)
     route_graph = None
     odometry = np.zeros((topic_count_dict[odom_topic], 2))
     odom_count = 0

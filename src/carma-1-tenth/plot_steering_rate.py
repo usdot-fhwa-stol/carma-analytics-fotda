@@ -1,5 +1,4 @@
-import sys
-import rosbag2_py
+from rosbag_utils import open_bagfile
 import numpy as np
 import yaml
 import tqdm
@@ -9,37 +8,10 @@ import matplotlib.pyplot as plt
 import datetime as dt
 import os
 
+
 # from ackermann_to_vesc_node parameters in c1t_bringup/params/params.yaml
 STEERING_TO_SERVO_OFFSET = 0.425
 STEERING_TO_SERVO_GAIN = -0.55
-
-def get_rosbag_options(path, serialization_format="cdr", storage_id="sqlite3"):
-    storage_options = rosbag2_py.StorageOptions(uri=path, storage_id=storage_id)
-
-    converter_options = rosbag2_py.ConverterOptions(
-        input_serialization_format=serialization_format,
-        output_serialization_format=serialization_format)
-
-    return storage_options, converter_options
-
-def open_bagfile(filepath: str, serialization_format="cdr", storage_id="sqlite3"):
-    storage_options, converter_options = get_rosbag_options(filepath, serialization_format=serialization_format, storage_id=storage_id)
-
-    reader = rosbag2_py.SequentialReader()
-    reader.open(storage_options, converter_options)
-
-    topic_types = reader.get_all_topics_and_types()
-    # Create maps for quicker lookup
-    type_map = {topic_types[i].name: topic_types[i].type for i in range(len(topic_types))}
-    topic_metadata_map = {topic_types[i].name: topic_types[i] for i in range(len(topic_types))}
-    return topic_types, type_map, topic_metadata_map, reader
-
-def open_bagfile_writer(filepath: str, serialization_format="cdr", storage_id="sqlite3"):
-    storage_options, converter_options = get_rosbag_options(filepath, serialization_format=serialization_format, storage_id=storage_id)
-
-    writer = rosbag2_py.SequentialWriter()
-    writer.open(storage_options, converter_options)
-    return writer
 
 
 def plot_steering_rate(bag_dir, label, start_offset=0.0):
@@ -49,12 +21,9 @@ def plot_steering_rate(bag_dir, label, start_offset=0.0):
     with open(metadatafile, "r") as f:
         metadata_dict : dict = yaml.load(f, Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
     storage_id = metadata_dict['storage_identifier']
-    _, type_map, _, reader = open_bagfile(bag_dir, storage_id=storage_id)
     servo_topic = '/commands/servo/position'
     topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
-    topic_counts = np.array( list(topic_count_dict.values()) )
-    filt = rosbag2_py.StorageFilter([servo_topic])
-    reader.set_filter(filt)
+    reader, type_map = open_bagfile(bag_dir, topics=[servo_topic], storage_id=storage_id)
     timestamps = np.zeros(topic_count_dict[servo_topic],)
     steering_angles = np.zeros(topic_count_dict[servo_topic],)
     for idx in tqdm.tqdm(iterable=range(topic_count_dict[servo_topic])):
