@@ -95,7 +95,7 @@ if __name__=="__main__":
     argdict : dict = vars(args)
     plot_absolute_route_deviation(os.path.normpath(os.path.abspath(argdict["bag_in"])))
     plt.xlabel("Time (s)")
-    plt.ylabel("Deviation from Route (m)")
+    plt.ylabel("Absolute Deviation from Route (m)")
     if argdict["png_out"]:
         plt.savefig(argdict["png_out"])
     plt.show()
