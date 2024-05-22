@@ -28,16 +28,19 @@ def plot_route_driven(bag_dir):
             msg_type = type_map[topic]
             msg_type_full = get_message(msg_type)
             msg = deserialize_message(data, msg_type_full)
-            if msg_type == "visualization_msgs/msg/MarkerArray":
+            if topic == route_topic:
                 route_graph = msg
             else:
                 odometry[odom_count] = [msg.pose.pose.position.x, msg.pose.pose.position.y]
                 odom_count += 1
-    plt.plot(-odometry[:,1], odometry[:,0])
+    plt.plot(-odometry[:,1], odometry[:,0], label="Path Driven")
     x_min, y_min, x_max, y_max = np.inf, np.inf, -np.inf, -np.inf
     for i in range(len(route_graph.markers)):
         if route_graph.markers[i].type == 2:
-            plt.plot(-route_graph.markers[i].pose.position.y, route_graph.markers[i].pose.position.x, 'ro')
+            if i == 0:
+                plt.plot(-route_graph.markers[i].pose.position.y, route_graph.markers[i].pose.position.x, 'ro', label="Route")
+            else:
+                plt.plot(-route_graph.markers[i].pose.position.y, route_graph.markers[i].pose.position.x, 'ro')
             x_min = np.min([-route_graph.markers[i].pose.position.y, x_min])
             y_min = np.min([route_graph.markers[i].pose.position.x, y_min])
             x_max = np.max([-route_graph.markers[i].pose.position.y, x_max])
@@ -57,6 +60,7 @@ if __name__=="__main__":
     plot_route_driven(os.path.normpath(os.path.abspath(argdict["bag_in"])))
     plt.xlabel("Horizontal Coordinate (m)")
     plt.ylabel("Vertical Coordinate (m)")
+    plt.legend()
     if argdict["png_out"]:
         plt.savefig(argdict["png_out"])
     plt.show()
