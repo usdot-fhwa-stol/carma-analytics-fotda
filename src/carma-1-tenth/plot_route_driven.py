@@ -51,7 +51,7 @@ def plot_route_driven(bag_dir):
 
 if __name__=="__main__":
     import argparse, argcomplete
-    parser = argparse.ArgumentParser(description="Plot steering rate of C1T trucks")
+    parser = argparse.ArgumentParser(description="Plot the intended route and path driven of C1T trucks")
     parser.add_argument("bag_in", type=str, help="Bag to load")
     parser.add_argument("--png_out", type=str, help="Output file")
     argcomplete.autocomplete(parser)

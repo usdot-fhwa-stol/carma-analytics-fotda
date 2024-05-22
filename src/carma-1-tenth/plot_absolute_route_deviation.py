@@ -64,37 +64,38 @@ def plot_absolute_route_deviation(bag_dir, start_offset=0.0):
     # Fit 2D splines that map the distance along the route to the x and y coordinates to upsample the points
     x_spline = make_interp_spline(route_coordinates_with_distance[:,0], route_coordinates_with_distance[:,1])
     y_spline = make_interp_spline(route_coordinates_with_distance[:,0], route_coordinates_with_distance[:,2])
-    samples = np.linspace(route_coordinates_with_distance[0,0], route_coordinates_with_distance[-1,0], 5000)
+    samples = np.linspace(route_coordinates_with_distance[0,0], route_coordinates_with_distance[-1,0], 10000)
     route_x_points = x_spline(samples)
     route_y_points = y_spline(samples)
     route_deviations = []
-    route_times = []
+    distances_along_route = []
     # For each odometry message, compute the deviation from the closest point along the route
     for i in range(1, len(odometry)):
         closest_point = find_closest_point(np.array([route_x_points, route_y_points]).T, odometry[i])
         if closest_point is not None and np.linalg.norm(odometry[i]- odometry[i-1]) >= 0.005:
             route_deviations.append(np.linalg.norm(odometry[i] - closest_point))
-            route_times.append(odometry_times[i])
+            if len(distances_along_route):
+                distances_along_route.append(distances_along_route[-1] + np.linalg.norm(closest_point - previous_closest_point))
+            else:
+                distances_along_route.append(np.linalg.norm(closest_point - np.array([route_x_points[0], route_y_points[0]])))
+        previous_closest_point = closest_point
 
-    dates = np.array([dt.datetime.fromtimestamp(ts * 1e-9) for ts in route_times])
-    start_time = dates[0]
-    times = np.array([(date - start_time).total_seconds() - start_offset for date in dates])
 
     print("Average Deviation:", np.mean(route_deviations))
     print("Maximum Deviation:", np.max(route_deviations))
-    plt.plot(times, route_deviations)
+    plt.plot(distances_along_route, route_deviations)
 
 
 if __name__=="__main__":
     import argparse, argcomplete
-    parser = argparse.ArgumentParser(description="Plot steering rate of C1T trucks")
+    parser = argparse.ArgumentParser(description="Plot absolute deviation between C1T path driven and desired route")
     parser.add_argument("bag_in", type=str, help="Bag to load")
     parser.add_argument("--png_out", type=str, help="Output file")
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
     argdict : dict = vars(args)
     plot_absolute_route_deviation(os.path.normpath(os.path.abspath(argdict["bag_in"])))
-    plt.xlabel("Time (s)")
+    plt.xlabel("Downtrack (m)")
     plt.ylabel("Absolute Deviation from Route (m)")
     plt.title("Absolute Deviation from Route vs. Time")
     if argdict["png_out"]:
