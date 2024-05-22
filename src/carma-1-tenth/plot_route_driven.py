@@ -61,6 +61,7 @@ if __name__=="__main__":
     plt.xlabel("Horizontal Coordinate (m)")
     plt.ylabel("Vertical Coordinate (m)")
     plt.legend()
+    plt.title("Route Driven Compared to Desired Route")
     if argdict["png_out"]:
         plt.savefig(argdict["png_out"])
     plt.show()

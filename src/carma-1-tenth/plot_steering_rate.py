@@ -60,6 +60,7 @@ if __name__=="__main__":
     plt.ylim([-10, 10])
     plt.xlabel("Time (s)")
     plt.ylabel("Steering Rate (rad/s)")
+    plt.title("Steering Rate vs. Time")
     plt.legend()
     if argdict["png_out"]:
         plt.savefig(argdict["png_out"])
