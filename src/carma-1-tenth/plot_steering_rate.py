@@ -1,5 +1,7 @@
 # Plot the steering rate velocity over time, with the ability to compare between two runs
 
+
+import argparse, argcomplete
 from rosbag_utils import open_bagfile
 import numpy as np
 import yaml
@@ -45,7 +47,6 @@ def plot_steering_rate(bag_dir, label, start_offset=0.0):
 
 
 if __name__=="__main__":
-    import argparse, argcomplete
     parser = argparse.ArgumentParser(description="Plot steering rate of C1T trucks")
     parser.add_argument("filtered_bag", type=str, help="Directory of bag with filtered steering")
     parser.add_argument("--filtered_bag_offset", type=float, default=0.0, help="Time offset for start of bag with filtered steering")
