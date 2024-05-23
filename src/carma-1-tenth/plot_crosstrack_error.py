@@ -23,7 +23,6 @@ def find_closest_point(point_arr, point):
 
 
 def is_left(route_a, route_b, odometry):
-    print(route_a, route_b, odometry)
     cross_product = np.cross(route_b - route_a, odometry - route_a)
     if cross_product > 0:
         return True
