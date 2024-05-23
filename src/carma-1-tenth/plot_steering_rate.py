@@ -1,3 +1,5 @@
+# Plot the steering rate velocity over time, with the ability to compare between two runs
+
 from rosbag_utils import open_bagfile
 import numpy as np
 import yaml
@@ -49,7 +51,7 @@ if __name__=="__main__":
     parser.add_argument("--filtered_bag_offset", type=float, default=0.0, help="Time offset for start of bag with filtered steering")
     parser.add_argument("--unfiltered_bag", type=str, help="Bag with unfiltered steering")
     parser.add_argument("--unfiltered_bag_offset", type=float, default=0.0, help="Time offset for start of bag with unfiltered steering")
-    parser.add_argument("--png_out", type=str, help="Output file")
+    parser.add_argument("--png_out", type=str, help="File path to save the plot")
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
     argdict : dict = vars(args)

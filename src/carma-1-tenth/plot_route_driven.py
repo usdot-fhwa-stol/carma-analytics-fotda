@@ -1,3 +1,6 @@
+# Plot the path driven by the C1T truck and the route that it intended to follow
+
+
 from rosbag_utils import open_bagfile
 import numpy as np
 import yaml
@@ -53,7 +56,7 @@ if __name__=="__main__":
     import argparse, argcomplete
     parser = argparse.ArgumentParser(description="Plot the intended route and path driven of C1T trucks")
     parser.add_argument("bag_in", type=str, help="Bag to load")
-    parser.add_argument("--png_out", type=str, help="Output file")
+    parser.add_argument("--png_out", type=str, help="File path to save the plot")
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
     argdict : dict = vars(args)

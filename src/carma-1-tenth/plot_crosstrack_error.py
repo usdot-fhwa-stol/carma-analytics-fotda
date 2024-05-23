@@ -1,12 +1,15 @@
+# Plot the crosstrack error as a function of downtrack (distance traveled along the route)
+
+
 from rosbag_utils import open_bagfile
 import numpy as np
 import yaml
 import tqdm
 from rosidl_runtime_py.utilities import get_message
 from rclpy.serialization import deserialize_message
-import datetime as dt
 import matplotlib.pyplot as plt
 from scipy.interpolate import make_interp_spline
+import argparse, argcomplete
 import os
 
 
@@ -15,8 +18,17 @@ def find_closest_point(point_arr, point):
     min_index = difference_arr.argmin()
     # Don't want to include deviations if we have not yet reached the route or have completed it
     if min_index == 0 or min_index == len(difference_arr) - 1:
-        return None
-    return point_arr[min_index]
+        return None, None
+    return point_arr[min_index], min_index
+
+
+def is_left(route_a, route_b, odometry):
+    print(route_a, route_b, odometry)
+    cross_product = np.cross(route_b - route_a, odometry - route_a)
+    if cross_product > 0:
+        return True
+    else:
+        return False
 
 
 def plot_absolute_route_deviation(bag_dir, start_offset=0.0):
@@ -42,7 +54,7 @@ def plot_absolute_route_deviation(bag_dir, start_offset=0.0):
             msg_type = type_map[topic]
             msg_type_full = get_message(msg_type)
             msg = deserialize_message(data, msg_type_full)
-            if msg_type == "visualization_msgs/msg/MarkerArray":
+            if topic == route_topic:
                 route_graph = msg
             else:
                 odometry[odom_count] = [-msg.pose.pose.position.y, msg.pose.pose.position.x]
@@ -71,9 +83,12 @@ def plot_absolute_route_deviation(bag_dir, start_offset=0.0):
     distances_along_route = []
     # For each odometry message, compute the deviation from the closest point along the route
     for i in range(1, len(odometry)):
-        closest_point = find_closest_point(np.array([route_x_points, route_y_points]).T, odometry[i])
+        closest_point, closest_index = find_closest_point(np.array([route_x_points, route_y_points]).T, odometry[i])
         if closest_point is not None and np.linalg.norm(odometry[i]- odometry[i-1]) >= 0.005:
-            route_deviations.append(np.linalg.norm(odometry[i] - closest_point))
+            if is_left(np.array([route_x_points[closest_index - 5], route_y_points[closest_index - 5]]), np.array([route_x_points[closest_index + 5], route_y_points[closest_index + 5]]), odometry[i]):
+                route_deviations.append(np.linalg.norm(odometry[i] - closest_point))
+            else:
+                route_deviations.append(-np.linalg.norm(odometry[i] - closest_point))
             if len(distances_along_route):
                 distances_along_route.append(distances_along_route[-1] + np.linalg.norm(closest_point - previous_closest_point))
             else:
@@ -81,23 +96,24 @@ def plot_absolute_route_deviation(bag_dir, start_offset=0.0):
         previous_closest_point = closest_point
 
 
-    print("Average Deviation:", np.mean(route_deviations))
-    print("Maximum Deviation:", np.max(route_deviations))
-    plt.plot(distances_along_route, route_deviations)
+    print("Average Deviation:", np.mean(np.abs(route_deviations)))
+    print("Maximum Deviation:", np.max(np.abs(route_deviations)))
+    plt.plot(distances_along_route, route_deviations, label="Crosstrack Error")
+    plt.plot(distances_along_route, np.zeros(len(route_deviations)), label="Route")
 
 
 if __name__=="__main__":
-    import argparse, argcomplete
-    parser = argparse.ArgumentParser(description="Plot absolute deviation between C1T path driven and desired route")
+    parser = argparse.ArgumentParser(description="Plot deviation between C1T path driven and desired route")
     parser.add_argument("bag_in", type=str, help="Bag to load")
-    parser.add_argument("--png_out", type=str, help="Output file")
+    parser.add_argument("--png_out", type=str, help="File path to save the plot")
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
     argdict : dict = vars(args)
     plot_absolute_route_deviation(os.path.normpath(os.path.abspath(argdict["bag_in"])))
     plt.xlabel("Downtrack (m)")
-    plt.ylabel("Absolute Deviation from Route (m)")
-    plt.title("Absolute Deviation from Route vs. Time")
+    plt.ylabel("Crosstrack Error (m)")
+    plt.title("Crosstrack Error vs. Downtrack")
     if argdict["png_out"]:
         plt.savefig(argdict["png_out"])
+    plt.legend()
     plt.show()
