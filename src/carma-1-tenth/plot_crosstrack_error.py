@@ -104,7 +104,7 @@ def plot_absolute_route_deviation(bag_dir, start_offset=0.0):
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description="Plot deviation between C1T path driven and desired route")
-    parser.add_argument("bag_in", type=str, help="Bag to load")
+    parser.add_argument("bag_in", type=str, help="Directory of bag to load")
     parser.add_argument("--png_out", type=str, help="File path to save the plot")
     argcomplete.autocomplete(parser)
     args = parser.parse_args()

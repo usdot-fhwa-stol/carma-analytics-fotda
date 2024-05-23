@@ -47,9 +47,9 @@ def plot_steering_rate(bag_dir, label, start_offset=0.0):
 if __name__=="__main__":
     import argparse, argcomplete
     parser = argparse.ArgumentParser(description="Plot steering rate of C1T trucks")
-    parser.add_argument("filtered_bag", type=str, help="Bag with filtered steering")
+    parser.add_argument("filtered_bag", type=str, help="Directory of bag with filtered steering")
     parser.add_argument("--filtered_bag_offset", type=float, default=0.0, help="Time offset for start of bag with filtered steering")
-    parser.add_argument("--unfiltered_bag", type=str, help="Bag with unfiltered steering")
+    parser.add_argument("--unfiltered_bag", type=str, help="Directory of bag with unfiltered steering")
     parser.add_argument("--unfiltered_bag_offset", type=float, default=0.0, help="Time offset for start of bag with unfiltered steering")
     parser.add_argument("--png_out", type=str, help="File path to save the plot")
     argcomplete.autocomplete(parser)
