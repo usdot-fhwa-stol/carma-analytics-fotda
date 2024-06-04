@@ -98,8 +98,6 @@ def plot_absolute_route_deviation(bag_dir, start_offset=0.0):
 
     print("Average Deviation:", np.mean(np.abs(route_deviations)))
     print("Maximum Deviation:", np.max(np.abs(route_deviations)))
-    # plt.plot(route_x_points, route_y_points)
-    # plt.plot(route_coordinates[:,0], route_coordinates[:,1], '.r')
     plt.plot(distances_along_route, route_deviations, label="Crosstrack Error")
     plt.plot(distances_along_route, np.zeros(len(route_deviations)), label="Route")
 
