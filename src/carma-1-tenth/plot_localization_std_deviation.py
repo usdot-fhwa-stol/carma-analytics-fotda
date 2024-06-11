@@ -65,25 +65,20 @@ def plot_localization_std_deviation(bag_dir, start_offset=0.0):
     odom_std_deviations = []
     distances_along_route = []
     # For each odometry message, compute the deviation from the closest point along the route
-    for i in range(5, len(odometry) - 5):
+    for i in range(1, len(odometry) - 1):
         closest_point, _ = find_closest_point(np.array([route_x_points, route_y_points]).T, odometry[i])
         if closest_point is not None and np.linalg.norm(odometry[i]- odometry[i-1]) >= 0.005:
-            odom_std_deviations.append(np.std(odometry[i-1:i+1], axis=0))
+            odom_std_deviations.append(np.mean(np.std(odometry[i-1:i+1], axis=0)))
             if len(distances_along_route):
                 distances_along_route.append(distances_along_route[-1] + np.linalg.norm(closest_point - previous_closest_point))
             else:
                 distances_along_route.append(np.linalg.norm(closest_point - np.array([route_x_points[0], route_y_points[0]])))
         previous_closest_point = closest_point
-    odom_std_deviations = np.array(odom_std_deviations).T
 
+    print("Average Standard Deviation:", np.mean(odom_std_deviations))
+    print("Maximum Standard Deviation:", np.max(odom_std_deviations))
 
-    print("Average Standard Deviation (x):", np.mean(odom_std_deviations[0]))
-    print("Maximum Standard Deviation (x):", np.max(odom_std_deviations[0]))
-    print("Average Standard Deviation (y):", np.mean(odom_std_deviations[1]))
-    print("Maximum Standard Deviation (y):", np.max(odom_std_deviations[1]))
-
-    plt.plot(distances_along_route, odom_std_deviations[0], label="x")
-    plt.plot(distances_along_route, odom_std_deviations[1], label="y")
+    plt.plot(distances_along_route, odom_std_deviations)
 
 
 if __name__=="__main__":
@@ -99,5 +94,4 @@ if __name__=="__main__":
     plt.title("Localization Standard Deviation vs. Downtrack")
     if argdict["png_out"]:
         plt.savefig(argdict["png_out"])
-    plt.legend()
     plt.show()
