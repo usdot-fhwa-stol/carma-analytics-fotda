@@ -9,7 +9,7 @@ import tqdm
 from rosidl_runtime_py.utilities import get_message
 from rclpy.serialization import deserialize_message
 import matplotlib.pyplot as plt
-from scipy.interpolate import make_interp_spline
+from scipy.interpolate import make_interp_spline, interp1d
 import argparse, argcomplete
 import os
 
@@ -23,15 +23,19 @@ def plot_localization_std_deviation(bag_dir, start_offset=0.0):
     storage_id = metadata_dict['storage_identifier']
     odom_topic = '/amcl_pose'
     route_topic = '/route_graph'
-    reader, type_map = open_bagfile(bag_dir, topics=[odom_topic, route_topic], storage_id=storage_id)
+    particles_topic = '/particle_cloud'
+    reader, type_map = open_bagfile(bag_dir, topics=[odom_topic, route_topic, particles_topic], storage_id=storage_id)
     topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
 
     route_graph = None
     odom_count = 0
+    particles_count = 0
     odometry = np.zeros((topic_count_dict[odom_topic], 2))
     odometry_times = np.zeros((topic_count_dict[odom_topic],))
+    particle_std_deviations = np.zeros((topic_count_dict[particles_topic],))
+    particle_times = np.zeros((topic_count_dict[particles_topic],))
     # Iterate through bag and store odometry + route_graph messages
-    for idx in tqdm.tqdm(iterable=range(topic_count_dict[odom_topic] + topic_count_dict[route_topic])):
+    for idx in tqdm.tqdm(iterable=range(topic_count_dict[odom_topic] + topic_count_dict[route_topic] + topic_count_dict[particles_topic])):
         if(reader.has_next()):
             (topic, data, t_) = reader.read_next()
             msg_type = type_map[topic]
@@ -39,10 +43,20 @@ def plot_localization_std_deviation(bag_dir, start_offset=0.0):
             msg = deserialize_message(data, msg_type_full)
             if topic == route_topic:
                 route_graph = msg
-            else:
+            elif topic == odom_topic:
                 odometry[odom_count] = [-msg.pose.pose.position.y, msg.pose.pose.position.x]
                 odometry_times[odom_count] = t_
                 odom_count += 1
+            elif topic == particles_topic:
+                particles = np.zeros((len(msg.particles), 2))
+                weights = np.zeros((len(msg.particles),))
+                for i in range(len(msg.particles)):
+                    particles[i] = [msg.particles[i].pose.position.x, msg.particles[i].pose.position.y]
+                    weights[i] = msg.particles[i].weight
+                particle_std_deviations[particles_count] = np.mean(np.diagonal(np.sqrt(np.cov(particles.T, aweights=weights))))
+                particle_times[particles_count] = t_
+                particles_count += 1
+
     route_coordinates = []
     # Rotate the route_graph coordinates 90 degrees to match C1T coordinates (x-forward, y-left)
     for i in range(len(route_graph.markers)):
@@ -63,35 +77,58 @@ def plot_localization_std_deviation(bag_dir, start_offset=0.0):
     route_x_points = x_spline(samples)
     route_y_points = y_spline(samples)
     odom_std_deviations = []
-    distances_along_route = []
-    # For each odometry message, compute the deviation from the closest point along the route
-    for i in range(1, len(odometry) - 1):
+    odom_distances_along_route = []
+    # For each odometry message, compute the standard deviation using the current, previous, and next message
+    for i in range(2, len(odometry) - 2):
         closest_point, _ = find_closest_point(np.array([route_x_points, route_y_points]).T, odometry[i])
         if closest_point is not None and np.linalg.norm(odometry[i]- odometry[i-1]) >= 0.005:
-            odom_std_deviations.append(np.mean(np.std(odometry[i-1:i+1], axis=0)))
-            if len(distances_along_route):
-                distances_along_route.append(distances_along_route[-1] + np.linalg.norm(closest_point - previous_closest_point))
+            odom_std_deviations.append(np.mean(np.std(odometry[i-2:i+2], axis=0)))
+            if len(odom_distances_along_route):
+                odom_distances_along_route.append(odom_distances_along_route[-1] + np.linalg.norm(closest_point - previous_closest_point))
             else:
-                distances_along_route.append(np.linalg.norm(closest_point - np.array([route_x_points[0], route_y_points[0]])))
+                odom_distances_along_route.append(np.linalg.norm(closest_point - np.array([route_x_points[0], route_y_points[0]])))
+        previous_closest_point = closest_point
+    # Interpolate the odometry of the robot using timestamps
+    odometry_interp = interp1d(odometry_times, odometry, axis=0)
+    # For each particle cloud message, compute the standard deviation of the particles
+    particle_trimmed_std_deviations = []
+    particle_distances_along_route = []
+    for i in range(len(particle_std_deviations)):
+        try:
+            current_odom = odometry_interp(particle_times[i])
+        except ValueError:  # Happens if a particle cloud is received after the last odometry message
+            continue
+        closest_point, _ = find_closest_point(np.array([route_x_points, route_y_points]).T, current_odom)
+        if closest_point is not None:
+            particle_trimmed_std_deviations.append(particle_std_deviations[i])
+            if len(particle_distances_along_route):
+                particle_distances_along_route.append(particle_distances_along_route[-1] + np.linalg.norm(closest_point - previous_closest_point))
+            else:
+                particle_distances_along_route.append(np.linalg.norm(closest_point - np.array([route_x_points[0], route_y_points[0]])))
         previous_closest_point = closest_point
 
-    print("Average Standard Deviation:", np.mean(odom_std_deviations))
-    print("Maximum Standard Deviation:", np.max(odom_std_deviations))
+    print("Average Localization Standard Deviation:", np.mean(odom_std_deviations))
+    print("Maximum Localization Standard Deviation:", np.max(odom_std_deviations))
 
-    plt.plot(distances_along_route, odom_std_deviations)
+    print("Average PF Standard Deviation:", np.mean(particle_trimmed_std_deviations))
+    print("Maximum PF Standard Deviation:", np.max(particle_trimmed_std_deviations))
+
+    plt.plot(odom_distances_along_route, odom_std_deviations)
+    plt.xlabel("Downtrack (m)")
+    plt.ylabel("Localization Standard Deviation (m)")
+    plt.title("Localization Standard Deviation vs. Downtrack")
+    plt.figure()
+    plt.plot(particle_distances_along_route, particle_trimmed_std_deviations)
+    plt.xlabel("Downtrack (m)")
+    plt.ylabel("Particle Filter Standard Deviation (m)")
+    plt.title("Particle Filter Standard Deviation vs. Downtrack")
 
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description="Plot standard deviation of the vehicle's localization as a function of downtrack distance")
     parser.add_argument("bag_in", type=str, help="Directory of bag to load")
-    parser.add_argument("--png_out", type=str, help="File path to save the plot")
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
     argdict : dict = vars(args)
     plot_localization_std_deviation(os.path.normpath(os.path.abspath(argdict["bag_in"])))
-    plt.xlabel("Downtrack (m)")
-    plt.ylabel("Localization Standard Deviation (m)")
-    plt.title("Localization Standard Deviation vs. Downtrack")
-    if argdict["png_out"]:
-        plt.savefig(argdict["png_out"])
     plt.show()
