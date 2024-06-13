@@ -9,12 +9,13 @@ import tqdm
 from rosidl_runtime_py.utilities import get_message
 from rclpy.serialization import deserialize_message
 import matplotlib.pyplot as plt
+import datetime
 from scipy.interpolate import make_interp_spline, interp1d
 import argparse, argcomplete
 import os
 
 
-def plot_localization_std_deviation(bag_dir, start_offset=0.0):
+def plot_localization(bag_dir, start_offset=0.0):
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
         raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
@@ -74,15 +75,19 @@ def plot_localization_std_deviation(bag_dir, start_offset=0.0):
     x_spline = make_interp_spline(route_coordinates_with_distance[:,0], route_coordinates_with_distance[:,1])
     y_spline = make_interp_spline(route_coordinates_with_distance[:,0], route_coordinates_with_distance[:,2])
     samples = np.linspace(route_coordinates_with_distance[0,0], route_coordinates_with_distance[-1,0], 10000)
+    odometry_datetimes = [datetime.datetime.fromtimestamp(time * 1e-9) for time in odometry_times]
+    odometry_times_seconds = [(date - odometry_datetimes[0]).total_seconds() for date in odometry_datetimes]
     route_x_points = x_spline(samples)
     route_y_points = y_spline(samples)
     odom_std_deviations = []
     odom_distances_along_route = []
+    odometry_times_trimmed = []
     # For each odometry message, compute the standard deviation using the current, previous, and next message
     for i in range(2, len(odometry) - 2):
         closest_point, _ = find_closest_point(np.array([route_x_points, route_y_points]).T, odometry[i])
         if closest_point is not None and np.linalg.norm(odometry[i]- odometry[i-1]) >= 0.005:
             odom_std_deviations.append(np.mean(np.std(odometry[i-2:i+2], axis=0)))
+            odometry_times_trimmed.append(odometry_times_seconds[i])
             if len(odom_distances_along_route):
                 odom_distances_along_route.append(odom_distances_along_route[-1] + np.linalg.norm(closest_point - previous_closest_point))
             else:
@@ -122,6 +127,12 @@ def plot_localization_std_deviation(bag_dir, start_offset=0.0):
     plt.xlabel("Downtrack (m)")
     plt.ylabel("Particle Filter Standard Deviation (m)")
     plt.title("Particle Filter Standard Deviation vs. Downtrack")
+    plt.figure()
+
+    plt.plot(odom_distances_along_route, np.gradient(odom_distances_along_route, odometry_times_trimmed))
+    plt.xlabel("Downtrack (m)")
+    plt.ylabel("Speed (m/s)")
+    plt.title("Vehicle Speed vs. Downtrack")
 
 
 if __name__=="__main__":
@@ -130,5 +141,5 @@ if __name__=="__main__":
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
     argdict : dict = vars(args)
-    plot_localization_std_deviation(os.path.normpath(os.path.abspath(argdict["bag_in"])))
+    plot_localization(os.path.normpath(os.path.abspath(argdict["bag_in"])))
     plt.show()
