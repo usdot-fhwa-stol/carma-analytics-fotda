@@ -37,20 +37,27 @@ def plot_route_driven(bag_dir):
             else:
                 odometry[odom_count] = [msg.pose.pose.position.x, msg.pose.pose.position.y]
                 odom_count += 1
-    plt.plot(-odometry[:,1], odometry[:,0], label="Path Driven")
     x_min, y_min, x_max, y_max = np.inf, np.inf, -np.inf, -np.inf
+    route_graph_coordinates = []
+    route_downtrack_distances = []
     for i in range(len(route_graph.markers)):
         if route_graph.markers[i].type == 2:
-            if i == 0:
-                plt.plot(-route_graph.markers[i].pose.position.y, route_graph.markers[i].pose.position.x, 'ro', label="Route")
-            else:
-                plt.plot(-route_graph.markers[i].pose.position.y, route_graph.markers[i].pose.position.x, 'ro')
+            route_graph_coordinates.append(np.array([-route_graph.markers[i].pose.position.y, route_graph.markers[i].pose.position.x]))
             x_min = np.min([-route_graph.markers[i].pose.position.y, x_min])
             y_min = np.min([route_graph.markers[i].pose.position.x, y_min])
             x_max = np.max([-route_graph.markers[i].pose.position.y, x_max])
             y_max = np.max([route_graph.markers[i].pose.position.x, y_max])
+            if len(route_downtrack_distances):
+                route_downtrack_distances.append(route_downtrack_distances[-1] + np.linalg.norm(route_graph_coordinates[-1] - route_graph_coordinates[-2]))
+            else:
+                route_downtrack_distances.append(0.0)
+            plt.text(route_graph_coordinates[-1][0] + 0.1, route_graph_coordinates[-1][1] + 0.1, "{:.1f}".format(route_downtrack_distances[-1]))
+    route_graph_coordinates = np.array(route_graph_coordinates)
+    plt.plot(route_graph_coordinates[:,0], route_graph_coordinates[:,1], 'ro-', label="Route")
+    plt.plot(-odometry[:,1], odometry[:,0], label="Path Driven")
     plt.xlim([x_min - 1.0, x_max + 1.0])
     plt.ylim([y_min - 1.0, y_max + 1.0])
+    print(route_downtrack_distances)
 
 
 if __name__=="__main__":
