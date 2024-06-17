@@ -64,8 +64,9 @@ def plot_absolute_route_deviation(bag_dir, start_offset=0.0):
     for i in range(len(route_graph.markers)):
         if route_graph.markers[i].type == 2:
             route_coordinates.append([-route_graph.markers[i].pose.position.y, route_graph.markers[i].pose.position.x])
+    route_coordinates = np.array(route_coordinates)
     route_coordinates_with_distance = np.zeros((len(route_coordinates), 3))
-    route_coordinates_with_distance[:, 1:] = np.array(route_coordinates)
+    route_coordinates_with_distance[:, 1:] = route_coordinates
     running_distance = 0.0
     # Assign a distance along the route for each x,y coordinate along the route
     for i in range(len(route_coordinates)):
@@ -73,8 +74,8 @@ def plot_absolute_route_deviation(bag_dir, start_offset=0.0):
             running_distance += np.linalg.norm(route_coordinates_with_distance[i, 1:] - route_coordinates_with_distance[i-1, 1:])
         route_coordinates_with_distance[i,0] = running_distance
     # Fit 2D splines that map the distance along the route to the x and y coordinates to upsample the points
-    x_spline = make_interp_spline(route_coordinates_with_distance[:,0], route_coordinates_with_distance[:,1])
-    y_spline = make_interp_spline(route_coordinates_with_distance[:,0], route_coordinates_with_distance[:,2])
+    x_spline = make_interp_spline(route_coordinates_with_distance[:,0], route_coordinates_with_distance[:,1], k=1)
+    y_spline = make_interp_spline(route_coordinates_with_distance[:,0], route_coordinates_with_distance[:,2], k=1)
     samples = np.linspace(route_coordinates_with_distance[0,0], route_coordinates_with_distance[-1,0], 10000)
     route_x_points = x_spline(samples)
     route_y_points = y_spline(samples)
