@@ -88,20 +88,6 @@ def plot_localization(bag_dir, start_offset=0.0):
     odometry_times_seconds = [(date - odometry_datetimes[0]).total_seconds() for date in odometry_datetimes]
     route_x_points = x_spline(samples)
     route_y_points = y_spline(samples)
-    odom_std_deviations = []
-    odom_distances_along_route = []
-    odometry_times_trimmed = []
-    # For each odometry message, compute the standard deviation using the current, previous, and next message
-    for i in range(2, len(odometry) - 2):
-        closest_point, _ = find_closest_point(np.array([route_x_points, route_y_points]).T, odometry[i])
-        if closest_point is not None and np.linalg.norm(odometry[i]- odometry[i-1]) >= 0.005:
-            odom_std_deviations.append(np.mean(np.std(odometry[i-2:i+2], axis=0)))
-            odometry_times_trimmed.append(odometry_times_seconds[i])
-            if len(odom_distances_along_route):
-                odom_distances_along_route.append(odom_distances_along_route[-1] + np.linalg.norm(closest_point - previous_closest_point))
-            else:
-                odom_distances_along_route.append(np.linalg.norm(closest_point - np.array([route_x_points[0], route_y_points[0]])))
-        previous_closest_point = closest_point
     # Interpolate the odometry of the robot using timestamps
     odometry_interp = interp1d(odometry_times, odometry, axis=0)
     # For each particle cloud message, compute the standard deviation of the particles
@@ -137,26 +123,20 @@ def plot_localization(bag_dir, start_offset=0.0):
                 velocity_cmd_distances_along_route.append(np.linalg.norm(closest_point - np.array([route_x_points[0], route_y_points[0]])))
         previous_closest_point = closest_point
 
-    print("Average Localization Standard Deviation:", np.mean(odom_std_deviations))
-    print("Maximum Localization Standard Deviation:", np.max(odom_std_deviations))
-
     print("Average PF Standard Deviation:", np.mean(particle_trimmed_std_deviations))
     print("Maximum PF Standard Deviation:", np.max(particle_trimmed_std_deviations))
 
-    plt.plot(odom_distances_along_route, odom_std_deviations)
-    plt.xlabel("Downtrack (m)")
-    plt.ylabel("Localization Standard Deviation (m)")
-    plt.title("Localization Standard Deviation vs. Downtrack")
-    plt.figure()
     plt.plot(particle_distances_along_route, particle_trimmed_std_deviations)
     plt.xlabel("Downtrack (m)")
     plt.ylabel("Particle Filter Standard Deviation (m)")
     plt.title("Particle Filter Standard Deviation vs. Downtrack")
+    plt.ylim([0.0, 1.1 * np.max(particle_trimmed_std_deviations)])
     plt.figure()
 
     plt.plot(velocity_cmd_distances_along_route, velocity_cmd_trimmed)
     plt.xlabel("Downtrack (m)")
     plt.ylabel("Speed (m/s)")
+    plt.ylim([0.0, 1.1 * np.max(velocity_cmd_trimmed)])
     plt.title("Vehicle Speed vs. Downtrack")
 
 
