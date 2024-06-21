@@ -15,7 +15,7 @@ import argparse, argcomplete
 import os
 
 
-def plot_localization(bag_dir, start_offset=0.0):
+def plot_localization(bag_dir, start_offset=0.0, show_plots=True):
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
         raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
@@ -35,7 +35,7 @@ def plot_localization(bag_dir, start_offset=0.0):
     velocities_count = 0
     odometry = np.zeros((topic_count_dict[odom_topic], 2))
     odometry_times = np.zeros((topic_count_dict[odom_topic],))
-    particle_std_deviations = np.zeros((topic_count_dict[particles_topic],))
+    particle_std_deviations = np.zeros((topic_count_dict[particles_topic], 2))
     particle_times = np.zeros((topic_count_dict[particles_topic],))
     velocities = np.zeros((topic_count_dict[cmd_vel_topic],))
     velocity_times = np.zeros((topic_count_dict[cmd_vel_topic],))
@@ -59,7 +59,7 @@ def plot_localization(bag_dir, start_offset=0.0):
                 for i in range(len(msg.particles)):
                     particles[i] = [msg.particles[i].pose.position.x, msg.particles[i].pose.position.y]
                     weights[i] = msg.particles[i].weight
-                particle_std_deviations[particles_count] = np.mean(np.diagonal(np.sqrt(np.cov(particles.T, aweights=weights))))
+                particle_std_deviations[particles_count] = np.diagonal(np.sqrt(np.cov(particles.T, aweights=weights)))
                 particle_times[particles_count] = t_
                 particles_count += 1
             elif topic == cmd_vel_topic:
@@ -106,6 +106,8 @@ def plot_localization(bag_dir, start_offset=0.0):
             else:
                 particle_distances_along_route.append(np.linalg.norm(closest_point - np.array([route_x_points[0], route_y_points[0]])))
         previous_closest_point = closest_point
+    particle_distances_along_route = np.array(particle_distances_along_route)
+    particle_trimmed_std_deviations = np.array(particle_trimmed_std_deviations)
     # For each commanded velocity, compute the downtrack distance at that time
     velocity_cmd_trimmed = []
     velocity_cmd_distances_along_route = []
@@ -122,22 +124,26 @@ def plot_localization(bag_dir, start_offset=0.0):
             else:
                 velocity_cmd_distances_along_route.append(np.linalg.norm(closest_point - np.array([route_x_points[0], route_y_points[0]])))
         previous_closest_point = closest_point
+    velocity_cmd_distances_along_route = np.array(velocity_cmd_distances_along_route)
+    velocity_cmd_trimmed = np.array(velocity_cmd_trimmed)
+    averaged_particle_standard_deviations = np.mean(particle_trimmed_std_deviations, axis=1)
+    print("Average PF Standard Deviation:", np.mean(averaged_particle_standard_deviations))
+    print("Maximum PF Standard Deviation:", np.max(averaged_particle_standard_deviations))
 
-    print("Average PF Standard Deviation:", np.mean(particle_trimmed_std_deviations))
-    print("Maximum PF Standard Deviation:", np.max(particle_trimmed_std_deviations))
+    if show_plots:
+        plt.plot(particle_distances_along_route, averaged_particle_standard_deviations)
+        plt.xlabel("Downtrack (m)")
+        plt.ylabel("Particle Filter Standard Deviation (m)")
+        plt.title("Particle Filter Standard Deviation vs. Downtrack")
+        plt.ylim([0.0, 1.1 * np.max(particle_trimmed_std_deviations)])
+        plt.figure()
 
-    plt.plot(particle_distances_along_route, particle_trimmed_std_deviations)
-    plt.xlabel("Downtrack (m)")
-    plt.ylabel("Particle Filter Standard Deviation (m)")
-    plt.title("Particle Filter Standard Deviation vs. Downtrack")
-    plt.ylim([0.0, 1.1 * np.max(particle_trimmed_std_deviations)])
-    plt.figure()
-
-    plt.plot(velocity_cmd_distances_along_route, velocity_cmd_trimmed)
-    plt.xlabel("Downtrack (m)")
-    plt.ylabel("Speed (m/s)")
-    plt.ylim([0.0, 1.1 * np.max(velocity_cmd_trimmed)])
-    plt.title("Vehicle Speed vs. Downtrack")
+        plt.plot(velocity_cmd_distances_along_route, velocity_cmd_trimmed)
+        plt.xlabel("Downtrack (m)")
+        plt.ylabel("Speed (m/s)")
+        plt.ylim([0.0, 1.1 * np.max(velocity_cmd_trimmed)])
+        plt.title("Vehicle Speed vs. Downtrack")
+    return particle_distances_along_route, particle_trimmed_std_deviations
 
 
 if __name__=="__main__":

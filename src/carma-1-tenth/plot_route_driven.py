@@ -9,10 +9,13 @@ import tqdm
 from rosidl_runtime_py.utilities import get_message
 from rclpy.serialization import deserialize_message
 import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
+from plot_crosstrack_error import find_closest_point
+from plot_localization import plot_localization
 import os
 
 
-def plot_route_driven(bag_dir):
+def plot_route_driven(bag_dir, show_plots=True):
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
         raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
@@ -35,11 +38,12 @@ def plot_route_driven(bag_dir):
             if topic == route_topic:
                 route_graph = msg
             else:
-                odometry[odom_count] = [msg.pose.pose.position.x, msg.pose.pose.position.y]
+                odometry[odom_count] = [-msg.pose.pose.position.y, msg.pose.pose.position.x]
                 odom_count += 1
     x_min, y_min, x_max, y_max = np.inf, np.inf, -np.inf, -np.inf
     route_graph_coordinates = []
     route_downtrack_distances = []
+    map_coords_to_downtrack = dict()
     for i in range(len(route_graph.markers)):
         if route_graph.markers[i].type == 2:
             route_graph_coordinates.append(np.array([-route_graph.markers[i].pose.position.y, route_graph.markers[i].pose.position.x]))
@@ -52,11 +56,21 @@ def plot_route_driven(bag_dir):
             else:
                 route_downtrack_distances.append(0.0)
             plt.text(route_graph_coordinates[-1][0] + 0.1, route_graph_coordinates[-1][1] + 0.1, "{:.1f}".format(route_downtrack_distances[-1]))
+            map_coords_to_downtrack[tuple(route_graph_coordinates[-1])] = route_downtrack_distances[-1]
     route_graph_coordinates = np.array(route_graph_coordinates)
-    plt.plot(route_graph_coordinates[:,0], route_graph_coordinates[:,1], 'ro-', label="Route")
-    plt.plot(-odometry[:,1], odometry[:,0], label="Path Driven")
-    plt.xlim([x_min - 1.0, x_max + 1.0])
-    plt.ylim([y_min - 1.0, y_max + 1.0])
+    if show_plots:
+        plt.plot(route_graph_coordinates[:,0], route_graph_coordinates[:,1], 'ro-', label="Route")
+        plt.plot(odometry[:,0], odometry[:,1], 'b', label="Estimated Path Driven")
+        plt.xlim([x_min - 1.0, x_max + 1.0])
+        plt.ylim([y_min - 1.0, y_max + 1.0])
+        ax = plt.gca()
+        particle_distances_along_route, particle_std_deviations = plot_localization(bag_dir, show_plots=False)
+        for route_coordinate in route_graph_coordinates:
+            closest_odom_to_route, _ = find_closest_point(odometry, route_coordinate)
+            route_coordinate_downtrack_distance = map_coords_to_downtrack[tuple(route_coordinate)]
+            std_deviation_at_route_coordinate = particle_std_deviations[np.abs(route_coordinate_downtrack_distance - particle_distances_along_route).argmin()]
+            e2 = Ellipse(closest_odom_to_route, 2.0 * std_deviation_at_route_coordinate[0], 2.0 * std_deviation_at_route_coordinate[1], color='b', fill=False, ls="--")
+            ax.add_patch(e2)
     print(route_downtrack_distances)
 
 
@@ -71,7 +85,7 @@ if __name__=="__main__":
     plt.xlabel("Horizontal Coordinate (m)")
     plt.ylabel("Vertical Coordinate (m)")
     plt.legend()
-    plt.title("Route Driven Compared to Desired Route")
+    plt.title("Estimated Path Driven Compared to Desired Route")
     if argdict["png_out"]:
         plt.savefig(argdict["png_out"])
     plt.show()
