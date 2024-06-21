@@ -15,7 +15,7 @@ import argparse, argcomplete
 import os
 
 
-def plot_localization(bag_dir, start_offset=0.0, show_plots=True):
+def plot_localization(bag_dir, show_plots=True):
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
         raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))

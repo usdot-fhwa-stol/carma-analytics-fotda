@@ -30,7 +30,7 @@ def is_left(route_a, route_b, odometry):
         return False
 
 
-def plot_absolute_route_deviation(bag_dir, start_offset=0.0, show_plots=True):
+def plot_absolute_route_deviation(bag_dir, show_plots=True):
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
         raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
