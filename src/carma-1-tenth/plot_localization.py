@@ -49,6 +49,7 @@ def plot_localization(bag_dir, start_offset=0.0):
             if topic == route_topic:
                 route_graph = msg
             elif topic == odom_topic:
+                # Rotate from standard x,y coordinates to vehicle coordinates
                 odometry[odom_count] = [-msg.pose.pose.position.y, msg.pose.pose.position.x]
                 odometry_times[odom_count] = t_
                 odom_count += 1
