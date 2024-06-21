@@ -30,7 +30,7 @@ def is_left(route_a, route_b, odometry):
         return False
 
 
-def plot_absolute_route_deviation(bag_dir, start_offset=0.0):
+def plot_absolute_route_deviation(bag_dir, show_plots=True):
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
         raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
@@ -98,8 +98,9 @@ def plot_absolute_route_deviation(bag_dir, start_offset=0.0):
 
     print("Average Deviation:", np.mean(np.abs(route_deviations)))
     print("Maximum Deviation:", np.max(np.abs(route_deviations)))
-    plt.plot(distances_along_route, route_deviations, label="Crosstrack Error")
-    plt.plot(distances_along_route, np.zeros(len(route_deviations)), label="Route")
+    if show_plots:
+        plt.plot(distances_along_route, route_deviations, label="Crosstrack Error")
+        plt.plot(distances_along_route, np.zeros(len(route_deviations)), label="Route")
 
 
 if __name__=="__main__":
