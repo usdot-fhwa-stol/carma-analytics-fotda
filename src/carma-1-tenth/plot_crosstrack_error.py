@@ -13,11 +13,11 @@ import argparse, argcomplete
 import os
 
 
-def find_closest_point(point_arr, point):
+def find_closest_point(point_arr, point, trim_ends=True):
     difference_arr = np.linalg.norm(point_arr - point, axis=1)
     min_index = difference_arr.argmin()
     # Don't want to include deviations if we have not yet reached the route or have completed it
-    if min_index == 0 or min_index == len(difference_arr) - 1:
+    if trim_ends and (min_index == 0 or min_index == len(difference_arr) - 1):
         return None, None
     return point_arr[min_index], min_index
 
