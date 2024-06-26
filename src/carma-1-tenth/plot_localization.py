@@ -40,7 +40,7 @@ def plot_localization(bag_dir, show_plots=True):
     velocities = np.zeros((topic_count_dict[cmd_vel_topic],))
     velocity_times = np.zeros((topic_count_dict[cmd_vel_topic],))
     # Iterate through bag and store odometry + route_graph messages
-    for idx in tqdm.tqdm(iterable=range(topic_count_dict[odom_topic] + topic_count_dict[route_topic] + topic_count_dict[particles_topic])):
+    for idx in tqdm.tqdm(iterable=range(topic_count_dict[odom_topic] + topic_count_dict[route_topic] + topic_count_dict[particles_topic] + topic_count_dict[cmd_vel_topic])):
         if(reader.has_next()):
             (topic, data, t_) = reader.read_next()
             msg_type = type_map[topic]
