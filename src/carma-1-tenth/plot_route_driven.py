@@ -69,10 +69,8 @@ def plot_route_driven(bag_dir, show_plots=True):
             closest_odom_to_route, _ = find_closest_point(odometry, route_coordinate, trim_ends=False)
             route_coordinate_downtrack_distance = map_coords_to_downtrack[tuple(route_coordinate)]
             std_deviation_at_route_coordinate = particle_std_deviations[np.abs(route_coordinate_downtrack_distance - particle_distances_along_route).argmin()]
-            print(closest_odom_to_route)
             e2 = Ellipse(closest_odom_to_route, 2.0 * std_deviation_at_route_coordinate[0], 2.0 * std_deviation_at_route_coordinate[1], color='b', fill=False, ls="--")
             ax.add_patch(e2)
-    print(route_downtrack_distances)
 
 
 if __name__=="__main__":
