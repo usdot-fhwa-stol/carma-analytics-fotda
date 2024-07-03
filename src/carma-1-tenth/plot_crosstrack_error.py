@@ -30,7 +30,7 @@ def is_left(route_a, route_b, odometry):
         return False
 
 
-def plot_absolute_route_deviation(bag_dir, show_plots=True):
+def plot_crosstrack_error(bag_dir, show_plots=True):
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
         raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
@@ -101,6 +101,7 @@ def plot_absolute_route_deviation(bag_dir, show_plots=True):
     if show_plots:
         plt.plot(distances_along_route, route_deviations, label="Crosstrack Error")
         plt.plot(distances_along_route, np.zeros(len(route_deviations)), label="Route")
+    return distances_along_route, route_deviations
 
 
 if __name__=="__main__":
@@ -110,7 +111,7 @@ if __name__=="__main__":
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
     argdict : dict = vars(args)
-    plot_absolute_route_deviation(os.path.normpath(os.path.abspath(argdict["bag_in"])))
+    plot_crosstrack_error(os.path.normpath(os.path.abspath(argdict["bag_in"])))
     plt.xlabel("Downtrack (m)")
     plt.ylabel("Crosstrack Error (m)")
     plt.title("Crosstrack Error vs. Downtrack")
