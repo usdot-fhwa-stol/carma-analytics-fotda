@@ -94,7 +94,7 @@ class C1TMetricAnalysis(unittest.TestCase):
         pass
 
     def test_C1T_13(self):
-        # TODO
+        self.assertTrue(check_port_drayage_ack(self.bag_dir, "HOLDING_AREA"))
         pass
     
 

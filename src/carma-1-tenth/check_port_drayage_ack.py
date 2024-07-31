@@ -35,25 +35,25 @@ def check_port_drayage_ack(bag_dir, operation):
             if topic == goal_topic:
                 strategy_params = json.loads(msg.strategy_params)
                 if strategy_params["operation"] == operation:
-                    if operation == "PICKUP":
+                    if operation == "PICKUP" or operation == "HOLDING_AREA":
                         goal_cargo_id = strategy_params["cargo_id"]
                     elif operation == "DROPOFF":
                         goal_cargo_id = ""
                     else:
-                        raise ValueError("Unsupported operation %s, please use PICKUP or DROPOFF")
+                        raise ValueError("Unsupported operation %s, please use PICKUP, DROPOFF, or HOLDING_AREA")
             elif topic == ack_topic:
                 strategy_params = json.loads(msg.strategy_params)
                 if strategy_params["operation"] == operation:
-                    if strategy_params["operation"] == "PICKUP" and strategy_params["cargo_id"] == goal_cargo_id:
-                            return True
+                    if (strategy_params["operation"] == "PICKUP" or strategy_params["operation"] == "HOLDING_AREA") and strategy_params["cargo_id"] == goal_cargo_id:
+                        return True
                     elif strategy_params["operation"] == "DROPOFF" and not strategy_params["cargo"]:
-                            return True
+                        return True
     return False
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description="Verify the vehicle correctly acks the port drayage pickup/dropoff messages")
     parser.add_argument("bag_in", type=str, help="Directory of bag to load")
-    parser.add_argument("operation", type=str, help="PICKUP or DROPOFF")
+    parser.add_argument("operation", type=str, help="PICKUP, DROPOFF, or HOLDING_AREA")
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
     argdict : dict = vars(args)
