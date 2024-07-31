@@ -4,8 +4,6 @@ from rosbag_utils import open_bagfile
 import numpy as np
 import yaml
 import tqdm
-from rosidl_runtime_py.utilities import get_message
-from rclpy.serialization import deserialize_message
 import datetime
 import argparse, argcomplete
 import os
@@ -21,15 +19,13 @@ def check_message_timing(bag_dir, call_topic, response_topic):
     reader, type_map = open_bagfile(bag_dir, topics=[call_topic, response_topic], storage_id=storage_id)
     topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
     if call_topic not in topic_count_dict or response_topic not in topic_count_dict:
-        return [np.inf]
+        return np.array([np.inf])
     call_topic_count, response_topic_count = 0,0
     call_topic_times, response_topic_times = np.zeros((topic_count_dict[call_topic],)), np.zeros((topic_count_dict[response_topic],))
     # Iterate through bag and store odometry + route_graph messages
     for _ in tqdm.tqdm(iterable=range(topic_count_dict[call_topic] + topic_count_dict[response_topic])):
         if(reader.has_next()):
             (topic, data, t_) = reader.read_next()
-            msg_type = type_map[topic]
-            msg_type_full = get_message(msg_type)
             if topic == call_topic:
                 call_topic_times[call_topic_count] = t_
                 call_topic_count += 1
@@ -39,7 +35,7 @@ def check_message_timing(bag_dir, call_topic, response_topic):
                     response_topic_count += 1
     call_topic_datetimes = [datetime.datetime.fromtimestamp(time * 1e-9) for time in call_topic_times]
     response_topic_datetimes = [datetime.datetime.fromtimestamp(time * 1e-9) for time in response_topic_times]
-    return [(response_time - call_time).total_seconds() for call_time, response_time in zip(call_topic_datetimes, response_topic_datetimes)]
+    return np.array([(response_time - call_time).total_seconds() for call_time, response_time in zip(call_topic_datetimes, response_topic_datetimes)])
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description="Plot standard deviation of the vehicle's localization as a function of downtrack distance")

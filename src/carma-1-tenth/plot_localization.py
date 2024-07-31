@@ -25,8 +25,8 @@ def plot_localization(bag_dir, show_plots=True):
     odom_topic = '/amcl_pose'
     route_topic = '/route_graph'
     particles_topic = '/particle_cloud'
-    cmd_vel_topic = '/cmd_vel'
-    reader, type_map = open_bagfile(bag_dir, topics=[odom_topic, route_topic, particles_topic, cmd_vel_topic], storage_id=storage_id)
+    vel_topic = '/odom'
+    reader, type_map = open_bagfile(bag_dir, topics=[odom_topic, route_topic, particles_topic, vel_topic], storage_id=storage_id)
     topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
 
     route_graph = None
@@ -37,10 +37,10 @@ def plot_localization(bag_dir, show_plots=True):
     odometry_times = np.zeros((topic_count_dict[odom_topic],))
     particle_std_deviations = np.zeros((topic_count_dict[particles_topic], 2))
     particle_times = np.zeros((topic_count_dict[particles_topic],))
-    velocities = np.zeros((topic_count_dict[cmd_vel_topic],))
-    velocity_times = np.zeros((topic_count_dict[cmd_vel_topic],))
+    velocities = np.zeros((topic_count_dict[vel_topic],))
+    velocity_times = np.zeros((topic_count_dict[vel_topic],))
     # Iterate through bag and store odometry + route_graph messages
-    for idx in tqdm.tqdm(iterable=range(topic_count_dict[odom_topic] + topic_count_dict[route_topic] + topic_count_dict[particles_topic] + topic_count_dict[cmd_vel_topic])):
+    for idx in tqdm.tqdm(iterable=range(topic_count_dict[odom_topic] + topic_count_dict[route_topic] + topic_count_dict[particles_topic] + topic_count_dict[vel_topic])):
         if(reader.has_next()):
             (topic, data, t_) = reader.read_next()
             msg_type = type_map[topic]
@@ -62,8 +62,8 @@ def plot_localization(bag_dir, show_plots=True):
                 particle_std_deviations[particles_count] = np.diagonal(np.sqrt(np.cov(particles.T, aweights=weights)))
                 particle_times[particles_count] = t_
                 particles_count += 1
-            elif topic == cmd_vel_topic:
-                velocities[velocities_count] = msg.linear.x
+            elif topic == vel_topic:
+                velocities[velocities_count] = msg.twist.twist.linear.x
                 velocity_times[velocities_count] = t_
                 velocities_count += 1
 

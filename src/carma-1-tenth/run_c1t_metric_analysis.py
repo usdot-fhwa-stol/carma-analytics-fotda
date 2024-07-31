@@ -9,6 +9,8 @@ from functools import partialmethod
 
 from check_distance_to_arrival import check_distance_to_arrival
 from check_message_published import check_message_published
+from check_message_timing import check_message_timing
+from check_port_drayage_ack import check_port_drayage_ack
 from plot_crosstrack_error import plot_crosstrack_error
 from plot_vehicle_speed import plot_vehicle_speed
 
@@ -25,19 +27,19 @@ class C1TMetricAnalysis(unittest.TestCase):
         self.assertTrue(check_message_published(self.bag_dir, "/plan"))
 
     def test_C1T_02(self):
-        time_between_messages = self.check_message_timing(self.bag_dir, "/goal_pose", "/plan")
+        time_between_messages = check_message_timing(self.bag_dir, "/goal_pose", "/plan")
         self.assertTrue(np.all(time_between_messages < 3.0))
 
     def test_C1T_03(self):
-        time_between_messages = self.check_message_timing(self.bag_dir, "/incoming_mobility_operation", "/plan")
+        time_between_messages = check_message_timing(self.bag_dir, "/incoming_mobility_operation", "/plan")
         self.assertTrue(np.all(time_between_messages < 3.0))
 
     def test_C1T_04(self):
-        # TODO
-        pass
+        _, crosstrack_errors = plot_crosstrack_error(self.bag_dir, "/plan", show_plots=False)
+        self.assertTrue(np.all(crosstrack_errors < 0.4))
 
     def test_C1T_05(self):
-        _, crosstrack_errors = plot_crosstrack_error(self.bag_dir, show_plots=False)
+        _, crosstrack_errors = plot_crosstrack_error(self.bag_dir, "/route_graph", show_plots=False)
         self.assertTrue(np.all(crosstrack_errors < 0.2))
 
     def test_C1T_06(self):
@@ -49,7 +51,30 @@ class C1TMetricAnalysis(unittest.TestCase):
     def test_C1T_07(self):
         velocities, target_velocities = plot_vehicle_speed(self.bag_dir, show_plots=False)
         max_target_speed = np.max(target_velocities)
-        speeds_on_turns = velocities[target_velocities < max_target_speed and target_velocities > 0.0]
+        # Determine which slowdowns are due to turns and which slowdowns are due to entering/exiting goals
+        stop_detected = True  # Vehicle will originally be stopped
+        buffer = 0  # Buffer used to count previous velocities that may or may not be due to entering/exiting a goal
+        wait_for_vehicle_to_accelerate = 0
+        relevant_velocity_idxs = []
+        for velocity in target_velocities:
+            if velocity == max_target_speed:
+                if wait_for_vehicle_to_accelerate > 5:
+                    relevant_velocity_idxs += (buffer + 1) * [True]
+                else:
+                    relevant_velocity_idxs += (buffer + 1) * [False]
+                wait_for_vehicle_to_accelerate += 1
+                buffer = 0
+                stop_detected = False
+            elif stop_detected:
+                relevant_velocity_idxs.append(False)    
+            elif velocity == 0.0:
+                relevant_velocity_idxs += (buffer + 1) * [False]
+                buffer = 0
+                stop_detected = True
+                wait_for_vehicle_to_accelerate = 0
+            else:
+                buffer += 1
+        speeds_on_turns = velocities[relevant_velocity_idxs]
         self.assertTrue(np.all(speeds_on_turns > 0.5 * max_target_speed))
 
     def test_C1T_08(self):
@@ -60,14 +85,15 @@ class C1TMetricAnalysis(unittest.TestCase):
         self.assertTrue(check_message_published(self.bag_dir, "/outgoing_mobility_operation"))
 
     def test_C1T_10(self):
-        time_between_messages = self.check_message_timing(self.bag_dir, "/outgoing_mobility_operation", "/incoming_mobility_operation")
+        time_between_messages = check_message_timing(self.bag_dir, "/outgoing_mobility_operation", "/incoming_mobility_operation")
         self.assertTrue(np.all(time_between_messages < 1.5))
 
-    def test_C1T_11(self):
-        # TODO
+    def test_C1T_12(self):
+        self.assertTrue(check_port_drayage_ack(self.bag_dir, "PICKUP"))
+        self.assertTrue(check_port_drayage_ack(self.bag_dir, "DROPOFF"))
         pass
 
-    def test_C1T_12(self):
+    def test_C1T_13(self):
         # TODO
         pass
     

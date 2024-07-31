@@ -1,4 +1,4 @@
-# Report the distance between the goal position and actual position after arriving at the destination
+# Verify the vehicle correctly acks the port drayage pickup/dropoff messages
 
 
 from rosbag_utils import open_bagfile
@@ -12,7 +12,7 @@ import os
 import json
 
 
-def check_distance_to_arrival(bag_dir):
+def check_port_drayage_ack(bag_dir, operation):
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
         raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
@@ -26,9 +26,6 @@ def check_distance_to_arrival(bag_dir):
     if topic_count_dict[goal_topic] != topic_count_dict[ack_topic]:
         print("Number of goal messages (%d) does not equal number of ack messages (%d)".format(topic_count_dict[goal_topic], topic_count_dict[ack_topic]))
         return np.array([np.inf])
-    goal_position_count, ack_position_count = 0, 0
-    goal_positions = np.zeros((topic_count_dict[goal_topic], 2))
-    ack_positions = np.zeros((topic_count_dict[ack_topic], 2))
     for _ in tqdm.tqdm(iterable=range(topic_count_dict[goal_topic] + topic_count_dict[ack_topic])):
         if(reader.has_next()):
             (topic, data, t_) = reader.read_next()
@@ -37,20 +34,28 @@ def check_distance_to_arrival(bag_dir):
             msg = deserialize_message(data, msg_type_full)
             if topic == goal_topic:
                 strategy_params = json.loads(msg.strategy_params)
-                goal_positions[goal_position_count] = [strategy_params["destination"]["longitude"], strategy_params["destination"]["latitude"]]
-                goal_position_count += 1
+                if strategy_params["operation"] == operation:
+                    if operation == "PICKUP":
+                        goal_cargo_id = strategy_params["cargo_id"]
+                    elif operation == "DROPOFF":
+                        goal_cargo_id = ""
+                    else:
+                        raise ValueError("Unsupported operation %s, please use PICKUP or DROPOFF")
             elif topic == ack_topic:
                 strategy_params = json.loads(msg.strategy_params)
-                ack_positions[ack_position_count] = [strategy_params["location"]["longitude"], strategy_params["location"]["latitude"]]
-                ack_position_count += 1
-    return np.linalg.norm(goal_positions - ack_positions, axis=1)
-
+                if strategy_params["operation"] == operation:
+                    if strategy_params["operation"] == "PICKUP" and strategy_params["cargo_id"] == goal_cargo_id:
+                            return True
+                    elif strategy_params["operation"] == "DROPOFF" and not strategy_params["cargo"]:
+                            return True
+    return False
 
 if __name__=="__main__":
-    parser = argparse.ArgumentParser(description="Compute the differences between each goal destination and vehicle position on reported arrival")
+    parser = argparse.ArgumentParser(description="Verify the vehicle correctly acks the port drayage pickup/dropoff messages")
     parser.add_argument("bag_in", type=str, help="Directory of bag to load")
+    parser.add_argument("operation", type=str, help="PICKUP or DROPOFF")
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
     argdict : dict = vars(args)
-    distances_from_goal = check_distance_to_arrival(os.path.normpath(os.path.abspath(argdict["bag_in"])))
-    print(distances_from_goal)
+    result = check_port_drayage_ack(os.path.normpath(os.path.abspath(argdict["bag_in"])), argdict["operation"])
+    print(result)
