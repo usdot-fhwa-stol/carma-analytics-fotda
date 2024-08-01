@@ -32,11 +32,11 @@ def plot_steering_rate(bag_dir, label, start_offset=0.0):
     steering_angles = np.zeros(topic_count_dict[servo_topic],)
     for idx in tqdm.tqdm(iterable=range(topic_count_dict[servo_topic])):
         if(reader.has_next()):
-            (topic, data, t_) = reader.read_next()
+            (topic, data, timestamp) = reader.read_next()
             msg_type = type_map[topic]
             msg_type_full = get_message(msg_type)
             msg = deserialize_message(data, msg_type_full)
-            timestamps[idx] = t_
+            timestamps[idx] = timestamp
             steering_angles[idx] = (msg.data - STEERING_TO_SERVO_OFFSET) / STEERING_TO_SERVO_GAIN
     dates = np.array([dt.datetime.fromtimestamp(ts * 1e-9) for ts in timestamps])
     start_time = dates[0]
