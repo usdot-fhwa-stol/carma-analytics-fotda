@@ -26,7 +26,7 @@ def plot_localization(bag_dir, show_plots=True):
     odom_topic = '/amcl_pose'
     route_topic = '/route_graph'
     particles_topic = '/particle_cloud'
-    vel_topic = '/odom'
+    vel_topic = '/ackermann_cmd'
     # Open bag
     reader, type_map = open_bagfile(bag_dir, topics=[odom_topic, route_topic, particles_topic, vel_topic], storage_id=storage_id)
     # Gather number of messages on each topic
@@ -44,7 +44,7 @@ def plot_localization(bag_dir, show_plots=True):
     velocities = np.zeros((topic_count_dict[vel_topic],))
     velocity_times = np.zeros((topic_count_dict[vel_topic],))
     # Iterate through bag and store odometry + route_graph messages
-    for idx in tqdm.tqdm(iterable=range(topic_count_dict[odom_topic] + topic_count_dict[route_topic] + topic_count_dict[particles_topic] + topic_count_dict[vel_topic])):
+    for _ in tqdm.tqdm(iterable=range(topic_count_dict[odom_topic] + topic_count_dict[route_topic] + topic_count_dict[particles_topic] + topic_count_dict[vel_topic])):
         if(reader.has_next()):
             (topic, data, timestamp) = reader.read_next()
             msg_type = type_map[topic]
@@ -67,7 +67,7 @@ def plot_localization(bag_dir, show_plots=True):
                 particle_times[particles_count] = timestamp
                 particles_count += 1
             elif topic == vel_topic:
-                velocities[velocities_count] = msg.twist.twist.linear.x
+                velocities[velocities_count] = msg.drive.speed
                 velocity_times[velocities_count] = timestamp
                 velocities_count += 1
 
