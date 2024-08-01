@@ -45,6 +45,7 @@ def get_route_coordinates(route_message):
 
 
 def plot_crosstrack_error(bag_dir, route_topic, show_plots=True):
+    # Open metadata.yaml
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
         raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
@@ -52,27 +53,36 @@ def plot_crosstrack_error(bag_dir, route_topic, show_plots=True):
         metadata_dict : dict = yaml.load(f, Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
     storage_id = metadata_dict['storage_identifier']
     odom_topic = '/amcl_pose'
+    # Open bag
     reader, type_map = open_bagfile(bag_dir, topics=[odom_topic, route_topic], storage_id=storage_id)
+    # Gather number of messages on each topic
     topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
 
+    # Message received on route_topic
     route_graph = None
+    # Count number of odom messages processed
     odom_count = 0
+    # Stored odometry messages
     odometry = np.zeros((topic_count_dict[odom_topic], 2))
+    # Odometry message times
     odometry_times = np.zeros((topic_count_dict[odom_topic],))
     # Iterate through bag and store odometry + route_graph messages
-    for idx in tqdm.tqdm(iterable=range(topic_count_dict[odom_topic] + topic_count_dict[route_topic])):
+    for _ in tqdm.tqdm(iterable=range(topic_count_dict[odom_topic] + topic_count_dict[route_topic])):
         if(reader.has_next()):
-            (topic, data, t_) = reader.read_next()
+            (topic, data, timestamp) = reader.read_next()
             msg_type = type_map[topic]
             msg_type_full = get_message(msg_type)
             msg = deserialize_message(data, msg_type_full)
             if topic == route_topic:
+                # Store route graph
                 route_graph = msg
             else:
+                # Store odometry message and time
                 odometry[odom_count] = [-msg.pose.pose.position.y, msg.pose.pose.position.x]
-                odometry_times[odom_count] = t_
+                odometry_times[odom_count] = timestamp
                 odom_count += 1
     
+    # Get the coordinates from route_graph
     route_coordinates = get_route_coordinates(route_graph)
     route_coordinates = np.array(route_coordinates)
     route_coordinates_with_distance = np.zeros((len(route_coordinates), 3))

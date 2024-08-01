@@ -16,6 +16,7 @@ import os
 
 
 def plot_localization(bag_dir, show_plots=True):
+    # Open metadata.yaml
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
         raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
@@ -26,9 +27,12 @@ def plot_localization(bag_dir, show_plots=True):
     route_topic = '/route_graph'
     particles_topic = '/particle_cloud'
     vel_topic = '/odom'
+    # Open bag
     reader, type_map = open_bagfile(bag_dir, topics=[odom_topic, route_topic, particles_topic, vel_topic], storage_id=storage_id)
+    # Gather number of messages on each topic
     topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
 
+    # Variables to store messages from bag
     route_graph = None
     odom_count = 0
     particles_count = 0
@@ -42,7 +46,7 @@ def plot_localization(bag_dir, show_plots=True):
     # Iterate through bag and store odometry + route_graph messages
     for idx in tqdm.tqdm(iterable=range(topic_count_dict[odom_topic] + topic_count_dict[route_topic] + topic_count_dict[particles_topic] + topic_count_dict[vel_topic])):
         if(reader.has_next()):
-            (topic, data, t_) = reader.read_next()
+            (topic, data, timestamp) = reader.read_next()
             msg_type = type_map[topic]
             msg_type_full = get_message(msg_type)
             msg = deserialize_message(data, msg_type_full)
@@ -51,7 +55,7 @@ def plot_localization(bag_dir, show_plots=True):
             elif topic == odom_topic:
                 # Rotate from standard x,y coordinates to vehicle coordinates
                 odometry[odom_count] = [-msg.pose.pose.position.y, msg.pose.pose.position.x]
-                odometry_times[odom_count] = t_
+                odometry_times[odom_count] = timestamp
                 odom_count += 1
             elif topic == particles_topic:
                 particles = np.zeros((len(msg.particles), 2))
@@ -60,11 +64,11 @@ def plot_localization(bag_dir, show_plots=True):
                     particles[i] = [msg.particles[i].pose.position.x, msg.particles[i].pose.position.y]
                     weights[i] = msg.particles[i].weight
                 particle_std_deviations[particles_count] = np.diagonal(np.sqrt(np.cov(particles.T, aweights=weights)))
-                particle_times[particles_count] = t_
+                particle_times[particles_count] = timestamp
                 particles_count += 1
             elif topic == vel_topic:
                 velocities[velocities_count] = msg.twist.twist.linear.x
-                velocity_times[velocities_count] = t_
+                velocity_times[velocities_count] = timestamp
                 velocities_count += 1
 
     route_coordinates = []

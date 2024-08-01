@@ -16,6 +16,7 @@ import os
 
 
 def plot_route_driven(bag_dir, show_plots=True):
+    # Open metadata.yaml
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
         raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
@@ -25,13 +26,15 @@ def plot_route_driven(bag_dir, show_plots=True):
     odom_topic = '/amcl_pose'
     route_topic = '/route_graph'
     topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
+    # Open bag
     reader, type_map = open_bagfile(bag_dir, topics=[odom_topic, route_topic], storage_id=storage_id)
     route_graph = None
     odometry = np.zeros((topic_count_dict[odom_topic], 2))
     odom_count = 0
-    for idx in tqdm.tqdm(iterable=range(topic_count_dict[odom_topic] + topic_count_dict[route_topic])):
+    # Iterate through bag
+    for _ in tqdm.tqdm(iterable=range(topic_count_dict[odom_topic] + topic_count_dict[route_topic])):
         if(reader.has_next()):
-            (topic, data, t_) = reader.read_next()
+            (topic, data, _) = reader.read_next()
             msg_type = type_map[topic]
             msg_type_full = get_message(msg_type)
             msg = deserialize_message(data, msg_type_full)
@@ -40,17 +43,20 @@ def plot_route_driven(bag_dir, show_plots=True):
             else:
                 odometry[odom_count] = [-msg.pose.pose.position.y, msg.pose.pose.position.x]
                 odom_count += 1
+    # Find max and min x/y values in graph to scale plots
     x_min, y_min, x_max, y_max = np.inf, np.inf, -np.inf, -np.inf
     route_graph_coordinates = []
     route_downtrack_distances = []
     map_coords_to_downtrack = dict()
     for i in range(len(route_graph.markers)):
         if route_graph.markers[i].type == 2:
+            # For each graph node, store its coordinates and adjust the min/max x/y
             route_graph_coordinates.append(np.array([-route_graph.markers[i].pose.position.y, route_graph.markers[i].pose.position.x]))
             x_min = np.min([-route_graph.markers[i].pose.position.y, x_min])
             y_min = np.min([route_graph.markers[i].pose.position.x, y_min])
             x_max = np.max([-route_graph.markers[i].pose.position.y, x_max])
             y_max = np.max([route_graph.markers[i].pose.position.x, y_max])
+            # Compute downtrack distance of graph node
             if len(route_downtrack_distances):
                 route_downtrack_distances.append(route_downtrack_distances[-1] + np.linalg.norm(route_graph_coordinates[-1] - route_graph_coordinates[-2]))
             else:
@@ -64,6 +70,7 @@ def plot_route_driven(bag_dir, show_plots=True):
     plt.ylim([y_min - 1.0, y_max + 1.0])
     ax = plt.gca()
     particle_distances_along_route, particle_std_deviations = plot_localization(bag_dir, show_plots=False)
+    # For each graph node, plot and ellipse using the vehicle's localization std. dev. to show uncertainty in position
     for route_coordinate in route_graph_coordinates:
         closest_odom_to_route, _ = find_closest_point(odometry, route_coordinate, trim_ends=False)
         route_coordinate_downtrack_distance = map_coords_to_downtrack[tuple(route_coordinate)]
