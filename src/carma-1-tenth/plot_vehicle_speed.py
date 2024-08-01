@@ -47,6 +47,8 @@ def plot_vehicle_speed(bag_dir, show_plots=True):
     velocity_time_seconds = [(date - velocity_datetimes[0]).total_seconds() for date in velocity_datetimes]
     plt.plot(velocity_time_seconds, velocities, label="Measured Velocity")
     plt.plot(velocity_time_seconds, target_velocities, label="Target Velocity")
+    plt.xlabel("Time (s)")
+    plt.ylabel("Speed (m/s)")
     plt.legend()
     if show_plots:
         plt.show()
