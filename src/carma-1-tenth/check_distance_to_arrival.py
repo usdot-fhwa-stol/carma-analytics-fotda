@@ -1,5 +1,6 @@
-# Report the distance between the goal position and actual position after arriving at the destination
-
+# Report the distance between the goal position (sent on /incoming_mobility_operation) and the position
+# the C1T vehicle reports when acknowledging it has reached the goal (sent on /outgoing_mobility_operation)
+# Assumes that there are an equal number of goal messages and acks in the ROS2 bag
 
 from rosbag_utils import open_bagfile
 import numpy as np
@@ -16,7 +17,7 @@ def check_distance_to_arrival(bag_dir):
     # Open metadata.yaml
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
-        raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
+        raise ValueError("Metadata file %s does not exist. Are you sure %s is a rosbag directory?" % (metadatafile, bag_dir))
     with open(metadatafile, "r") as f:
         metadata_dict : dict = yaml.load(f, Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
     storage_id = metadata_dict['storage_identifier']

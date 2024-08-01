@@ -1,4 +1,5 @@
-# Verify the vehicle correctly acks the port drayage pickup, dropoff, and holding area messages
+# Verify the vehicle correctly acks the port drayage pickup, dropoff, and holding area messages by checking the cargo_id variable
+# in the goal messages and the acknowledgement messages
 
 
 from rosbag_utils import open_bagfile
@@ -16,7 +17,7 @@ def check_port_drayage_ack(bag_dir, operation):
     # Open metadata.yaml
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
-        raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
+        raise ValueError("Metadata file %s does not exist. Are you sure %s is a rosbag directory?" % (metadatafile, bag_dir))
     with open(metadatafile, "r") as f:
         metadata_dict : dict = yaml.load(f, Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
     storage_id = metadata_dict['storage_identifier']

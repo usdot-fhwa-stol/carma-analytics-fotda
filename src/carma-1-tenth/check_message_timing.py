@@ -1,4 +1,5 @@
-# Check the times between messages received on two topics
+# Check the times between messages received on two specified topics
+# Assumes that there are an equal number of messages on the two topics
 
 from rosbag_utils import open_bagfile
 import numpy as np
@@ -13,7 +14,7 @@ def check_message_timing(bag_dir, call_topic, response_topic):
     # Open metadata.yaml
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
-        raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
+        raise ValueError("Metadata file %s does not exist. Are you sure %s is a rosbag directory?" % (metadatafile, bag_dir))
     with open(metadatafile, "r") as f:
         metadata_dict : dict = yaml.load(f, Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
     storage_id = metadata_dict['storage_identifier']
