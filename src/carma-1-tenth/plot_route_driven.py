@@ -58,19 +58,25 @@ def plot_route_driven(bag_dir, show_plots=True):
             plt.text(route_graph_coordinates[-1][0] + 0.1, route_graph_coordinates[-1][1] + 0.1, "{:.1f}".format(route_downtrack_distances[-1]))
             map_coords_to_downtrack[tuple(route_graph_coordinates[-1])] = route_downtrack_distances[-1]
     route_graph_coordinates = np.array(route_graph_coordinates)
+    plt.plot(route_graph_coordinates[:,0], route_graph_coordinates[:,1], 'ro-', label="Route")
+    plt.plot(odometry[:,0], odometry[:,1], 'b', label="Estimated Path Driven")
+    plt.xlim([x_min - 1.0, x_max + 1.0])
+    plt.ylim([y_min - 1.0, y_max + 1.0])
+    ax = plt.gca()
+    particle_distances_along_route, particle_std_deviations = plot_localization(bag_dir, show_plots=False)
+    for route_coordinate in route_graph_coordinates:
+        closest_odom_to_route, _ = find_closest_point(odometry, route_coordinate, trim_ends=False)
+        route_coordinate_downtrack_distance = map_coords_to_downtrack[tuple(route_coordinate)]
+        std_deviation_at_route_coordinate = particle_std_deviations[np.abs(route_coordinate_downtrack_distance - particle_distances_along_route).argmin()]
+        e2 = Ellipse(closest_odom_to_route, 2.0 * std_deviation_at_route_coordinate[0], 2.0 * std_deviation_at_route_coordinate[1], color='b', fill=False, ls="--")
+        ax.add_patch(e2)
+    plt.xlabel("Horizontal Coordinate (m)")
+    plt.ylabel("Vertical Coordinate (m)")
+    plt.legend()
+    plt.title("Estimated Path Driven Compared to Desired Route")
     if show_plots:
-        plt.plot(route_graph_coordinates[:,0], route_graph_coordinates[:,1], 'ro-', label="Route")
-        plt.plot(odometry[:,0], odometry[:,1], 'b', label="Estimated Path Driven")
-        plt.xlim([x_min - 1.0, x_max + 1.0])
-        plt.ylim([y_min - 1.0, y_max + 1.0])
-        ax = plt.gca()
-        particle_distances_along_route, particle_std_deviations = plot_localization(bag_dir, show_plots=False)
-        for route_coordinate in route_graph_coordinates:
-            closest_odom_to_route, _ = find_closest_point(odometry, route_coordinate, trim_ends=False)
-            route_coordinate_downtrack_distance = map_coords_to_downtrack[tuple(route_coordinate)]
-            std_deviation_at_route_coordinate = particle_std_deviations[np.abs(route_coordinate_downtrack_distance - particle_distances_along_route).argmin()]
-            e2 = Ellipse(closest_odom_to_route, 2.0 * std_deviation_at_route_coordinate[0], 2.0 * std_deviation_at_route_coordinate[1], color='b', fill=False, ls="--")
-            ax.add_patch(e2)
+        plt.show()
+
 
 
 if __name__=="__main__":
@@ -81,10 +87,6 @@ if __name__=="__main__":
     args = parser.parse_args()
     argdict : dict = vars(args)
     plot_route_driven(os.path.normpath(os.path.abspath(argdict["bag_in"])))
-    plt.xlabel("Horizontal Coordinate (m)")
-    plt.ylabel("Vertical Coordinate (m)")
-    plt.legend()
-    plt.title("Estimated Path Driven Compared to Desired Route")
+    
     if argdict["png_out"]:
         plt.savefig(argdict["png_out"])
-    plt.show()

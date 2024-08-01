@@ -105,12 +105,16 @@ def plot_crosstrack_error(bag_dir, route_topic, show_plots=True):
                 distances_along_route.append(np.linalg.norm(closest_point - np.array([route_x_points[0], route_y_points[0]])))
         previous_closest_point = closest_point
 
-
+    plt.plot(distances_along_route, route_deviations, label="Crosstrack Error")
+    plt.plot(distances_along_route, np.zeros(len(route_deviations)), label="Route")
+    plt.xlabel("Downtrack (m)")
+    plt.ylabel("Crosstrack Error (m)")
+    plt.title("Crosstrack Error vs. Downtrack")
+    plt.legend()
     if show_plots:
         print("Average Deviation:", np.mean(np.abs(route_deviations)))
         print("Maximum Deviation:", np.max(np.abs(route_deviations)))
-        plt.plot(distances_along_route, route_deviations, label="Crosstrack Error")
-        plt.plot(distances_along_route, np.zeros(len(route_deviations)), label="Route")
+        plt.show()
     return np.array(distances_along_route), np.array(route_deviations)
 
 
@@ -123,10 +127,5 @@ if __name__=="__main__":
     args = parser.parse_args()
     argdict : dict = vars(args)
     plot_crosstrack_error(os.path.normpath(os.path.abspath(argdict["bag_in"])), argdict["route_topic"])
-    plt.xlabel("Downtrack (m)")
-    plt.ylabel("Crosstrack Error (m)")
-    plt.title("Crosstrack Error vs. Downtrack")
     if argdict["png_out"]:
         plt.savefig(argdict["png_out"])
-    plt.legend()
-    plt.show()

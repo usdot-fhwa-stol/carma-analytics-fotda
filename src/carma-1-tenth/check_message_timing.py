@@ -38,7 +38,7 @@ def check_message_timing(bag_dir, call_topic, response_topic):
     return np.array([(response_time - call_time).total_seconds() for call_time, response_time in zip(call_topic_datetimes, response_topic_datetimes)])
 
 if __name__=="__main__":
-    parser = argparse.ArgumentParser(description="Plot standard deviation of the vehicle's localization as a function of downtrack distance")
+    parser = argparse.ArgumentParser(description="Check the times between messages received on two topics")
     parser.add_argument("bag_in", type=str, help="Directory of bag to load")
     parser.add_argument("call_topic", type=str, help="Topic that initiates a message exchange")
     parser.add_argument("response_topic", type=str, help="Topic that responds to the call topic")

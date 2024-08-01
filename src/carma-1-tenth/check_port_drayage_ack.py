@@ -1,4 +1,4 @@
-# Verify the vehicle correctly acks the port drayage pickup/dropoff messages
+# Verify the vehicle correctly acks the port drayage pickup, dropoff, and holding area messages
 
 
 from rosbag_utils import open_bagfile
@@ -51,7 +51,7 @@ def check_port_drayage_ack(bag_dir, operation):
     return False
 
 if __name__=="__main__":
-    parser = argparse.ArgumentParser(description="Verify the vehicle correctly acks the port drayage pickup/dropoff messages")
+    parser = argparse.ArgumentParser(description="Verify the vehicle correctly acks the port drayage pickup, dropoff, and holding area messages")
     parser.add_argument("bag_in", type=str, help="Directory of bag to load")
     parser.add_argument("operation", type=str, help="PICKUP, DROPOFF, or HOLDING_AREA")
     argcomplete.autocomplete(parser)

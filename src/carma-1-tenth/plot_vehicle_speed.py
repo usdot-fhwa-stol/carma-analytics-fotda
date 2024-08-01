@@ -1,4 +1,4 @@
-# Report the target and actual vehicle speeds
+# Plot the target and actual vehicle speeds
 
 
 from rosbag_utils import open_bagfile
@@ -30,7 +30,6 @@ def plot_vehicle_speed(bag_dir, show_plots=True):
     velocities = np.zeros((topic_count_dict[vel_topic],))
     target_velocities = np.zeros((topic_count_dict[vel_topic],))
     velocity_times = np.zeros((topic_count_dict[vel_topic],))
-    # Iterate through bag and store odometry + route_graph messages
     for _ in tqdm.tqdm(iterable=range(topic_count_dict[target_topic] + topic_count_dict[vel_topic])):
         if(reader.has_next()):
             (topic, data, t_) = reader.read_next()
@@ -44,18 +43,18 @@ def plot_vehicle_speed(bag_dir, show_plots=True):
                 target_velocities[vel_count] = current_target_velocity
                 velocity_times[vel_count] = t_
                 vel_count += 1
+    velocity_datetimes = [datetime.datetime.fromtimestamp(time * 1e-9) for time in velocity_times]
+    velocity_time_seconds = [(date - velocity_datetimes[0]).total_seconds() for date in velocity_datetimes]
+    plt.plot(velocity_time_seconds, velocities, label="Measured Velocity")
+    plt.plot(velocity_time_seconds, target_velocities, label="Target Velocity")
+    plt.legend()
     if show_plots:
-        velocity_datetimes = [datetime.datetime.fromtimestamp(time * 1e-9) for time in velocity_times]
-        velocity_time_seconds = [(date - velocity_datetimes[0]).total_seconds() for date in velocity_datetimes]
-        plt.plot(velocity_time_seconds, velocities, label="Measured Velocity")
-        plt.plot(velocity_time_seconds, target_velocities, label="Target Velocity")
-        plt.legend()
         plt.show()
     return velocities, target_velocities
 
 
 if __name__=="__main__":
-    parser = argparse.ArgumentParser(description="Plot standard deviation of the vehicle's localization as a function of downtrack distance")
+    parser = argparse.ArgumentParser(description="Plot the target and actual vehicle speeds")
     parser.add_argument("bag_in", type=str, help="Directory of bag to load")
     argcomplete.autocomplete(parser)
     args = parser.parse_args()

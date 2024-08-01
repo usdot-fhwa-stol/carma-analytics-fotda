@@ -84,8 +84,6 @@ def plot_localization(bag_dir, show_plots=True):
     x_spline = make_interp_spline(route_coordinates_with_distance[:,0], route_coordinates_with_distance[:,1])
     y_spline = make_interp_spline(route_coordinates_with_distance[:,0], route_coordinates_with_distance[:,2])
     samples = np.linspace(route_coordinates_with_distance[0,0], route_coordinates_with_distance[-1,0], 10000)
-    odometry_datetimes = [datetime.datetime.fromtimestamp(time * 1e-9) for time in odometry_times]
-    odometry_times_seconds = [(date - odometry_datetimes[0]).total_seconds() for date in odometry_datetimes]
     route_x_points = x_spline(samples)
     route_y_points = y_spline(samples)
     # Interpolate the odometry of the robot using timestamps
@@ -130,19 +128,19 @@ def plot_localization(bag_dir, show_plots=True):
     print("Average PF Standard Deviation:", np.mean(averaged_particle_standard_deviations))
     print("Maximum PF Standard Deviation:", np.max(averaged_particle_standard_deviations))
 
+    plt.plot(particle_distances_along_route, averaged_particle_standard_deviations)
+    plt.xlabel("Downtrack (m)")
+    plt.ylabel("Particle Filter Standard Deviation (m)")
+    plt.title("Particle Filter Standard Deviation vs. Downtrack")
+    plt.ylim([0.0, 1.1 * np.max(particle_trimmed_std_deviations)])
+    plt.figure()
+    plt.plot(velocity_cmd_distances_along_route, velocity_cmd_trimmed)
+    plt.xlabel("Downtrack (m)")
+    plt.ylabel("Speed (m/s)")
+    plt.ylim([0.0, 1.1 * np.max(velocity_cmd_trimmed)])
+    plt.title("Vehicle Speed vs. Downtrack")
     if show_plots:
-        plt.plot(particle_distances_along_route, averaged_particle_standard_deviations)
-        plt.xlabel("Downtrack (m)")
-        plt.ylabel("Particle Filter Standard Deviation (m)")
-        plt.title("Particle Filter Standard Deviation vs. Downtrack")
-        plt.ylim([0.0, 1.1 * np.max(particle_trimmed_std_deviations)])
-        plt.figure()
-
-        plt.plot(velocity_cmd_distances_along_route, velocity_cmd_trimmed)
-        plt.xlabel("Downtrack (m)")
-        plt.ylabel("Speed (m/s)")
-        plt.ylim([0.0, 1.1 * np.max(velocity_cmd_trimmed)])
-        plt.title("Vehicle Speed vs. Downtrack")
+        plt.show()
     return particle_distances_along_route, particle_trimmed_std_deviations
 
 
@@ -153,4 +151,3 @@ if __name__=="__main__":
     args = parser.parse_args()
     argdict : dict = vars(args)
     plot_localization(os.path.normpath(os.path.abspath(argdict["bag_in"])))
-    plt.show()
