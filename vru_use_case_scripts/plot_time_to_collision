@@ -12,7 +12,7 @@ from scipy.interpolate import splrep, BSpline
 
 # This can be used to establish what constitutes a collision
 COLLISION_THRESHOLD_M = 5.0
-NEAR_MISS_THRESHOLD_S = 1.0 # to plot
+NEAR_MISS_THRESHOLD_S = 1.5 # to plot
 
 def parse_vehicle_odometry_from_csv(odometry_csv):
     return pd.read_csv(odometry_csv)
@@ -150,10 +150,17 @@ plt.scatter(vehicle_odometry_df["Message Time (ms)"] / 1_000.0, times_to_collisi
 plt.title("Time-to-collision (TTC) v. Simulation Time")
 plt.ylabel("Time-to-collision (TTC) [s]")
 plt.xlabel("CDASim time [s]")
+plt.ylim(bottom=0.0)
 plt.axhline(y=NEAR_MISS_THRESHOLD_S, color='r', linestyle='--', label='Near-miss threshold [s]')
 
 plt.legend()
 
 cli_args.plots_dir.mkdir(exist_ok=True)
 
-plt.savefig(cli_args.plots_dir / f"ttc.png")
+scenario_name = str(cli_args.plots_dir).split("/")[-3]
+# print(scenario_name)
+output_dir = "/media/carma/Seagate_Expansion_Drive/vru_validation_testing/successful_runs/plots/Plot_Analysis/ts_near-miss_collision"
+# print(output_dir + "/ttc_" + scenario_name + ".png")
+
+# plt.savefig(cli_args.plots_dir / f"ttc.png")
+plt.savefig(output_dir + "/ttc_" + scenario_name + ".png")

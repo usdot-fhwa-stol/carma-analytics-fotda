@@ -47,7 +47,9 @@ parser.add_argument(
 
 def plot_duration(df: pd.DataFrame, show_plot, plots_dir):
     processing_mean = df["Duration Between Msgs (s)"].mean()
-    print(f"Mean CP stack processing simulation time: {processing_mean}")
+    processing_std = df["Duration Between Msgs (s)"].std()
+    # print(f"Mean CP stack processing simulation time: {processing_mean}")
+    print(processing_mean, processing_std)
     # Plot duration over Message Time for each Object ID
     fig, ax = plt.subplots()
     ax.stem(
@@ -82,14 +84,14 @@ def get_processing_time(df: pd.DataFrame):
 
     df.sort_values(by=[SIM_TIME_TO_USE], inplace=True)
 
-    print(df)
+    # print(df)
     # Shift by -1 meaning move up so that each row
     # indicates what timestamp the data started missing
     # and how long did it last
     df["Duration Between Msgs (s)"] = (
         df[SIM_TIME_TO_USE].diff().shift(-1) #/ 1e3
     )
-    print(df)
+    # print(df)
     # Reset the index of the DataFrame
     df.reset_index(drop=True, inplace=True)
 
