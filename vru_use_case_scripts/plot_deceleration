@@ -217,7 +217,7 @@ def plot_deceleration_and_speed_and_ttc(vehicle_odometry_df, times_to_collision_
     times_to_collision_interpolated = f_interp(plotting_time_stamps)
 
     # Plotting
-    fig, axs = plt.subplots(3, 1, figsize=(30, 10))
+    fig, axs = plt.subplots(3, 1, figsize=(30, 10), gridspec_kw={'height_ratios': [1, 1, 2]})
 
     # NOTE: Object can get detected very early on due to CP
     # therefore, for better plotting we take the max of first time platform engaged and object detected
@@ -237,7 +237,7 @@ def plot_deceleration_and_speed_and_ttc(vehicle_odometry_df, times_to_collision_
 
 
     # Plot deceleration
-    axs[0].plot(plotting_time_stamps, decel_values, 'o')
+    axs[0].plot(plotting_time_stamps, decel_values, 'o', label='Instantaneous acceleration')
     axs[0].set_title('Instantaneous acceleration over time', fontsize=20)
     axs[0].set_xlabel('Simulation Time (s)', fontsize=16)
     axs[0].set_ylabel('Acceleration (m/s^2)', fontsize=16)
@@ -246,7 +246,7 @@ def plot_deceleration_and_speed_and_ttc(vehicle_odometry_df, times_to_collision_
     axs[0].set_xlim([x_lower_limit, x_upper_limit])
 
     # Plot speed
-    axs[1].plot(plotting_time_stamps, speeds_for_plotting, '-', linewidth=3.0)
+    axs[1].plot(plotting_time_stamps, speeds_for_plotting, '^', linewidth=3.0, label = 'Speed')
     axs[1].set_title('Speed over time', fontsize=20)
     axs[1].set_xlabel('Simulation Time (s)', fontsize=16)
     axs[1].set_ylabel('Speed (m/s)', fontsize=16)
@@ -255,7 +255,7 @@ def plot_deceleration_and_speed_and_ttc(vehicle_odometry_df, times_to_collision_
     axs[1].set_xlim([x_lower_limit, x_upper_limit])
 
     # Plot ttc
-    axs[2].scatter(plotting_time_stamps, times_to_collision_interpolated)
+    axs[2].plot(plotting_time_stamps, times_to_collision_interpolated, 's', label= 'Time-to-collision')
     axs[2].set_title("Time-to-collision (TTC) v. Simulation Time",  fontsize=20)
     axs[2].set_ylabel("Time-to-collision (TTC) (s)", fontsize=16)
     axs[2].set_xlabel("Simulation Time (s)", fontsize=16)
