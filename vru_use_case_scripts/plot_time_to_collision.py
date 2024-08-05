@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+
+from argparse import ArgumentParser
+from dataclasses import dataclass
+import math
+from pathlib import Path
+
+from matplotlib import pyplot as plt
+import more_itertools
+import pandas as pd
+from scipy.interpolate import splrep, BSpline
+
+# This can be used to establish what constitutes a collision
+COLLISION_THRESHOLD_M = 5.0
+NEAR_MISS_THRESHOLD_S = 1.5 # to plot
+
+def parse_vehicle_odometry_from_csv(odometry_csv):
+    return pd.read_csv(odometry_csv)
+
+def parse_pedestrian_odometry_from_csv(odometry_csv):
+    return pd.read_csv(odometry_csv)
+
+def interpolate_trajectory(odometry_df):
+    times = odometry_df["Message Time (ms)"].tolist()
+    tck_x = splrep(times, odometry_df["Map Position X (m)"].tolist(), k=5)
+    tck_y = splrep(times, odometry_df["Map Position Y (m)"].tolist(), k=5)
+
+    return BSpline(*tck_x, extrapolate=False), BSpline(*tck_y, extrapolate=False)
+
+def calc_time_to_collision(vehicle_odom, ped_traj_x, ped_traj_y):
+    @dataclass
+    class Point:
+        x_m: float
+        y_m: float
+
+    def to_point(tup):
+        # CSV row: Index, Message Time (ms), Map Position X (m), Map Position Y (m), Body Twist Longitudinal (mps)
+        # Can't use namedtuple field names because column names have spaces
+        return Point(x_m=tup[2], y_m=tup[3])
+
+    def pythagorean_distance(point_a, point_b):
+        return math.sqrt(
+            (point_a.x_m - point_b.x_m) ** 2 + (point_a.y_m - point_b.y_m) ** 2
+        )
+
+    trajectory_start_time_ms = vehicle_odom["Message Time (ms)"].iloc[0]
+    vehicle_speed_mps = vehicle_odom["Body Twist Longitudinal (mps)"].iloc[0]
+
+    if abs(vehicle_speed_mps) < 0.01:
+        vehicle_position = Point(
+            x_m=vehicle_odom["Map Position X (m)"].iloc[0],
+            y_m=vehicle_odom["Map Position Y (m)"].iloc[0],
+        )
+
+        pedestrian_position = Point(
+            x_m=ped_traj_x(trajectory_start_time_ms),
+            y_m=ped_traj_y(trajectory_start_time_ms),
+        )
+
+        if (
+            pythagorean_distance(vehicle_position, pedestrian_position)
+            < COLLISION_THRESHOLD_M
+        ):
+            return 0.0
+
+        return None
+
+    # Represents the running approximate integral as the vehicle is
+    # propagated along the path
+    accumulated_time_ms = 0.0
+    for prev_v_position, current_v_position in more_itertools.pairwise(
+        vehicle_odom.itertuples()
+    ):
+        vehicle_position = to_point(current_v_position)
+
+        travel_distance_m = pythagorean_distance(
+            to_point(prev_v_position), vehicle_position
+        )
+
+        if math.isclose(travel_distance_m, 0.0):
+            continue
+
+        # Time to travel between to path points
+        travel_time_s = travel_distance_m / vehicle_speed_mps
+        accumulated_time_ms += travel_time_s * 1_000
+
+        pedestrian_position = Point(
+            x_m=ped_traj_x(trajectory_start_time_ms + accumulated_time_ms),
+            y_m=ped_traj_y(trajectory_start_time_ms + accumulated_time_ms),
+        )
+
+        # We only care about when the pedestrian is moving
+        # Assuming pedestrian odometry contains only values for when moving
+        if math.isnan(pedestrian_position.x_m) or math.isnan(pedestrian_position.y_m):
+            continue
+
+        if (
+            pythagorean_distance(vehicle_position, pedestrian_position)
+            < COLLISION_THRESHOLD_M
+        ):
+            return accumulated_time_ms
+
+    return None
+
+def get_ttc_timestamps_in_sec(vehicle_odometry_df, pedestrian_odometry_df):
+    ped_traj_x, ped_traj_y = interpolate_trajectory(pedestrian_odometry_df)
+
+    times_to_collision_ms = [
+        calc_time_to_collision(vehicle_odometry_df.iloc[index:], ped_traj_x, ped_traj_y)
+        for index in range(len(vehicle_odometry_df.index))
+    ]
+
+    times_to_collision_s = [
+        ttc / 1_000 if ttc is not None else None for ttc in times_to_collision_ms
+    ]
+
+    return times_to_collision_s
+
+def plot_and_save(vehicle_odometry_df, times_to_collision_s, plots_dir):
+    plt.scatter(vehicle_odometry_df["Message Time (ms)"] / 1_000.0, times_to_collision_s, label='Time-to-collision [s]')
+    plt.title("Time-to-collision (TTC) v. Simulation Time")
+    plt.ylabel("Time-to-collision (TTC) [s]")
+    plt.xlabel("Simulation Time [s]")
+    plt.ylim(bottom=0.0)
+    plt.axhline(y=NEAR_MISS_THRESHOLD_S, color='r', linestyle='--', label='Near-miss threshold [s]')
+
+    plt.legend()
+
+    plots_dir.mkdir(exist_ok=True)
+
+    #scenario_name = str(plots_dir).split("/")[-3]
+    # print(scenario_name)
+    output_dir = "/media/carma/Seagate_Expansion_Drive/vru_validation_testing/successful_runs/plots/Plot_Analysis/ts_near-miss_collision"
+    # print(output_dir + "/ttc_" + scenario_name + ".png")
+
+    plt.savefig(plots_dir / f"ttc.png")
+    #plt.savefig(output_dir + "/ttc_" + scenario_name + ".png")
+

@@ -74,11 +74,12 @@ if cli_args.min_required is not None:
         label="Min Required",
     )
 
-ax.set_title("Real Time Factor v. Simulation Time")
-ax.set_ylabel("Real Time Factor (RTF) [%]")
-ax.set_xlabel("Simulation Time [s]")
+ax.set_title("Simulation Speed v. Simulation Time", fontsize=20)
+# Real Time Factor (RTF) [%] is another unit
+ax.set_ylabel("Simulation Speed\n (1 second of simulation time/the \nreal-time spent to complete\n1 second of simulation time)", fontsize=16)
+ax.set_xlabel("Simulation Time (s)", fontsize=16)
 ax.legend(loc="lower right")
-
+plt.tight_layout()
 if cli_args.plots_dir is None:
     plt.show()
 else:

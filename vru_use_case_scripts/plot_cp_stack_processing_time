@@ -71,7 +71,7 @@ def plot_duration(df: pd.DataFrame, show_plot, plots_dir):
     )
     ax.axhline(y=processing_mean, linestyle="dotted", color="k", label="Mean Processing Time")
     plt.xlabel("System Time of the Object that is Missing (s) ", fontsize=16)
-    plt.ylabel("Duration in CDASim Time (s)", fontsize=16)
+    plt.ylabel("Duration in Simulation Time (s)", fontsize=16)
     plt.title(f"Processing Duration for CP", fontsize=18)
     plt.legend()
     plt.savefig(plots_dir / "cp_stack_processing_time.png")

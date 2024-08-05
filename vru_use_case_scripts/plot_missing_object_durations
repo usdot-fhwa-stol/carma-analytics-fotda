@@ -51,7 +51,7 @@ def plot_missing(df: pd.DataFrame, plots_dir):
             label="CP stack operation period",
         )
         plt.xlabel("Message time of the object that is missing (ms)", fontsize=14)
-        plt.ylabel("Missing duration in CDASim time (ms)", fontsize=14)
+        plt.ylabel("Missing duration in Simulation Time (ms)", fontsize=14)
         plt.title(f"Missing duration for object ID: {obj_id}", fontsize=20)
         plt.legend()
         plt.savefig(plots_dir / f"missing_obj_duration_{obj_id}.png")

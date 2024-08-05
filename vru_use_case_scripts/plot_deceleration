@@ -10,6 +10,8 @@ import csv
 import statistics
 import sys
 import os
+from plot_time_to_collision import *
+from scipy.interpolate import interp1d
 
 # Add the path to carma-platform to the system path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../src/carma-platform')))
@@ -164,12 +166,13 @@ def get_pedestrian_times_of_interest(ros_bag_file, clock_diff, ped_crossing_x, p
     return (detected_t_sec, started_moving_t_sec, exited_crosswalk_t_sec)
 
 
-def plot_deceleration_and_speed(ros_bag_file, show_plot, figure_dir, max_deceleration_value = MAX_DECEL_VALUE, window_size=5):
+def plot_deceleration_and_speed_and_ttc(vehicle_odometry_df, times_to_collision_s, ros_bag_file, show_plot, figure_dir, max_deceleration_value = MAX_DECEL_VALUE, window_size=5):
     decel_values = []
     time_stamps = []
     plotting_time_stamps = []
     raw_speeds = []
     speeds_for_plotting = []
+    ttc_for_plotting = []
 
     # CARLA vs CDASim clock
     clock_diff = get_time_offset(ros_bag_file).to_sec()
@@ -185,12 +188,11 @@ def plot_deceleration_and_speed(ros_bag_file, show_plot, figure_dir, max_deceler
             raw_speeds.append(msg.twist.linear.x)
             time_stamps.append(t.to_sec() - clock_diff) # CARLA time to CDASim Time
 
-     # Apply moving average filter
+    # Apply moving average filter
     filtered_speeds = moving_average(raw_speeds, window_size)
     # Adjust time_stamps length to match the filtered_speeds length
     adjusted_time_stamps = time_stamps[int(window_size/2):int(-window_size/2)+1]
     speed_time_pair = zip(filtered_speeds, adjusted_time_stamps)
-
 
     for current, next_ in more_itertools.pairwise(speed_time_pair):
         curr_speed, current_log_timestamp = current
@@ -208,10 +210,14 @@ def plot_deceleration_and_speed(ros_bag_file, show_plot, figure_dir, max_deceler
         decel_values.append(instant_decel)
         plotting_time_stamps.append(current_log_timestamp)
 
+    vehicle_odometry_df['Message Time (s)'] = vehicle_odometry_df['Message Time (ms)'] / 1000.0
+    print(vehicle_odometry_df)
+    # Adjust ttc data to fit timestamp with decel/speed
+    f_interp = interp1d(vehicle_odometry_df['Message Time (s)'], times_to_collision_s, fill_value="extrapolate")
+    times_to_collision_interpolated = f_interp(plotting_time_stamps)
 
     # Plotting
-    fig, axs = plt.subplots(2, 1, figsize=(30, 10))
-
+    fig, axs = plt.subplots(3, 1, figsize=(30, 10))
 
     # NOTE: Object can get detected very early on due to CP
     # therefore, for better plotting we take the max of first time platform engaged and object detected
@@ -233,7 +239,7 @@ def plot_deceleration_and_speed(ros_bag_file, show_plot, figure_dir, max_deceler
     # Plot deceleration
     axs[0].plot(plotting_time_stamps, decel_values, 'o')
     axs[0].set_title('Instantaneous acceleration over time', fontsize=20)
-    axs[0].set_xlabel('Time (s)', fontsize=16)
+    axs[0].set_xlabel('Simulation Time (s)', fontsize=16)
     axs[0].set_ylabel('Acceleration (m/s^2)', fontsize=16)
     axs[0].tick_params(axis="x", labelsize=16)
     axs[0].tick_params(axis="y", labelsize=16)
@@ -242,13 +248,20 @@ def plot_deceleration_and_speed(ros_bag_file, show_plot, figure_dir, max_deceler
     # Plot speed
     axs[1].plot(plotting_time_stamps, speeds_for_plotting, '-', linewidth=3.0)
     axs[1].set_title('Speed over time', fontsize=20)
-    axs[1].set_xlabel('Time (s)', fontsize=16)
+    axs[1].set_xlabel('Simulation Time (s)', fontsize=16)
     axs[1].set_ylabel('Speed (m/s)', fontsize=16)
     axs[1].tick_params(axis="x", labelsize=16)
     axs[1].tick_params(axis="y", labelsize=16)
     axs[1].set_xlim([x_lower_limit, x_upper_limit])
 
-
+    # Plot ttc
+    axs[2].scatter(plotting_time_stamps, times_to_collision_interpolated)
+    axs[2].set_title("Time-to-collision (TTC) v. Simulation Time",  fontsize=20)
+    axs[2].set_ylabel("Time-to-collision (TTC) (s)", fontsize=16)
+    axs[2].set_xlabel("Simulation Time (s)", fontsize=16)
+    axs[2].set_xlim([x_lower_limit, x_upper_limit])
+    axs[2].tick_params(axis="x", labelsize=16)
+    axs[2].tick_params(axis="y", labelsize=16)
 
     # Also if the actors never achieved the events we are tracking, move the line to the end of the plot
     started_moving_t_sec = adjusted_time_stamps[-1] if started_moving_t_sec is None else started_moving_t_sec
@@ -257,6 +270,8 @@ def plot_deceleration_and_speed(ros_bag_file, show_plot, figure_dir, max_deceler
     exit_t_sec = adjusted_time_stamps[-1] if exit_t_sec is None else exit_t_sec
 
     # Adding vertical lines to both subplots for important timestamps
+    handles, labels = [], []
+    unique_labels = {}
     for i, ax in enumerate(axs):
         ax.axvline(x=detected_t_sec, color='black', linestyle='--', linewidth=3.0, label='Pedestrian Detected Time')
         ax.axvline(x=started_moving_t_sec, color='grey', linestyle='--', linewidth=3.0, label='Pedestrian Started Moving Time')
@@ -265,11 +280,19 @@ def plot_deceleration_and_speed(ros_bag_file, show_plot, figure_dir, max_deceler
         ax.axvline(x=exit_t_sec, color='grey', linestyle='-.', linewidth=3.0, label="Vehicle's Intersection Exit Time")
         if (i == 0):
             ax.axhline(y=max_deceleration_value, color='red', linestyle=':', linewidth=3.0, label="Max Decel for Comfortable Travel")
-            ax.legend(loc='lower left', fontsize=16)
+        if (i == 2):
+            ax.axhline(y=NEAR_MISS_THRESHOLD_S, color='red', linestyle='-',  linewidth=3.0, label='Near-miss threshold')
 
         ax.grid(True)
-        # ax.legend(loc='lower right', fontsize=16)
 
+        # extract labels
+        for handle, label in zip(*ax.get_legend_handles_labels()):
+            if label not in unique_labels:
+                unique_labels[label] = handle
+
+    # Extract the unique handles and labels
+    handles, labels = list(unique_labels.values()), list(unique_labels.keys())
+    plt.legend(handles, labels, loc='lower left', fontsize=16)
     plt.tight_layout()
 
     if figure_dir is None:
@@ -283,7 +306,7 @@ def plot_deceleration_and_speed(ros_bag_file, show_plot, figure_dir, max_deceler
 
     # plt.savefig(figure_dir / "deceleration_and_speed.png")
     #plt.savefig(str(figure_dir) + "/accel_speed_" + scenario_name + ".png")
-    plt.savefig(str(figure_dir) + "/accel_speed" + ".png")
+    plt.savefig(str(figure_dir) + "/accel_speed_ttc" + ".png")
 
     if show_plot:
         plt.show()
@@ -301,6 +324,20 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--vehicle-odometry-csv",
+    type=Path,
+    help="CSV file containing vehicle odometry data",
+    required=True,
+)
+
+parser.add_argument(
+    "--pedestrian-odometry-csv",
+    type=Path,
+    help="CSV file containing pedestrian odometry data",
+    required=True,
+)
+
+parser.add_argument(
     "--show-plot",
     help="Plot vehicle and pedestrian paths and the encroachment zone (debugging only)",
     action="store_true",
@@ -312,8 +349,15 @@ parser.add_argument(
     help="Directory to store generated plots",
 )
 
-
 cli_args = parser.parse_args()
 
-plot_deceleration_and_speed(cli_args.rosbag, cli_args.show_plot, cli_args.plots_dir)
+vehicle_odometry_df = parse_vehicle_odometry_from_csv(cli_args.vehicle_odometry_csv)
+
+pedestrian_odometry_df = parse_pedestrian_odometry_from_csv(
+    cli_args.pedestrian_odometry_csv
+)
+
+times_to_collision_s = get_ttc_timestamps_in_sec(vehicle_odometry_df, pedestrian_odometry_df)
+
+plot_deceleration_and_speed_and_ttc(vehicle_odometry_df, times_to_collision_s, cli_args.rosbag, cli_args.show_plot, cli_args.plots_dir)
 
