@@ -21,7 +21,7 @@ def plot_vehicle_speed(bag_dir, show_plots=True):
     with open(metadatafile, "r") as f:
         metadata_dict : dict = yaml.load(f, Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
     storage_id = metadata_dict['storage_identifier']
-    target_topic = '/ackermann_cmd'
+    target_topic = '/cmd_vel'
     vel_topic = '/odom'
     # Open bag
     reader, type_map = open_bagfile(bag_dir, topics=[target_topic, vel_topic], storage_id=storage_id)
@@ -42,7 +42,8 @@ def plot_vehicle_speed(bag_dir, show_plots=True):
             msg = deserialize_message(data, msg_type_full)
             if topic == target_topic:
                 # Store current target velocity
-                current_target_velocity = msg.drive.speed
+                # current_target_velocity = msg.drive.speed
+                current_target_velocity = msg.linear.x
             elif topic == vel_topic:
                 # Store measured velocity and target velocity at that time
                 velocities[vel_count] = msg.twist.twist.linear.x
@@ -54,6 +55,7 @@ def plot_vehicle_speed(bag_dir, show_plots=True):
     velocity_time_seconds = [(date - velocity_datetimes[0]).total_seconds() for date in velocity_datetimes]
     plt.plot(velocity_time_seconds, target_velocities, '-', label="Target Velocity")
     plt.plot(velocity_time_seconds, velocities, '--', label="Measured Velocity")
+    plt.plot(velocity_time_seconds, len(velocity_time_seconds) * [0.5 * np.max(target_velocities)], "--r", label="Slowdown Threshold")
     plt.xlabel("Time (s)")
     plt.ylabel("Speed (m/s)")
     plt.legend()
