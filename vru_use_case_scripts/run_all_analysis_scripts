@@ -287,7 +287,7 @@ def run_plot_time_to_collision(
         ]
     )
 
-def run_plot_deceleration(rosbag_file, plots_dir):
+def run_plot_deceleration(rosbag_file, plots_dir, vehicle_odometry_csv, pedestrian_odometry_csv):
     script_path = Path(os.path.realpath(__file__)).parent / "plot_deceleration"
 
     if not script_path.exists():
@@ -301,6 +301,10 @@ def run_plot_deceleration(rosbag_file, plots_dir):
             str(rosbag_file),
             "--plots-dir",
             str(plots_dir),
+            "--vehicle-odometry-csv",
+            str(vehicle_odometry_csv),
+            "--pedestrian-odometry-csv",
+            str(pedestrian_odometry_csv),
         ]
     )
 
@@ -360,11 +364,11 @@ for data_dir in [
     #     output_file_path=output_dir / "calc_post_encroachment_time.txt",
     # )
 
-    # run_plot_cp_stack_processing_time(
-    #     vehicle_detection_csv=rosbag_csv_dir
-    #     / "detected_objects_with_sim_received_time.csv",
-    #     plots_dir=output_dir / "plot_cp_stack_processing_time",
-    # )
+    #run_plot_cp_stack_processing_time(
+    #    vehicle_detection_csv=rosbag_csv_dir
+    #    / "detected_objects_with_sim_received_time.csv",
+    #    plots_dir=output_dir / "plot_cp_stack_processing_time",
+    #)
 
     # run_monitor_time_sync_through_logs(
     #     input_logs_dir = data_dir,
@@ -411,4 +415,6 @@ for data_dir in [
         run_plot_deceleration(
             rosbag_file=next(data_dir.glob("*.bag")),
             plots_dir=output_dir / "plot_deceleration",
+            vehicle_odometry_csv=rosbag_csv_dir / "vehicle_odometry.csv",
+            pedestrian_odometry_csv=rosbag_csv_dir / "pedestrian_odometry.csv"
         )

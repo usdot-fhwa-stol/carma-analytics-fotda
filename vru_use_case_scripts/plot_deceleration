@@ -172,7 +172,6 @@ def plot_deceleration_and_speed_and_ttc(vehicle_odometry_df, times_to_collision_
     plotting_time_stamps = []
     raw_speeds = []
     speeds_for_plotting = []
-    ttc_for_plotting = []
 
     # CARLA vs CDASim clock
     clock_diff = get_time_offset(ros_bag_file).to_sec()
@@ -187,6 +186,9 @@ def plot_deceleration_and_speed_and_ttc(vehicle_odometry_df, times_to_collision_
         if (msg.twist.linear.x > EPSILON):
             raw_speeds.append(msg.twist.linear.x)
             time_stamps.append(t.to_sec() - clock_diff) # CARLA time to CDASim Time
+        else:
+            raw_speeds.append(0.0)
+            time_stamps.append(t.to_sec() - clock_diff) # CARLA time to CDASim Time
 
     # Apply moving average filter
     filtered_speeds = moving_average(raw_speeds, window_size)
@@ -194,6 +196,8 @@ def plot_deceleration_and_speed_and_ttc(vehicle_odometry_df, times_to_collision_
     adjusted_time_stamps = time_stamps[int(window_size/2):int(-window_size/2)+1]
     speed_time_pair = zip(filtered_speeds, adjusted_time_stamps)
 
+    first_time_vehicle_moved = 0
+    is_vehicle_moved = False
     for current, next_ in more_itertools.pairwise(speed_time_pair):
         curr_speed, current_log_timestamp = current
         next_speed, next_log_timestamp = next_
@@ -204,6 +208,11 @@ def plot_deceleration_and_speed_and_ttc(vehicle_odometry_df, times_to_collision_
             continue  # Avoid division by zero or negative time intervals
 
         instant_decel = (next_speed - curr_speed) / delta_time
+
+        if (curr_speed < 2 * EPSILON and not is_vehicle_moved):
+            first_time_vehicle_moved = current_log_timestamp
+        else:
+            is_vehicle_moved = True
 
         # Store speed, deceleration, and timestamp for plotting
         speeds_for_plotting.append(curr_speed)
@@ -217,11 +226,12 @@ def plot_deceleration_and_speed_and_ttc(vehicle_odometry_df, times_to_collision_
     times_to_collision_interpolated = f_interp(plotting_time_stamps)
 
     # Plotting
-    fig, axs = plt.subplots(3, 1, figsize=(30, 10), gridspec_kw={'height_ratios': [1, 1, 2]})
+    fig, axs = plt.subplots(3, 1, figsize=(30, 20), gridspec_kw={'height_ratios': [1, 1, 1]})
 
     # NOTE: Object can get detected very early on due to CP
     # therefore, for better plotting we take the max of first time platform engaged and object detected
-    detected_t_sec = adjusted_time_stamps[-1] if detected_t_sec is None else max(detected_t_sec, adjusted_time_stamps[0])
+
+    detected_t_sec = adjusted_time_stamps[-1] if detected_t_sec is None else max(detected_t_sec, first_time_vehicle_moved)
     x_lower_limit = detected_t_sec - 1.0
     # print(x_lower_limit)
 
@@ -292,7 +302,7 @@ def plot_deceleration_and_speed_and_ttc(vehicle_odometry_df, times_to_collision_
 
     # Extract the unique handles and labels
     handles, labels = list(unique_labels.values()), list(unique_labels.keys())
-    plt.legend(handles, labels, loc='lower left', fontsize=16)
+    plt.legend(handles, labels, loc='center right', fontsize=16)
     plt.tight_layout()
 
     if figure_dir is None:
@@ -300,16 +310,16 @@ def plot_deceleration_and_speed_and_ttc(vehicle_odometry_df, times_to_collision_
 
     figure_dir.mkdir(exist_ok=True)
 
-    #scenario_name = str(figure_dir).split("/")[-3]
-    # print(scenario_name)
-    # output_dir = "/media/carma/Seagate_Expansion_Drive/vru_validation_testing/successful_runs/plots/Plot_Analysis/ts_acceleration_with_distance"
+    scenario_name = str(figure_dir).split("/")[-3]
+    print(scenario_name)
+    output_dir = "/media/carma/Seagate_Expansion_Drive/vru_validation_testing/successful_runs/plots/Plot_Analysis/ts_acceleration_with_distance"
 
     # plt.savefig(figure_dir / "deceleration_and_speed.png")
-    #plt.savefig(str(figure_dir) + "/accel_speed_" + scenario_name + ".png")
-    plt.savefig(str(figure_dir) + "/accel_speed_ttc" + ".png")
+    plt.savefig(str(output_dir) + "/accel_speed_ttc_" + scenario_name + ".png")
+    #plt.savefig(str(figure_dir) + "/accel_speed_ttc" + ".png")
 
-    if show_plot:
-        plt.show()
+    #if show_plot:
+    #    plt.show()
 
 parser = ArgumentParser(
     prog="plot deceleration",
