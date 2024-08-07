@@ -21,7 +21,7 @@ STEERING_TO_SERVO_GAIN = -0.55
 def plot_steering_rate(bag_dir, label, start_offset=0.0):
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
-        raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
+        raise ValueError("Metadata file %s does not exist. Are you sure %s is a rosbag directory?" % (metadatafile, bag_dir))
     with open(metadatafile, "r") as f:
         metadata_dict : dict = yaml.load(f, Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
     storage_id = metadata_dict['storage_identifier']
@@ -32,11 +32,11 @@ def plot_steering_rate(bag_dir, label, start_offset=0.0):
     steering_angles = np.zeros(topic_count_dict[servo_topic],)
     for idx in tqdm.tqdm(iterable=range(topic_count_dict[servo_topic])):
         if(reader.has_next()):
-            (topic, data, t_) = reader.read_next()
+            (topic, data, timestamp) = reader.read_next()
             msg_type = type_map[topic]
             msg_type_full = get_message(msg_type)
             msg = deserialize_message(data, msg_type_full)
-            timestamps[idx] = t_
+            timestamps[idx] = timestamp
             steering_angles[idx] = (msg.data - STEERING_TO_SERVO_OFFSET) / STEERING_TO_SERVO_GAIN
     dates = np.array([dt.datetime.fromtimestamp(ts * 1e-9) for ts in timestamps])
     start_time = dates[0]
@@ -52,7 +52,6 @@ if __name__=="__main__":
     parser.add_argument("--filtered_bag_offset", type=float, default=0.0, help="Time offset for start of bag with filtered steering")
     parser.add_argument("--unfiltered_bag", type=str, help="Directory of bag with unfiltered steering")
     parser.add_argument("--unfiltered_bag_offset", type=float, default=0.0, help="Time offset for start of bag with unfiltered steering")
-    parser.add_argument("--png_out", type=str, help="File path to save the plot")
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
     argdict : dict = vars(args)
@@ -65,6 +64,4 @@ if __name__=="__main__":
     plt.ylabel("Steering Rate (rad/s)")
     plt.title("Steering Rate vs. Time")
     plt.legend()
-    if argdict["png_out"]:
-        plt.savefig(argdict["png_out"])
     plt.show()

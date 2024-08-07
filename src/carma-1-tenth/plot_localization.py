@@ -16,19 +16,23 @@ import os
 
 
 def plot_localization(bag_dir, show_plots=True):
+    # Open metadata.yaml
     metadatafile : str = os.path.join(bag_dir, "metadata.yaml")
     if not os.path.isfile(metadatafile):
-        raise ValueError("Metadata file %s does not exist. Are you sure %s is a valid rosbag?" % (metadatafile, bag_dir))
+        raise ValueError("Metadata file %s does not exist. Are you sure %s is a rosbag directory?" % (metadatafile, bag_dir))
     with open(metadatafile, "r") as f:
         metadata_dict : dict = yaml.load(f, Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
     storage_id = metadata_dict['storage_identifier']
     odom_topic = '/amcl_pose'
     route_topic = '/route_graph'
     particles_topic = '/particle_cloud'
-    cmd_vel_topic = '/cmd_vel'
-    reader, type_map = open_bagfile(bag_dir, topics=[odom_topic, route_topic, particles_topic, cmd_vel_topic], storage_id=storage_id)
+    vel_topic = '/cmd_vel'
+    # Open bag
+    reader, type_map = open_bagfile(bag_dir, topics=[odom_topic, route_topic, particles_topic, vel_topic], storage_id=storage_id)
+    # Gather number of messages on each topic
     topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
 
+    # Variables to store messages from bag
     route_graph = None
     odom_count = 0
     particles_count = 0
@@ -37,12 +41,12 @@ def plot_localization(bag_dir, show_plots=True):
     odometry_times = np.zeros((topic_count_dict[odom_topic],))
     particle_std_deviations = np.zeros((topic_count_dict[particles_topic], 2))
     particle_times = np.zeros((topic_count_dict[particles_topic],))
-    velocities = np.zeros((topic_count_dict[cmd_vel_topic],))
-    velocity_times = np.zeros((topic_count_dict[cmd_vel_topic],))
+    velocities = np.zeros((topic_count_dict[vel_topic],))
+    velocity_times = np.zeros((topic_count_dict[vel_topic],))
     # Iterate through bag and store odometry + route_graph messages
-    for idx in tqdm.tqdm(iterable=range(topic_count_dict[odom_topic] + topic_count_dict[route_topic] + topic_count_dict[particles_topic] + topic_count_dict[cmd_vel_topic])):
+    for _ in tqdm.tqdm(iterable=range(topic_count_dict[odom_topic] + topic_count_dict[route_topic] + topic_count_dict[particles_topic] + topic_count_dict[vel_topic])):
         if(reader.has_next()):
-            (topic, data, t_) = reader.read_next()
+            (topic, data, timestamp) = reader.read_next()
             msg_type = type_map[topic]
             msg_type_full = get_message(msg_type)
             msg = deserialize_message(data, msg_type_full)
@@ -51,7 +55,7 @@ def plot_localization(bag_dir, show_plots=True):
             elif topic == odom_topic:
                 # Rotate from standard x,y coordinates to vehicle coordinates
                 odometry[odom_count] = [-msg.pose.pose.position.y, msg.pose.pose.position.x]
-                odometry_times[odom_count] = t_
+                odometry_times[odom_count] = timestamp
                 odom_count += 1
             elif topic == particles_topic:
                 particles = np.zeros((len(msg.particles), 2))
@@ -60,11 +64,11 @@ def plot_localization(bag_dir, show_plots=True):
                     particles[i] = [msg.particles[i].pose.position.x, msg.particles[i].pose.position.y]
                     weights[i] = msg.particles[i].weight
                 particle_std_deviations[particles_count] = np.diagonal(np.sqrt(np.cov(particles.T, aweights=weights)))
-                particle_times[particles_count] = t_
+                particle_times[particles_count] = timestamp
                 particles_count += 1
-            elif topic == cmd_vel_topic:
+            elif topic == vel_topic:
                 velocities[velocities_count] = msg.linear.x
-                velocity_times[velocities_count] = t_
+                velocity_times[velocities_count] = timestamp
                 velocities_count += 1
 
     route_coordinates = []
@@ -84,8 +88,6 @@ def plot_localization(bag_dir, show_plots=True):
     x_spline = make_interp_spline(route_coordinates_with_distance[:,0], route_coordinates_with_distance[:,1])
     y_spline = make_interp_spline(route_coordinates_with_distance[:,0], route_coordinates_with_distance[:,2])
     samples = np.linspace(route_coordinates_with_distance[0,0], route_coordinates_with_distance[-1,0], 10000)
-    odometry_datetimes = [datetime.datetime.fromtimestamp(time * 1e-9) for time in odometry_times]
-    odometry_times_seconds = [(date - odometry_datetimes[0]).total_seconds() for date in odometry_datetimes]
     route_x_points = x_spline(samples)
     route_y_points = y_spline(samples)
     # Interpolate the odometry of the robot using timestamps
@@ -137,12 +139,12 @@ def plot_localization(bag_dir, show_plots=True):
         plt.title("Particle Filter Standard Deviation vs. Downtrack")
         plt.ylim([0.0, 1.1 * np.max(particle_trimmed_std_deviations)])
         plt.figure()
-
         plt.plot(velocity_cmd_distances_along_route, velocity_cmd_trimmed)
         plt.xlabel("Downtrack (m)")
         plt.ylabel("Speed (m/s)")
         plt.ylim([0.0, 1.1 * np.max(velocity_cmd_trimmed)])
         plt.title("Vehicle Speed vs. Downtrack")
+        plt.show()
     return particle_distances_along_route, particle_trimmed_std_deviations
 
 
@@ -153,4 +155,3 @@ if __name__=="__main__":
     args = parser.parse_args()
     argdict : dict = vars(args)
     plot_localization(os.path.normpath(os.path.abspath(argdict["bag_in"])))
-    plt.show()

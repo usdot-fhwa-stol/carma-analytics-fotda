@@ -10,7 +10,7 @@ import yaml
 from plot_crosstrack_error import plot_crosstrack_error
 
 
-def plot_multiple_crosstrack_errors(bags, show_plots=True):
+def plot_multiple_crosstrack_errors(bags):
     bag_metadata = []
     for bag in bags:
         bag_path = os.path.normpath(os.path.abspath(bag))
@@ -52,41 +52,36 @@ def plot_multiple_crosstrack_errors(bags, show_plots=True):
 
     data = red_truck_sorted_data + blue_truck_sorted_data
 
-    if show_plots:
-        fig, ax = plt.subplots(figsize=(10, 6))
-        bp = ax.boxplot(data, medianprops = dict(color = "black", linewidth = 1.5))
-        for i in range(len(data)):
-            box = bp['boxes'][i]
-            box_x = []
-            box_y = []
-            for j in range(5):
-                box_x.append(box.get_xdata()[j])
-                box_y.append(box.get_ydata()[j])
-            box_coords = np.column_stack([box_x, box_y])
-            if i < len(red_truck_data):
-                ax.add_patch(Polygon(box_coords, facecolor="darksalmon"))
-            else:
-                ax.add_patch(Polygon(box_coords, facecolor="cornflowerblue"))
-        ax.set_xticklabels([str(speed) for speed in red_truck_sorted_speeds + blue_truck_sorted_speeds])
-        fig.text(0.925, 0.85, 'Red Truck',
-         backgroundcolor="darksalmon", color='black', weight='roman',
-         size='x-small')
-        fig.text(0.925, 0.815, 'Blue Truck',
-         backgroundcolor="cornflowerblue",
-         color='white', weight='roman', size='x-small')
-
+    fig, ax = plt.subplots(figsize=(10, 6))
+    bp = ax.boxplot(data, medianprops = dict(color = "black", linewidth = 1.5))
+    for i in range(len(data)):
+        box = bp['boxes'][i]
+        box_x = []
+        box_y = []
+        for j in range(5):
+            box_x.append(box.get_xdata()[j])
+            box_y.append(box.get_ydata()[j])
+        box_coords = np.column_stack([box_x, box_y])
+        if i < len(red_truck_data):
+            ax.add_patch(Polygon(box_coords, facecolor="darksalmon"))
+        else:
+            ax.add_patch(Polygon(box_coords, facecolor="cornflowerblue"))
+    ax.set_xticklabels([str(speed) for speed in red_truck_sorted_speeds + blue_truck_sorted_speeds])
+    fig.text(0.925, 0.85, 'Red Truck',
+        backgroundcolor="darksalmon", color='black', weight='roman',
+        size='x-small')
+    fig.text(0.925, 0.815, 'Blue Truck',
+        backgroundcolor="cornflowerblue",
+        color='white', weight='roman', size='x-small')
+    plt.xlabel("Vehicle Speed (m/s)")
+    plt.ylabel("Crosstrack Error (m)")
+    plt.title("Crosstrack Error at Varying Speeds")
+    plt.show()
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description="Generate box plots for multiple runs of C1T vehicles")
     parser.add_argument("bags", type=str, help="Directories of bags to load", nargs='*')
-    parser.add_argument("--png_out", type=str, help="File path to save the plot")
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
     argdict : dict = vars(args)
     plot_multiple_crosstrack_errors(argdict["bags"])
-    plt.xlabel("Vehicle Speed (m/s)")
-    plt.ylabel("Crosstrack Error (m)")
-    plt.title("Crosstrack Error at Varying Speeds")
-    if argdict["png_out"]:
-        plt.savefig(argdict["png_out"])
-    plt.show()
