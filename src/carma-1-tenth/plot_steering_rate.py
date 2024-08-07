@@ -52,7 +52,6 @@ if __name__=="__main__":
     parser.add_argument("--filtered_bag_offset", type=float, default=0.0, help="Time offset for start of bag with filtered steering")
     parser.add_argument("--unfiltered_bag", type=str, help="Directory of bag with unfiltered steering")
     parser.add_argument("--unfiltered_bag_offset", type=float, default=0.0, help="Time offset for start of bag with unfiltered steering")
-    parser.add_argument("--png_out", type=str, help="File path to save the plot")
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
     argdict : dict = vars(args)
@@ -65,6 +64,4 @@ if __name__=="__main__":
     plt.ylabel("Steering Rate (rad/s)")
     plt.title("Steering Rate vs. Time")
     plt.legend()
-    if argdict["png_out"]:
-        plt.savefig(argdict["png_out"])
     plt.show()

@@ -42,7 +42,6 @@ def plot_vehicle_speed(bag_dir, show_plots=True):
             msg = deserialize_message(data, msg_type_full)
             if topic == target_topic:
                 # Store current target velocity
-                # current_target_velocity = msg.drive.speed
                 current_target_velocity = msg.linear.x
             elif topic == vel_topic:
                 # Store measured velocity and target velocity at that time
@@ -53,13 +52,13 @@ def plot_vehicle_speed(bag_dir, show_plots=True):
     # Convert timestamps to seconds from start of the bag
     velocity_datetimes = [datetime.datetime.fromtimestamp(time * 1e-9) for time in velocity_times]
     velocity_time_seconds = [(date - velocity_datetimes[0]).total_seconds() for date in velocity_datetimes]
-    plt.plot(velocity_time_seconds, target_velocities, '-', label="Target Velocity")
-    plt.plot(velocity_time_seconds, velocities, '--', label="Measured Velocity")
-    plt.plot(velocity_time_seconds, len(velocity_time_seconds) * [0.5 * np.max(target_velocities)], "--r", label="Slowdown Threshold")
-    plt.xlabel("Time (s)")
-    plt.ylabel("Speed (m/s)")
-    plt.legend()
     if show_plots:
+        plt.plot(velocity_time_seconds, target_velocities, '-', label="Target Velocity")
+        plt.plot(velocity_time_seconds, velocities, '--', label="Measured Velocity")
+        plt.plot(velocity_time_seconds, len(velocity_time_seconds) * [0.5 * np.max(target_velocities)], "--r", label="Slowdown Threshold")
+        plt.xlabel("Time (s)")
+        plt.ylabel("Speed (m/s)")
+        plt.legend()
         plt.show()
     return velocities, target_velocities
 

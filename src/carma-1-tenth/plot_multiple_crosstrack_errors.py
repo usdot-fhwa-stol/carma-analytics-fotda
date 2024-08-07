@@ -10,7 +10,7 @@ import yaml
 from plot_crosstrack_error import plot_crosstrack_error
 
 
-def plot_multiple_crosstrack_errors(bags, show_plots=True):
+def plot_multiple_crosstrack_errors(bags):
     bag_metadata = []
     for bag in bags:
         bag_path = os.path.normpath(os.path.abspath(bag))
@@ -76,17 +76,12 @@ def plot_multiple_crosstrack_errors(bags, show_plots=True):
     plt.xlabel("Vehicle Speed (m/s)")
     plt.ylabel("Crosstrack Error (m)")
     plt.title("Crosstrack Error at Varying Speeds")
-    if show_plots:
-        plt.show()
-
+    plt.show()
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description="Generate box plots for multiple runs of C1T vehicles")
     parser.add_argument("bags", type=str, help="Directories of bags to load", nargs='*')
-    parser.add_argument("--png_out", type=str, help="File path to save the plot")
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
     argdict : dict = vars(args)
     plot_multiple_crosstrack_errors(argdict["bags"])
-    if argdict["png_out"]:
-        plt.savefig(argdict["png_out"])
