@@ -35,9 +35,13 @@ def get_route_coordinates(route_message):
     route_coordinates = []
     # Rotate the route_graph coordinates 90 degrees to match C1T coordinates (x-forward, y-left)
     if type(route_message) == MarkerArray:
+        samples = np.linspace(0, 1, 100)
         for i in range(len(route_message.markers)):
-            if route_message.markers[i].type == 2:
-                route_coordinates.append([-route_message.markers[i].pose.position.y, route_message.markers[i].pose.position.x])
+            if route_message.markers[i].type == 5:
+                start_point = np.array([-route_message.markers[i].points[0].y, route_message.markers[i].points[0].x])
+                end_point = np.array([-route_message.markers[i].points[1].y, route_message.markers[i].points[1].x])
+                points = (1 - samples)[:, np.newaxis] * start_point + samples[:, np.newaxis] * end_point
+                route_coordinates += points.tolist()
     elif type(route_message) == Path:
         for i in range(len(route_message.poses)):
             route_coordinates.append([-route_message.poses[i].pose.position.y, route_message.poses[i].pose.position.x])
@@ -86,21 +90,9 @@ def plot_crosstrack_error(bag_dir, route_topic, show_plots=True):
     # Get the coordinates from route_graph
     route_coordinates = get_route_coordinates(route_graph)
     route_coordinates = np.array(route_coordinates)
-    route_coordinates_with_distance = np.zeros((len(route_coordinates), 3))
-    route_coordinates_with_distance[:, 1:] = route_coordinates
-    running_distance = 0.0
-    # Assign a distance along the route for each x,y coordinate along the route
-    for i in range(len(route_coordinates)):
-        if i > 0:
-            running_distance += np.linalg.norm(route_coordinates_with_distance[i, 1:] - route_coordinates_with_distance[i-1, 1:])
-        route_coordinates_with_distance[i,0] = running_distance
-    # Fit 2D splines that map the distance along the route to the x and y coordinates to upsample the points
-    x_spline = make_interp_spline(route_coordinates_with_distance[:,0], route_coordinates_with_distance[:,1], k=1)
-    y_spline = make_interp_spline(route_coordinates_with_distance[:,0], route_coordinates_with_distance[:,2], k=1)
-    samples = np.linspace(route_coordinates_with_distance[0,0], route_coordinates_with_distance[-1,0], 10000)
-    route_x_points = x_spline(samples)
-    route_y_points = y_spline(samples)
+    route_x_points, route_y_points = route_coordinates[:,0], route_coordinates[:,1]
     route_deviations = []
+    running_distance = 0.0
     distances_along_route = []
     # For each odometry message, compute the deviation from the closest point along the route
     for i in range(1, len(odometry)):
@@ -111,10 +103,11 @@ def plot_crosstrack_error(bag_dir, route_topic, show_plots=True):
             else:
                 route_deviations.append(-np.linalg.norm(odometry[i] - closest_point))
             if len(distances_along_route):
-                distances_along_route.append(distances_along_route[-1] + np.linalg.norm(closest_point - previous_closest_point))
+                distances_along_route.append(running_distance + np.linalg.norm(closest_point - previous_closest_point))
+                running_distance += np.linalg.norm(closest_point - previous_closest_point)
             else:
-                distances_along_route.append(np.linalg.norm(closest_point - np.array([route_x_points[0], route_y_points[0]])))
-        previous_closest_point = closest_point
+                distances_along_route.append(0.0)
+            previous_closest_point = closest_point
 
     if show_plots:
         plt.plot(distances_along_route, route_deviations, label="Crosstrack Error")

@@ -107,7 +107,7 @@ def plot_localization(bag_dir, show_plots=True):
                 particle_distances_along_route.append(particle_distances_along_route[-1] + np.linalg.norm(closest_point - previous_closest_point))
             else:
                 particle_distances_along_route.append(np.linalg.norm(closest_point - np.array([route_x_points[0], route_y_points[0]])))
-        previous_closest_point = closest_point
+            previous_closest_point = closest_point
     particle_distances_along_route = np.array(particle_distances_along_route)
     particle_trimmed_std_deviations = np.array(particle_trimmed_std_deviations)
     # For each commanded velocity, compute the downtrack distance at that time
@@ -125,7 +125,7 @@ def plot_localization(bag_dir, show_plots=True):
                 velocity_cmd_distances_along_route.append(velocity_cmd_distances_along_route[-1] + np.linalg.norm(closest_point - previous_closest_point))
             else:
                 velocity_cmd_distances_along_route.append(np.linalg.norm(closest_point - np.array([route_x_points[0], route_y_points[0]])))
-        previous_closest_point = closest_point
+            previous_closest_point = closest_point
     velocity_cmd_distances_along_route = np.array(velocity_cmd_distances_along_route)
     velocity_cmd_trimmed = np.array(velocity_cmd_trimmed)
     averaged_particle_standard_deviations = np.mean(particle_trimmed_std_deviations, axis=1)
