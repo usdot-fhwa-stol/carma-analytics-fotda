@@ -13,6 +13,7 @@ import matplotlib.cm as cm
 from matplotlib.patches import Ellipse
 from plot_crosstrack_error import find_closest_point
 from plot_localization import plot_localization
+import networkx as nx
 import os
 
 def get_slowdown_speeds(speeds, target_speeds):
@@ -30,6 +31,24 @@ def get_slowdown_speeds(speeds, target_speeds):
                 min_slowdown_speed = max_target_speed
     slowdown_speeds.append([min_slowdown_idx, min_slowdown_speed])
     return slowdown_speeds
+
+def find_path_driven(odometry, nx_graph):
+    route_coordinates_reached = []
+    route_ids_reached = set()
+    previous_node_id = None
+    for odom in odometry:
+        min_distance = np.inf
+        min_node = None
+        for node in nx_graph.nodes(data=True):
+            if np.linalg.norm(node[1]['pos'] - odom) < min_distance:
+                min_distance = np.linalg.norm(node[1]['pos'] - odom)
+                min_node = node
+        if len(route_coordinates_reached) == 0 or (min_node[0] not in route_ids_reached and min_node[0] in nx_graph.neighbors(previous_node_id)):
+            route_coordinates_reached.append([min_node[0], min_node[1]['pos'][0], min_node[1]['pos'][1]])
+            route_ids_reached.add(min_node[0])
+            previous_node_id = min_node[0]
+    return np.array(route_coordinates_reached)
+
 
 def plot_colorline(x, y, c):
     col = cm.coolwarm_r((c-np.min(c))/(np.max(c)-np.min(c)))
@@ -82,25 +101,34 @@ def plot_route_driven(bag_dir, show_localization=False, show_speed=False):
     # Find max and min x/y values in graph to scale plots
     x_min, y_min, x_max, y_max = np.inf, np.inf, -np.inf, -np.inf
     route_graph_coordinates = []
-    route_downtrack_distances = []
-    map_coords_to_downtrack = dict()
+    nx_graph = nx.DiGraph()
     for i in range(len(route_graph.markers)):
         if route_graph.markers[i].type == 2:
             # For each graph node, store its coordinates and adjust the min/max x/y
-            route_graph_coordinates.append(np.array([-route_graph.markers[i].pose.position.y, route_graph.markers[i].pose.position.x]))
+            route_graph_coordinates.append([route_graph.markers[i].id, -route_graph.markers[i].pose.position.y, route_graph.markers[i].pose.position.x])
             x_min = np.min([-route_graph.markers[i].pose.position.y, x_min])
             y_min = np.min([route_graph.markers[i].pose.position.x, y_min])
             x_max = np.max([-route_graph.markers[i].pose.position.y, x_max])
             y_max = np.max([route_graph.markers[i].pose.position.x, y_max])
-            # Compute downtrack distance of graph node
-            if len(route_downtrack_distances):
-                route_downtrack_distances.append(route_downtrack_distances[-1] + np.linalg.norm(route_graph_coordinates[-1] - route_graph_coordinates[-2]))
-            else:
-                route_downtrack_distances.append(0.0)
-            if not show_speed:
-                plt.text(route_graph_coordinates[-1][0] + 0.1, route_graph_coordinates[-1][1] + 0.1, "{:.1f}".format(route_downtrack_distances[-1]))
-            map_coords_to_downtrack[tuple(route_graph_coordinates[-1])] = route_downtrack_distances[-1]
+            nx_graph.add_node(route_graph.markers[i].id, pos=(-route_graph.markers[i].pose.position.y, route_graph.markers[i].pose.position.x))
     route_graph_coordinates = np.array(route_graph_coordinates)
+    for i in range(len(route_graph.markers)):
+        if route_graph.markers[i].type == 5:
+            plt.plot([-route_graph.markers[i].points[0].y, -route_graph.markers[i].points[1].y], [route_graph.markers[i].points[0].x, route_graph.markers[i].points[1].x], 'r')
+            _, start_index = find_closest_point(route_graph_coordinates[:, 1:], [-route_graph.markers[i].points[0].y, route_graph.markers[i].points[0].x], trim_ends=False)
+            _, end_index = find_closest_point(route_graph_coordinates[:, 1:], [-route_graph.markers[i].points[1].y, route_graph.markers[i].points[1].x], trim_ends=False)
+            nx_graph.add_edge(route_graph_coordinates[start_index, 0], route_graph_coordinates[end_index, 0])
+    route_coordinates_reached = find_path_driven(odometry[:,:2], nx_graph)
+    map_coords_to_downtrack = dict()
+    running_distance = 0.0
+    previous_coordinate = None
+    for coordinate in route_coordinates_reached:
+        if previous_coordinate is None:
+            map_coords_to_downtrack[tuple(np.round(coordinate[1:], 2))] = running_distance
+        else:
+            running_distance += np.linalg.norm(coordinate[1:] - previous_coordinate[1:])
+            map_coords_to_downtrack[tuple(np.round(coordinate[1:], 2))] = running_distance
+        previous_coordinate = coordinate            
     if show_speed:
         plot_colorline(odometry[:,0], odometry[:,1], odometry[:,2])
         slowdown_speeds = get_slowdown_speeds(odometry[:,2], odometry[:,3])
@@ -113,17 +141,19 @@ def plot_route_driven(bag_dir, show_localization=False, show_speed=False):
                 plt.scatter(odometry[idx,0], odometry[idx,1], s=20, c='red', zorder=10)
             plt.text(odometry[idx,0] + 0.1, odometry[idx,1] + 0.1, "{:.2f}".format(speed))
     else:
-        plt.plot(route_graph_coordinates[:,0], route_graph_coordinates[:,1], 'ro-', label="Route")
+        plt.plot(route_graph_coordinates[1:,1], route_graph_coordinates[1:,2], 'ro', label="Route")
         plt.plot(odometry[:,0], odometry[:,1], 'b', label="Estimated Path Driven")
+        for coordinate, downtrack in zip(map_coords_to_downtrack.keys(), map_coords_to_downtrack.values()):
+            plt.text(coordinate[0] + 0.1, coordinate[1] + 0.1, "{:.1f}".format(downtrack))
     plt.xlim([x_min - 1.0, x_max + 1.0])
     plt.ylim([y_min - 1.0, y_max + 1.0])
     # For each graph node, plot and ellipse using the vehicle's localization std. dev. to show uncertainty in position
     if show_localization:
         ax = plt.gca()
         particle_distances_along_route, particle_std_deviations = plot_localization(bag_dir, show_plots=False)
-        for route_coordinate in route_graph_coordinates:
-            closest_odom_to_route, _ = find_closest_point(odometry[:,:2], route_coordinate, trim_ends=False)
-            route_coordinate_downtrack_distance = map_coords_to_downtrack[tuple(route_coordinate)]
+        for route_coordinate in route_coordinates_reached:
+            closest_odom_to_route, _ = find_closest_point(odometry[:,:2], route_coordinate[1:], trim_ends=False)
+            route_coordinate_downtrack_distance = map_coords_to_downtrack[tuple(np.round(route_coordinate[1:], 2))]
             std_deviation_at_route_coordinate = particle_std_deviations[np.abs(route_coordinate_downtrack_distance - particle_distances_along_route).argmin()]
             e2 = Ellipse(closest_odom_to_route, 2.0 * std_deviation_at_route_coordinate[0], 2.0 * std_deviation_at_route_coordinate[1], color='b', fill=False, ls="--")
             ax.add_patch(e2)
