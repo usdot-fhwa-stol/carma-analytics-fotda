@@ -42,7 +42,6 @@ def get_route_coordinates(route_messages, odometry):
                 _, end_index = find_closest_point(route_graph_coordinates[:, 1:], [-route_message.markers[i].points[1].y, route_message.markers[i].points[1].x], trim_ends=False)
                 nx_graph.add_edge(route_graph_coordinates[start_index, 0], route_graph_coordinates[end_index, 0])
         route_coordinates_reached = find_path_driven(odometry, nx_graph)
-        print(route_coordinates_reached.shape)
         samples = np.linspace(0, 1, 100)
         for i in range(1, len(route_coordinates_reached)):
             points = (1 - samples)[:, np.newaxis] * route_coordinates_reached[i-1, 1:] + samples[:, np.newaxis] * route_coordinates_reached[i, 1:]

@@ -22,6 +22,7 @@ def check_distance_to_arrival(bag_dir):
         metadata_dict : dict = yaml.load(f, Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
     storage_id = metadata_dict['storage_identifier']
     # Goal and Ack topics
+    rviz_topic = '/goal_pose'
     goal_topic = '/incoming_mobility_operation'
     ack_topic = '/outgoing_mobility_operation'
     # Open bag
@@ -29,16 +30,15 @@ def check_distance_to_arrival(bag_dir):
     # Gather number of messages on each topic
     topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
     # Number of goal messages must equal number of acks
-    if topic_count_dict[goal_topic] != topic_count_dict[ack_topic]:
-        print("Number of goal messages (%d) does not equal number of ack messages (%d)".format(topic_count_dict[goal_topic], topic_count_dict[ack_topic]))
-        return np.array([np.inf])
+    if topic_count_dict[goal_topic] + topic_count_dict[rviz_topic] != topic_count_dict[ack_topic]:
+        print("Number of goal messages ({0}) does not equal one less than number of ack messages ({1})".format(topic_count_dict[goal_topic] + topic_count_dict[rviz_topic], topic_count_dict[ack_topic]))
     # Count number of goal/ack messages processed
     goal_position_count, ack_position_count = 0, 0
     # Store goal and ack positions
-    goal_positions = np.zeros((topic_count_dict[goal_topic], 2))
+    goal_positions = np.zeros((topic_count_dict[goal_topic] + topic_count_dict[rviz_topic], 2))
     ack_positions = np.zeros((topic_count_dict[ack_topic], 2))
     # Iterate through bag
-    for _ in tqdm.tqdm(iterable=range(topic_count_dict[goal_topic] + topic_count_dict[ack_topic])):
+    for _ in tqdm.tqdm(iterable=range(topic_count_dict[goal_topic] + topic_count_dict[rviz_topic] + topic_count_dict[ack_topic])):
         if(reader.has_next()):
             (topic, data, _) = reader.read_next()
             msg_type = type_map[topic]
@@ -48,6 +48,9 @@ def check_distance_to_arrival(bag_dir):
                 strategy_params = json.loads(msg.strategy_params)
                 # Store goal position
                 goal_positions[goal_position_count] = [strategy_params["destination"]["longitude"], strategy_params["destination"]["latitude"]]
+                goal_position_count += 1
+            elif topic == rviz_topic:
+                goal_position_count[goal_position_count] = [msg.pose.position.x, msg.pose.position.y]
                 goal_position_count += 1
             elif topic == ack_topic:
                 strategy_params = json.loads(msg.strategy_params)

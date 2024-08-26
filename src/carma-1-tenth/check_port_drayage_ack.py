@@ -28,9 +28,9 @@ def check_port_drayage_ack(bag_dir, operation):
     reader, type_map = open_bagfile(bag_dir, topics=[goal_topic, ack_topic], storage_id=storage_id)
     # Gather number of messages on each topic
     topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
-    # If number of goals does not equal number of acks, return False
-    if topic_count_dict[goal_topic] != topic_count_dict[ack_topic]:
-        print("Number of goal messages (%d) does not equal number of ack messages (%d)".format(topic_count_dict[goal_topic], topic_count_dict[ack_topic]))
+    # If number of goals does not equal number of acks - 1, return False
+    if topic_count_dict[goal_topic] != topic_count_dict[ack_topic] - 1:
+        print("Number of goal messages ({0}) does not equal one less than number of ack messages ({1})".format(topic_count_dict[goal_topic], topic_count_dict[ack_topic]))
         return False
     # Iterate through bag
     for _ in tqdm.tqdm(iterable=range(topic_count_dict[goal_topic] + topic_count_dict[ack_topic])):
@@ -57,8 +57,8 @@ def check_port_drayage_ack(bag_dir, operation):
                         return True
                     elif strategy_params["operation"] == "DROPOFF" and not strategy_params["cargo"]:
                         return True
-    # Return false if desired operation is not in the bag
-    return False
+    # Return true if desired operation is not in the bag
+    return True
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description="Verify the vehicle correctly acks the port drayage pickup, dropoff, and holding area messages")

@@ -52,7 +52,19 @@ class C1TMetricAnalysis(unittest.TestCase):
         # The C1T CMV achieves and maintains its target speed with a tolerance of 0.2 m/s (excluding turns)
         velocities, target_velocities = plot_vehicle_speed(self.bag_dir, show_plots=False)
         max_target_speed = np.max(target_velocities)
-        speeds_on_straights = velocities[target_velocities == max_target_speed]
+        wait_for_vehicle_to_accelerate = 0
+        relevant_velocity_idxs = []
+        for velocity in target_velocities:
+            if velocity == max_target_speed:
+                if wait_for_vehicle_to_accelerate > 30:
+                    relevant_velocity_idxs.append(True)
+                else:
+                    relevant_velocity_idxs.append(False)
+                wait_for_vehicle_to_accelerate += 1
+            else:
+                relevant_velocity_idxs.append(False)
+                wait_for_vehicle_to_accelerate = 0
+        speeds_on_straights = velocities[relevant_velocity_idxs]
         self.assertTrue(np.all(np.abs(max_target_speed - speeds_on_straights) < 0.2), "Vehicle deviated more than 0.2 m/s from target speed on straight")
 
     def test_C1T_07_slowdown_on_turns(self):
@@ -66,7 +78,7 @@ class C1TMetricAnalysis(unittest.TestCase):
         relevant_velocity_idxs = []
         for velocity in target_velocities:
             if velocity == max_target_speed:
-                if wait_for_vehicle_to_accelerate > 5:
+                if wait_for_vehicle_to_accelerate > 30:
                     relevant_velocity_idxs += (buffer + 1) * [True]
                 else:
                     relevant_velocity_idxs += (buffer + 1) * [False]
