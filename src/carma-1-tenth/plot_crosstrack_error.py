@@ -8,20 +8,12 @@ import tqdm
 from rosidl_runtime_py.utilities import get_message
 from rclpy.serialization import deserialize_message
 import matplotlib.pyplot as plt
-from scipy.interpolate import make_interp_spline
+from rosbag_utils import find_path_driven, find_closest_point
 import argparse, argcomplete
 from visualization_msgs.msg import MarkerArray
 from nav_msgs.msg import Path
+import networkx as nx
 import os
-
-
-def find_closest_point(point_arr, point, trim_ends=True):
-    difference_arr = np.linalg.norm(point_arr - point, axis=1)
-    min_index = difference_arr.argmin()
-    # Don't want to include deviations if we have not yet reached the route or have completed it
-    if trim_ends and (min_index == 0 or min_index == len(difference_arr) - 1):
-        return None, None
-    return point_arr[min_index], min_index
 
 
 def is_left(route_a, route_b, odometry):
@@ -31,20 +23,34 @@ def is_left(route_a, route_b, odometry):
     else:
         return False
     
-def get_route_coordinates(route_message):
+def get_route_coordinates(route_messages, odometry):
     route_coordinates = []
     # Rotate the route_graph coordinates 90 degrees to match C1T coordinates (x-forward, y-left)
-    if type(route_message) == MarkerArray:
-        samples = np.linspace(0, 1, 100)
+    if type(route_messages[0]) == MarkerArray:
+        route_message = route_messages[0]
+        nx_graph = nx.DiGraph()
+        route_graph_coordinates = []
+        for i in range(len(route_message.markers)):
+            if route_message.markers[i].type == 2:
+                # For each graph node, store its coordinates and adjust the min/max x/y
+                route_graph_coordinates.append([route_message.markers[i].id, -route_message.markers[i].pose.position.y, route_message.markers[i].pose.position.x])
+                nx_graph.add_node(route_message.markers[i].id, pos=(-route_message.markers[i].pose.position.y, route_message.markers[i].pose.position.x))
+        route_graph_coordinates = np.array(route_graph_coordinates)
         for i in range(len(route_message.markers)):
             if route_message.markers[i].type == 5:
-                start_point = np.array([-route_message.markers[i].points[0].y, route_message.markers[i].points[0].x])
-                end_point = np.array([-route_message.markers[i].points[1].y, route_message.markers[i].points[1].x])
-                points = (1 - samples)[:, np.newaxis] * start_point + samples[:, np.newaxis] * end_point
-                route_coordinates += points.tolist()
-    elif type(route_message) == Path:
-        for i in range(len(route_message.poses)):
-            route_coordinates.append([-route_message.poses[i].pose.position.y, route_message.poses[i].pose.position.x])
+                _, start_index = find_closest_point(route_graph_coordinates[:, 1:], [-route_message.markers[i].points[0].y, route_message.markers[i].points[0].x], trim_ends=False)
+                _, end_index = find_closest_point(route_graph_coordinates[:, 1:], [-route_message.markers[i].points[1].y, route_message.markers[i].points[1].x], trim_ends=False)
+                nx_graph.add_edge(route_graph_coordinates[start_index, 0], route_graph_coordinates[end_index, 0])
+        route_coordinates_reached = find_path_driven(odometry, nx_graph)
+        print(route_coordinates_reached.shape)
+        samples = np.linspace(0, 1, 100)
+        for i in range(1, len(route_coordinates_reached)):
+            points = (1 - samples)[:, np.newaxis] * route_coordinates_reached[i-1, 1:] + samples[:, np.newaxis] * route_coordinates_reached[i, 1:]
+            route_coordinates += points.tolist()
+    elif type(route_messages[0]) == Path:
+        for route_message in route_messages:
+            for i in range(len(route_message.poses)):
+                route_coordinates.append([-route_message.poses[i].pose.position.y, route_message.poses[i].pose.position.x])
     return route_coordinates
 
 
@@ -64,7 +70,7 @@ def plot_crosstrack_error(bag_dir, route_topic, show_plots=True):
     topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
 
     # Message received on route_topic
-    route_graph = None
+    route_messages = []
     # Count number of odom messages processed
     odom_count = 0
     # Stored odometry messages
@@ -80,7 +86,7 @@ def plot_crosstrack_error(bag_dir, route_topic, show_plots=True):
             msg = deserialize_message(data, msg_type_full)
             if topic == route_topic:
                 # Store route graph
-                route_graph = msg
+                route_messages.append(msg)
             else:
                 # Store odometry message and time
                 odometry[odom_count] = [-msg.pose.pose.position.y, msg.pose.pose.position.x]
@@ -88,7 +94,7 @@ def plot_crosstrack_error(bag_dir, route_topic, show_plots=True):
                 odom_count += 1
     
     # Get the coordinates from route_graph
-    route_coordinates = get_route_coordinates(route_graph)
+    route_coordinates = get_route_coordinates(route_messages, odometry)
     route_coordinates = np.array(route_coordinates)
     route_x_points, route_y_points = route_coordinates[:,0], route_coordinates[:,1]
     route_deviations = []
@@ -98,7 +104,7 @@ def plot_crosstrack_error(bag_dir, route_topic, show_plots=True):
     for i in range(1, len(odometry)):
         closest_point, closest_index = find_closest_point(np.array([route_x_points, route_y_points]).T, odometry[i])
         if closest_point is not None and np.linalg.norm(odometry[i]- odometry[i-1]) >= 0.005:
-            if is_left(np.array([route_x_points[closest_index - 5], route_y_points[closest_index - 5]]), np.array([route_x_points[closest_index + 5], route_y_points[closest_index + 5]]), odometry[i]):
+            if is_left(np.array([route_x_points[closest_index - 1], route_y_points[closest_index - 1]]), np.array([route_x_points[closest_index + 1], route_y_points[closest_index + 1]]), odometry[i]):
                 route_deviations.append(np.linalg.norm(odometry[i] - closest_point))
             else:
                 route_deviations.append(-np.linalg.norm(odometry[i] - closest_point))

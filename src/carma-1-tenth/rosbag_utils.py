@@ -1,5 +1,5 @@
 import rosbag2_py
-
+import numpy as np
 
 def get_rosbag_options(path, serialization_format="cdr", storage_id="sqlite3"):
     storage_options = rosbag2_py.StorageOptions(uri=path, storage_id=storage_id)
@@ -24,3 +24,29 @@ def open_bagfile(path, topics=[], serialization_format="cdr", storage_id="sqlite
         filt = rosbag2_py.StorageFilter(topics)
         reader.set_filter(filt)
     return reader, type_map
+
+def find_closest_point(point_arr, point, trim_ends=True):
+    difference_arr = np.linalg.norm(point_arr - point, axis=1)
+    min_index = difference_arr.argmin()
+    # Don't want to include deviations if we have not yet reached the route or have completed it
+    if trim_ends and (min_index == 0 or min_index == len(difference_arr) - 1):
+        return None, None
+    return point_arr[min_index], min_index
+
+
+def find_path_driven(odometry, nx_graph):
+    route_coordinates_reached = []
+    route_ids_reached = set()
+    previous_node_id = None
+    for odom in odometry:
+        min_distance = np.inf
+        min_node = None
+        for node in nx_graph.nodes(data=True):
+            if np.linalg.norm(node[1]['pos'] - odom) < min_distance:
+                min_distance = np.linalg.norm(node[1]['pos'] - odom)
+                min_node = node
+        if len(route_coordinates_reached) == 0 or (min_node[0] not in route_ids_reached and min_node[0] in nx_graph.neighbors(previous_node_id)):
+            route_coordinates_reached.append([min_node[0], min_node[1]['pos'][0], min_node[1]['pos'][1]])
+            route_ids_reached.add(min_node[0])
+            previous_node_id = min_node[0]
+    return np.array(route_coordinates_reached)

@@ -9,7 +9,6 @@ import tqdm
 from rosidl_runtime_py.utilities import get_message
 from rclpy.serialization import deserialize_message
 import matplotlib.pyplot as plt
-import datetime
 from scipy.interpolate import make_interp_spline, interp1d
 import argparse, argcomplete
 import os

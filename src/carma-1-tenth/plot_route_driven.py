@@ -11,7 +11,7 @@ from rclpy.serialization import deserialize_message
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from matplotlib.patches import Ellipse
-from plot_crosstrack_error import find_closest_point
+from rosbag_utils import find_closest_point, find_path_driven
 from plot_localization import plot_localization
 import networkx as nx
 import os
@@ -31,23 +31,6 @@ def get_slowdown_speeds(speeds, target_speeds):
                 min_slowdown_speed = max_target_speed
     slowdown_speeds.append([min_slowdown_idx, min_slowdown_speed])
     return slowdown_speeds
-
-def find_path_driven(odometry, nx_graph):
-    route_coordinates_reached = []
-    route_ids_reached = set()
-    previous_node_id = None
-    for odom in odometry:
-        min_distance = np.inf
-        min_node = None
-        for node in nx_graph.nodes(data=True):
-            if np.linalg.norm(node[1]['pos'] - odom) < min_distance:
-                min_distance = np.linalg.norm(node[1]['pos'] - odom)
-                min_node = node
-        if len(route_coordinates_reached) == 0 or (min_node[0] not in route_ids_reached and min_node[0] in nx_graph.neighbors(previous_node_id)):
-            route_coordinates_reached.append([min_node[0], min_node[1]['pos'][0], min_node[1]['pos'][1]])
-            route_ids_reached.add(min_node[0])
-            previous_node_id = min_node[0]
-    return np.array(route_coordinates_reached)
 
 
 def plot_colorline(x, y, c):
