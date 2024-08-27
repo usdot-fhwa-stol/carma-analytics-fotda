@@ -1,5 +1,6 @@
 import rosbag2_py
 import numpy as np
+import networkx as nx
 
 def get_rosbag_options(path, serialization_format="cdr", storage_id="sqlite3"):
     storage_options = rosbag2_py.StorageOptions(uri=path, storage_id=storage_id)
@@ -36,9 +37,10 @@ def find_closest_point(point_arr, point, trim_ends=True):
 
 def find_path_driven(odometry, nx_graph):
     route_coordinates_reached = []
-    route_ids_reached = set()
-    candidate_nodes = dict()
+    route_ids_reached = []
+    blocked_nodes = set()
     previous_node_id = None
+    branch_start = None
     for odom in odometry:
         min_distance = np.inf
         min_node = None
@@ -49,30 +51,36 @@ def find_path_driven(odometry, nx_graph):
         # Add node if it is the first node or if it has not already been recorded and is a neighbor of the previous node
         if len(route_coordinates_reached) == 0:
             route_coordinates_reached.append([min_node[0], min_node[1]['pos'][0], min_node[1]['pos'][1]])
-            route_ids_reached.add(min_node[0])
+            route_ids_reached.append(min_node[0])
             previous_node_id = min_node[0]
             if len(list(nx_graph.neighbors(min_node[0]))) > 1:
+                branch_start = min_node[0]
                 for neighbor in nx_graph.neighbors(min_node[0]):
-                    candidate_nodes.add(neighbor)
-        elif min_node[0] not in route_ids_reached:
-            if len(candidate_nodes) == 0 and min_node[0] in nx_graph.neighbors(previous_node_id):
+                    blocked_nodes.add(neighbor)
+                    for next_neighbor in nx_graph.neighbors(neighbor):
+                        blocked_nodes.add(next_neighbor)
+        elif min_node[0] != route_ids_reached[-1]:
+            if len(blocked_nodes) == 0 and min_node[0] in nx_graph.neighbors(previous_node_id):
                 route_coordinates_reached.append([min_node[0], min_node[1]['pos'][0], min_node[1]['pos'][1]])
-                route_ids_reached.add(min_node[0])
+                route_ids_reached.append(min_node[0])
                 previous_node_id = min_node[0]
                 if len(list(nx_graph.neighbors(min_node[0]))) > 1:
-                    print("Root:", min_node)
+                    branch_start = min_node[0]
                     for neighbor in nx_graph.neighbors(min_node[0]):
-                        candidate_nodes[neighbor] = nx_graph.nodes[neighbor]
-                        print("Child:", neighbor)
-            elif min_node[0] not in candidate_nodes:
-                for candidate_node in candidate_nodes.items():
-                    if min_node[0] in nx_graph.neighbors(candidate_node[0]):
-                        route_coordinates_reached.append([candidate_node[0], candidate_node[1]['pos'][0], candidate_node[1]['pos'][1]])
-                        route_coordinates_reached.append([min_node[0], min_node[1]['pos'][0], min_node[1]['pos'][1]])
-                        route_ids_reached.add(candidate_node[0])
-                        route_ids_reached.add(min_node[0])
-                        previous_node_id = min_node[0]
-                        candidate_nodes.clear()
-                        break
-
+                        blocked_nodes.add(neighbor)
+                        for next_neighbor in nx_graph.neighbors(neighbor):
+                            blocked_nodes.add(next_neighbor)
+            elif len(blocked_nodes) > 0 and min_node[0] not in blocked_nodes:
+                route_coordinates_reached.append([branch_start, nx_graph.nodes[branch_start]['pos'][0], nx_graph.nodes[branch_start]['pos'][1]])
+                route_ids_reached.append(branch_start)
+                shortest_path = nx.shortest_path(nx_graph, source=branch_start, target=min_node[0])
+                if len(list(shortest_path)) > 4:
+                    continue
+                for nodeid in shortest_path:
+                    node = nx_graph.nodes[nodeid]
+                    route_coordinates_reached.append([nodeid, node['pos'][0], node['pos'][1]])
+                    route_ids_reached.append(nodeid)
+                previous_node_id = min_node[0]
+                blocked_nodes.clear()
+                branch_start = None
     return np.array(route_coordinates_reached)
