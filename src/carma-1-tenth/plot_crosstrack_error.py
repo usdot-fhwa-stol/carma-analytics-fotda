@@ -45,7 +45,7 @@ def get_route_coordinates(route_messages, odometry):
         samples = np.linspace(0, 1, 100)
         for i in range(1, len(route_coordinates_reached)):
             points = (1 - samples)[:, np.newaxis] * route_coordinates_reached[i-1, 1:] + samples[:, np.newaxis] * route_coordinates_reached[i, 1:]
-            route_coordinates += points.tolist()
+            route_coordinates += points.tolist()[1:-1]
     elif type(route_messages[0]) == Path:
         for route_message in route_messages:
             for i in range(len(route_message.poses)):

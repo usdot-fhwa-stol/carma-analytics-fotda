@@ -71,12 +71,12 @@ def find_path_driven(odometry, nx_graph):
                         for next_neighbor in nx_graph.neighbors(neighbor):
                             blocked_nodes.add(next_neighbor)
             elif len(blocked_nodes) > 0 and min_node[0] not in blocked_nodes:
-                route_coordinates_reached.append([branch_start, nx_graph.nodes[branch_start]['pos'][0], nx_graph.nodes[branch_start]['pos'][1]])
-                route_ids_reached.append(branch_start)
                 shortest_path = nx.shortest_path(nx_graph, source=branch_start, target=min_node[0])
                 if len(list(shortest_path)) > 4:
                     continue
                 for nodeid in shortest_path:
+                    if nodeid == branch_start:
+                        continue
                     node = nx_graph.nodes[nodeid]
                     route_coordinates_reached.append([nodeid, node['pos'][0], node['pos'][1]])
                     route_ids_reached.append(nodeid)
