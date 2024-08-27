@@ -57,7 +57,7 @@ class C1TMetricAnalysis(unittest.TestCase):
         # Add a buffer of ~3 seconds to allow the vehicle to accelerate before it is expected to reach its maximum speed
         for velocity in target_velocities:
             if velocity == max_target_speed:
-                if wait_for_vehicle_to_accelerate > 30:
+                if wait_for_vehicle_to_accelerate > 80:
                     relevant_velocity_idxs.append(True)
                 else:
                     relevant_velocity_idxs.append(False)
@@ -75,15 +75,10 @@ class C1TMetricAnalysis(unittest.TestCase):
         # Determine which slowdowns are due to turns and which slowdowns are due to entering/exiting goals
         stop_detected = True  # Vehicle will originally be stopped
         buffer = 0  # Buffer used to count previous velocities that may or may not be due to entering/exiting a goal
-        wait_for_vehicle_to_accelerate = 0
         relevant_velocity_idxs = []
         for velocity in target_velocities:
             if velocity == max_target_speed:
-                if wait_for_vehicle_to_accelerate > 30:
-                    relevant_velocity_idxs += (buffer + 1) * [True]
-                else:
-                    relevant_velocity_idxs += (buffer + 1) * [False]
-                wait_for_vehicle_to_accelerate += 1
+                relevant_velocity_idxs += (buffer + 1) * [False]
                 buffer = 0
                 stop_detected = False
             elif stop_detected:
@@ -92,7 +87,6 @@ class C1TMetricAnalysis(unittest.TestCase):
                 relevant_velocity_idxs += (buffer + 1) * [False]
                 buffer = 0
                 stop_detected = True
-                wait_for_vehicle_to_accelerate = 0
             else:
                 buffer += 1
         speeds_on_turns = velocities[relevant_velocity_idxs]
