@@ -31,7 +31,7 @@ def check_distance_to_arrival(bag_dir):
     topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
     # Number of goal messages must equal number of acks
     if topic_count_dict[goal_topic] + topic_count_dict[rviz_topic] != topic_count_dict[ack_topic]:
-        print("Number of goal messages ({0}) does not equal one less than number of ack messages ({1})".format(topic_count_dict[goal_topic] + topic_count_dict[rviz_topic], topic_count_dict[ack_topic]))
+        print("Number of goal messages ({0}) does not equal number of ack messages ({1})".format(topic_count_dict[goal_topic] + topic_count_dict[rviz_topic], topic_count_dict[ack_topic]))
     # Count number of goal/ack messages processed
     goal_position_count, ack_position_count = 0, 0
     # Store goal and ack positions
@@ -50,7 +50,7 @@ def check_distance_to_arrival(bag_dir):
                 goal_positions[goal_position_count] = [strategy_params["destination"]["longitude"], strategy_params["destination"]["latitude"]]
                 goal_position_count += 1
             elif topic == rviz_topic:
-                goal_position_count[goal_position_count] = [msg.pose.position.x, msg.pose.position.y]
+                goal_positions[goal_position_count] = [msg.pose.position.x, msg.pose.position.y]
                 goal_position_count += 1
             elif topic == ack_topic:
                 strategy_params = json.loads(msg.strategy_params)

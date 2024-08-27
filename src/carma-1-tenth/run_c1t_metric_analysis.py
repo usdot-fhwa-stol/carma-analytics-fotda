@@ -54,10 +54,10 @@ class C1TMetricAnalysis(unittest.TestCase):
         max_target_speed = np.max(target_velocities)
         wait_for_vehicle_to_accelerate = 0
         relevant_velocity_idxs = []
-        # Add a buffer of ~3 seconds to allow the vehicle to accelerate before it is expected to reach its maximum speed
+        # Add a buffer of ~2 seconds (odom is 50 Hz) to allow the vehicle to accelerate before it is expected to reach its maximum speed
         for velocity in target_velocities:
             if velocity == max_target_speed:
-                if wait_for_vehicle_to_accelerate > 80:
+                if wait_for_vehicle_to_accelerate > 100:
                     relevant_velocity_idxs.append(True)
                 else:
                     relevant_velocity_idxs.append(False)
