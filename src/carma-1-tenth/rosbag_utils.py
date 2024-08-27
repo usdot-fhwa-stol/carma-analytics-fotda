@@ -37,6 +37,7 @@ def find_closest_point(point_arr, point, trim_ends=True):
 def find_path_driven(odometry, nx_graph):
     route_coordinates_reached = []
     route_ids_reached = set()
+    candidate_nodes = dict()
     previous_node_id = None
     for odom in odometry:
         min_distance = np.inf
@@ -45,8 +46,33 @@ def find_path_driven(odometry, nx_graph):
             if np.linalg.norm(node[1]['pos'] - odom) < min_distance:
                 min_distance = np.linalg.norm(node[1]['pos'] - odom)
                 min_node = node
-        if len(route_coordinates_reached) == 0 or (min_node[0] not in route_ids_reached and min_node[0] in nx_graph.neighbors(previous_node_id)):
+        # Add node if it is the first node or if it has not already been recorded and is a neighbor of the previous node
+        if len(route_coordinates_reached) == 0:
             route_coordinates_reached.append([min_node[0], min_node[1]['pos'][0], min_node[1]['pos'][1]])
             route_ids_reached.add(min_node[0])
             previous_node_id = min_node[0]
+            if len(list(nx_graph.neighbors(min_node[0]))) > 1:
+                for neighbor in nx_graph.neighbors(min_node[0]):
+                    candidate_nodes.add(neighbor)
+        elif min_node[0] not in route_ids_reached:
+            if len(candidate_nodes) == 0 and min_node[0] in nx_graph.neighbors(previous_node_id):
+                route_coordinates_reached.append([min_node[0], min_node[1]['pos'][0], min_node[1]['pos'][1]])
+                route_ids_reached.add(min_node[0])
+                previous_node_id = min_node[0]
+                if len(list(nx_graph.neighbors(min_node[0]))) > 1:
+                    print("Root:", min_node)
+                    for neighbor in nx_graph.neighbors(min_node[0]):
+                        candidate_nodes[neighbor] = nx_graph.nodes[neighbor]
+                        print("Child:", neighbor)
+            elif min_node[0] not in candidate_nodes:
+                for candidate_node in candidate_nodes.items():
+                    if min_node[0] in nx_graph.neighbors(candidate_node[0]):
+                        route_coordinates_reached.append([candidate_node[0], candidate_node[1]['pos'][0], candidate_node[1]['pos'][1]])
+                        route_coordinates_reached.append([min_node[0], min_node[1]['pos'][0], min_node[1]['pos'][1]])
+                        route_ids_reached.add(candidate_node[0])
+                        route_ids_reached.add(min_node[0])
+                        previous_node_id = min_node[0]
+                        candidate_nodes.clear()
+                        break
+
     return np.array(route_coordinates_reached)
