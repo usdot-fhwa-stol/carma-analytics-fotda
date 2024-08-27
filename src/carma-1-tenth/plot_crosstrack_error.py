@@ -30,9 +30,9 @@ def get_route_coordinates(route_messages, odometry):
         route_message = route_messages[0]
         nx_graph = nx.DiGraph()
         route_graph_coordinates = []
+        # Create a networkx graph from the route graph marker array (nodes = 2, edges = 5)
         for i in range(len(route_message.markers)):
             if route_message.markers[i].type == 2:
-                # For each graph node, store its coordinates and adjust the min/max x/y
                 route_graph_coordinates.append([route_message.markers[i].id, -route_message.markers[i].pose.position.y, route_message.markers[i].pose.position.x])
                 nx_graph.add_node(route_message.markers[i].id, pos=(-route_message.markers[i].pose.position.y, route_message.markers[i].pose.position.x))
         route_graph_coordinates = np.array(route_graph_coordinates)
@@ -41,6 +41,7 @@ def get_route_coordinates(route_messages, odometry):
                 _, start_index = find_closest_point(route_graph_coordinates[:, 1:], [-route_message.markers[i].points[0].y, route_message.markers[i].points[0].x], trim_ends=False)
                 _, end_index = find_closest_point(route_graph_coordinates[:, 1:], [-route_message.markers[i].points[1].y, route_message.markers[i].points[1].x], trim_ends=False)
                 nx_graph.add_edge(route_graph_coordinates[start_index, 0], route_graph_coordinates[end_index, 0])
+        # Find the list of nodes that were traversed
         route_coordinates_reached = find_path_driven(odometry, nx_graph)
         samples = np.linspace(0, 1, 100)
         for i in range(1, len(route_coordinates_reached)):

@@ -17,6 +17,7 @@ import networkx as nx
 import os
 
 def get_slowdown_speeds(speeds, target_speeds):
+    # Get a list of vehicle speeds when it is slowing down on turns
     slowdown_speeds = []
     max_target_speed = np.max(target_speeds)
     min_slowdown_speed = max_target_speed
@@ -34,6 +35,7 @@ def get_slowdown_speeds(speeds, target_speeds):
 
 
 def plot_colorline(x, y, c):
+    # Plot a line color coded by vehicle speed
     col = cm.coolwarm_r((c-np.min(c))/(np.max(c)-np.min(c)))
     ax = plt.gca()
     for i in np.arange(len(x)-1):
@@ -96,6 +98,7 @@ def plot_route_driven(bag_dir, show_localization=False, show_speed=False):
             nx_graph.add_node(route_graph.markers[i].id, pos=(-route_graph.markers[i].pose.position.y, route_graph.markers[i].pose.position.x))
     route_graph_coordinates = np.array(route_graph_coordinates)
     for i in range(len(route_graph.markers)):
+        # Create edges connecting the graph nodes
         if route_graph.markers[i].type == 5:
             plt.plot([-route_graph.markers[i].points[0].y, -route_graph.markers[i].points[1].y], [route_graph.markers[i].points[0].x, route_graph.markers[i].points[1].x], 'r')
             _, start_index = find_closest_point(route_graph_coordinates[:, 1:], [-route_graph.markers[i].points[0].y, route_graph.markers[i].points[0].x], trim_ends=False)
