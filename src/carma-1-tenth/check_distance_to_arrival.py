@@ -29,14 +29,17 @@ def check_distance_to_arrival(bag_dir):
     reader, type_map = open_bagfile(bag_dir, topics=[goal_topic, ack_topic], storage_id=storage_id)
     # Gather number of messages on each topic
     topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
-    # Number of goal messages must equal number of acks
-    if topic_count_dict[goal_topic] + topic_count_dict[rviz_topic] != topic_count_dict[ack_topic]:
-        print("Number of goal messages ({0}) does not equal number of ack messages ({1})".format(topic_count_dict[goal_topic] + topic_count_dict[rviz_topic], topic_count_dict[ack_topic]))
+    if rviz_topic not in topic_count_dict:
+        topic_count_dict[rviz_topic] = 0
+    elif goal_topic not in topic_count_dict:
+        topic_count_dict[goal_topic] = 0
     # Count number of goal/ack messages processed
     goal_position_count, ack_position_count = 0, 0
     # Store goal and ack positions
     goal_positions = np.zeros((topic_count_dict[goal_topic] + topic_count_dict[rviz_topic], 2))
-    ack_positions = np.zeros((topic_count_dict[ack_topic], 2))
+    ack_positions = np.zeros((topic_count_dict[goal_topic] + topic_count_dict[rviz_topic], 2))
+    # Variable to keep track of whether or not a goal has been sent (used in case messages drop when bagging)
+    goal_sent = False
     # Iterate through bag
     for _ in tqdm.tqdm(iterable=range(topic_count_dict[goal_topic] + topic_count_dict[rviz_topic] + topic_count_dict[ack_topic])):
         if(reader.has_next()):
@@ -45,18 +48,24 @@ def check_distance_to_arrival(bag_dir):
             msg_type_full = get_message(msg_type)
             msg = deserialize_message(data, msg_type_full)
             if topic == goal_topic:
-                strategy_params = json.loads(msg.strategy_params)
-                # Store goal position
-                goal_positions[goal_position_count] = [strategy_params["destination"]["longitude"], strategy_params["destination"]["latitude"]]
-                goal_position_count += 1
+                if not goal_sent:
+                    strategy_params = json.loads(msg.strategy_params)
+                    # Store goal position
+                    goal_positions[goal_position_count] = [strategy_params["destination"]["longitude"], strategy_params["destination"]["latitude"]]
+                    goal_position_count += 1
+                    goal_sent = True
             elif topic == rviz_topic:
-                goal_positions[goal_position_count] = [msg.pose.position.x, msg.pose.position.y]
-                goal_position_count += 1
+                if not goal_sent:
+                    goal_positions[goal_position_count] = [msg.pose.position.x, msg.pose.position.y]
+                    goal_position_count += 1
+                    goal_sent = True
             elif topic == ack_topic:
-                strategy_params = json.loads(msg.strategy_params)
-                # Store ack position
-                ack_positions[ack_position_count] = [strategy_params["location"]["longitude"], strategy_params["location"]["latitude"]]
-                ack_position_count += 1
+                if goal_sent:
+                    strategy_params = json.loads(msg.strategy_params)
+                    # Store ack position
+                    ack_positions[ack_position_count] = [strategy_params["location"]["longitude"], strategy_params["location"]["latitude"]]
+                    ack_position_count += 1
+                    goal_sent = False
     # Return euclidean distance between each goal position and the reported ack position
     return np.linalg.norm(goal_positions - ack_positions, axis=1)
 
