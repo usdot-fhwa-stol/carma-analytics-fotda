@@ -98,7 +98,6 @@ class C1TMetricAnalysis(unittest.TestCase):
                 slowing_down = True
                 buffer += 1
         speeds_on_turns = velocities[relevant_velocity_idxs]
-        print(np.min(speeds_on_turns), np.max(speeds_on_turns))
         self.assertTrue(np.all(speeds_on_turns > 0.5 * max_target_speed), "Vehicle speed reduced more than 50% on turn")
 
     def test_C1T_08_stops_close_to_destination(self):
