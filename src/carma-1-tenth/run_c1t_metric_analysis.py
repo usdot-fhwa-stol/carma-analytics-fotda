@@ -74,13 +74,20 @@ class C1TMetricAnalysis(unittest.TestCase):
         max_target_speed = np.max(target_velocities)
         # Determine which slowdowns are due to turns and which slowdowns are due to entering/exiting goals
         stop_detected = True  # Vehicle will originally be stopped
+        slowing_down = False
         buffer = 0  # Buffer used to count previous velocities that may or may not be due to entering/exiting a goal
         relevant_velocity_idxs = []
         for velocity in target_velocities:
             if velocity == max_target_speed:
-                relevant_velocity_idxs += (buffer + 1) * [False]
+                if stop_detected:
+                    relevant_velocity_idxs += (buffer + 1) * [False]
+                elif slowing_down:
+                    relevant_velocity_idxs += (buffer + 1) * [True]
+                else:
+                    relevant_velocity_idxs += (buffer + 1) * [False]
                 buffer = 0
                 stop_detected = False
+                slowing_down = False
             elif stop_detected:
                 relevant_velocity_idxs.append(False)    
             elif velocity == 0.0:
@@ -88,8 +95,10 @@ class C1TMetricAnalysis(unittest.TestCase):
                 buffer = 0
                 stop_detected = True
             else:
+                slowing_down = True
                 buffer += 1
         speeds_on_turns = velocities[relevant_velocity_idxs]
+        print(np.min(speeds_on_turns), np.max(speeds_on_turns))
         self.assertTrue(np.all(speeds_on_turns > 0.5 * max_target_speed), "Vehicle speed reduced more than 50% on turn")
 
     def test_C1T_08_stops_close_to_destination(self):
