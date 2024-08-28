@@ -46,7 +46,7 @@ class C1TMetricAnalysis(unittest.TestCase):
     def test_C1T_05_follows_road_network(self):
         # The C1T CMV will drive along the centerline of the defined road network with less than 0.2 m of crosstrack error
         _, crosstrack_errors = plot_crosstrack_error(self.bag_dir, "/route_graph", show_plots=False)
-        self.assertTrue(np.all(crosstrack_errors < 0.2), "Crosstrack error from road network exceeded 0.2 m")
+        self.assertTrue(np.all(np.abs(crosstrack_errors) < 0.2), "Crosstrack error from road network exceeded 0.2 m")
 
     def test_C1T_06_maintains_speed_on_straights(self):
         # The C1T CMV achieves and maintains its target speed with a tolerance of 0.2 m/s (excluding turns)

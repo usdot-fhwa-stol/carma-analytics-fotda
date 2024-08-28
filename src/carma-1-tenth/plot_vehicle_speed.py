@@ -21,7 +21,7 @@ def plot_vehicle_speed(bag_dir, show_plots=True):
     with open(metadatafile, "r") as f:
         metadata_dict : dict = yaml.load(f, Loader=yaml.SafeLoader)["rosbag2_bagfile_information"]
     storage_id = metadata_dict['storage_identifier']
-    target_topic = '/cmd_vel'
+    target_topic = '/cmd_vel_smoothed'
     vel_topic = '/odom'
     # Open bag
     reader, type_map = open_bagfile(bag_dir, topics=[target_topic, vel_topic], storage_id=storage_id)
