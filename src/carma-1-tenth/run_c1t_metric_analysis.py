@@ -46,13 +46,26 @@ class C1TMetricAnalysis(unittest.TestCase):
     def test_C1T_05_follows_road_network(self):
         # The C1T CMV will drive along the centerline of the defined road network with less than 0.2 m of crosstrack error
         _, crosstrack_errors = plot_crosstrack_error(self.bag_dir, "/route_graph", show_plots=False)
-        self.assertTrue(np.all(crosstrack_errors < 0.2), "Crosstrack error from road network exceeded 0.2 m")
+        self.assertTrue(np.all(np.abs(crosstrack_errors) < 0.2), "Crosstrack error from road network exceeded 0.2 m")
 
     def test_C1T_06_maintains_speed_on_straights(self):
         # The C1T CMV achieves and maintains its target speed with a tolerance of 0.2 m/s (excluding turns)
         velocities, target_velocities = plot_vehicle_speed(self.bag_dir, show_plots=False)
         max_target_speed = np.max(target_velocities)
-        speeds_on_straights = velocities[target_velocities == max_target_speed]
+        wait_for_vehicle_to_accelerate = 0
+        relevant_velocity_idxs = []
+        # Add a buffer of ~2 seconds (odom is 50 Hz) to allow the vehicle to accelerate before it is expected to reach its maximum speed
+        for velocity in target_velocities:
+            if velocity == max_target_speed:
+                if wait_for_vehicle_to_accelerate > 100:
+                    relevant_velocity_idxs.append(True)
+                else:
+                    relevant_velocity_idxs.append(False)
+                wait_for_vehicle_to_accelerate += 1
+            else:
+                relevant_velocity_idxs.append(False)
+                wait_for_vehicle_to_accelerate = 0
+        speeds_on_straights = velocities[relevant_velocity_idxs]
         self.assertTrue(np.all(np.abs(max_target_speed - speeds_on_straights) < 0.2), "Vehicle deviated more than 0.2 m/s from target speed on straight")
 
     def test_C1T_07_slowdown_on_turns(self):
@@ -61,26 +74,28 @@ class C1TMetricAnalysis(unittest.TestCase):
         max_target_speed = np.max(target_velocities)
         # Determine which slowdowns are due to turns and which slowdowns are due to entering/exiting goals
         stop_detected = True  # Vehicle will originally be stopped
+        slowing_down = False
         buffer = 0  # Buffer used to count previous velocities that may or may not be due to entering/exiting a goal
-        wait_for_vehicle_to_accelerate = 0
         relevant_velocity_idxs = []
         for velocity in target_velocities:
             if velocity == max_target_speed:
-                if wait_for_vehicle_to_accelerate > 5:
+                if stop_detected:
+                    relevant_velocity_idxs += (buffer + 1) * [False]
+                elif slowing_down:
                     relevant_velocity_idxs += (buffer + 1) * [True]
                 else:
                     relevant_velocity_idxs += (buffer + 1) * [False]
-                wait_for_vehicle_to_accelerate += 1
                 buffer = 0
                 stop_detected = False
+                slowing_down = False
             elif stop_detected:
                 relevant_velocity_idxs.append(False)    
             elif velocity == 0.0:
                 relevant_velocity_idxs += (buffer + 1) * [False]
                 buffer = 0
                 stop_detected = True
-                wait_for_vehicle_to_accelerate = 0
             else:
+                slowing_down = True
                 buffer += 1
         speeds_on_turns = velocities[relevant_velocity_idxs]
         self.assertTrue(np.all(speeds_on_turns > 0.5 * max_target_speed), "Vehicle speed reduced more than 50% on turn")
