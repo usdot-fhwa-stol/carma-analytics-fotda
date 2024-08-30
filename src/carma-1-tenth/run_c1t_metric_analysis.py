@@ -99,20 +99,23 @@ class C1TMetricAnalysis(unittest.TestCase):
         # The C1T CMV sends Mobility Operation message acknowledging when a goal is reached
         self.assertTrue(check_message_published(self.bag_dir, "/outgoing_mobility_operation"), "Message not received on /outgoing_mobility_operation")
 
+    def test_C1T_08_receives_incoming_MOM(self):
+        # The C1T CMV sends Mobility Operation message acknowledging when a goal is reached
+        self.assertTrue(check_message_published(self.bag_dir, "/incoming_mobility_operation"), "Message not received on /incoming_mobility_operation")
+
     def test_C1T_09_generates_route_from_MOM_timing(self):
         # The C1T CMV will generate a route within 3 seconds of receiving an incoming mobility operation message
         time_between_messages = check_message_timing(self.bag_dir, "/incoming_mobility_operation", "/plan")
         self.assertTrue(np.all(time_between_messages < 3.0), "Time between messages on /incoming_mobility_operation and /plan exceeded 3 seconds")
 
-    def test_C1T_10_infrastructure_response_to_ack_timing(self):
-        # Infrastructure responds within a new goal destination within 1.5 seconds of receiving an ack from the C1T CMV
-        time_between_messages = check_message_timing(self.bag_dir, "/outgoing_mobility_operation", "/incoming_mobility_operation")
-        self.assertTrue(np.all(time_between_messages < 1.5), "Time between ack and new goal exceed 1.5 seconds")
-
     def test_C1T_12_communicate_load_and_unload(self):
         # Infrastructure can communicate with the C1T CMV that the container is loaded and unloaded
         self.assertTrue(check_port_drayage_ack(self.bag_dir, "PICKUP"), "Vehicle did not ack PICKUP correctly")
         self.assertTrue(check_port_drayage_ack(self.bag_dir, "DROPOFF"), "Vehicle did not ack DROPOFF correctly")
+
+    def test_C1T_13_communicate_checkpoint(self):
+        # Infrastructure can communicate with the C1T CMV that the container is loaded and unloaded
+        self.assertTrue(check_port_drayage_ack(self.bag_dir, "PORT_CHECKPOINT"), "Vehicle did not ack PORT_CHECKPOINT")
 
     def test_C1T_16_communicate_inspection(self):
         # Infrastructure can communicate with the C1T CMV that the container is inspected

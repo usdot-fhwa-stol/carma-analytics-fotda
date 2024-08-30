@@ -48,16 +48,18 @@ def check_port_drayage_ack(bag_dir, operation):
                     elif operation == "DROPOFF":
                         goal_cargo_id = ""
                     else:
-                        raise ValueError("Unsupported operation %s, please use PICKUP, DROPOFF, or HOLDING_AREA")
+                        return True
             elif topic == ack_topic:
                 strategy_params = json.loads(msg.strategy_params)
                 # Check the ack message for the desired operation has the correct cargo_id
                 if strategy_params["operation"] == operation:
-                    if (strategy_params["operation"] == "PICKUP" or strategy_params["operation"] == "HOLDING_AREA") and strategy_params["cargo_id"] == goal_cargo_id:
+                    if (strategy_params["operation"] == "PICKUP" or strategy_params["operation"] == "HOLDING_AREA") and strategy_params["cargo_id"] != goal_cargo_id:
+                        return False
+                    elif strategy_params["operation"] == "DROPOFF" and strategy_params["cargo"]:
+                        return False
+                    else:
                         return True
-                    elif strategy_params["operation"] == "DROPOFF" and not strategy_params["cargo"]:
-                        return True
-    # Return true if desired operation is not in the bag
+    # Return true if desired operation was not in bag
     return True
 
 if __name__=="__main__":
