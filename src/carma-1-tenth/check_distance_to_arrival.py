@@ -26,7 +26,7 @@ def check_distance_to_arrival(bag_dir):
     goal_topic = '/incoming_mobility_operation'
     ack_topic = '/outgoing_mobility_operation'
     # Open bag
-    reader, type_map = open_bagfile(bag_dir, topics=[goal_topic, ack_topic], storage_id=storage_id)
+    reader, type_map = open_bagfile(bag_dir, topics=[goal_topic, ack_topic, rviz_topic], storage_id=storage_id)
     # Gather number of messages on each topic
     topic_count_dict = {entry["topic_metadata"]["name"] : entry["message_count"] for entry in metadata_dict["topics_with_message_count"]}
     if rviz_topic not in topic_count_dict:
