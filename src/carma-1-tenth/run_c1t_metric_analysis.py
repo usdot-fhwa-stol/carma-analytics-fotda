@@ -97,7 +97,7 @@ class C1TMetricAnalysis(unittest.TestCase):
         self.assertTrue(np.all(speeds_on_turns > 0.5 * max_target_speed), "Vehicle speed reduced more than 50% on turn")
 
     def test_C1T_07_stops_close_to_destination(self):
-        # The C1T CMV stops within 0.2 m of the goal destinations
+        # The C1T CMV stops within 0.5 m of the goal destinations
         arrival_distances = check_distance_to_arrival(self.bag_dir)
         self.assertTrue(np.all(arrival_distances < 0.5), "Vehicle did not stop within 0.2 m of goal destination")
 
