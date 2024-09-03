@@ -99,7 +99,7 @@ class C1TMetricAnalysis(unittest.TestCase):
     def test_C1T_07_stops_close_to_destination(self):
         # The C1T CMV stops within 0.5 m of the goal destinations
         arrival_distances = check_distance_to_arrival(self.bag_dir)
-        self.assertTrue(np.all(arrival_distances < 0.5), "Vehicle did not stop within 0.2 m of goal destination")
+        self.assertTrue(np.all(arrival_distances < 0.5), "Vehicle did not stop within 0.5 m of goal destination")
 
     def test_C1T_08_acks_with_MOM(self):
         # The C1T CMV sends Mobility Operation message acknowledging when a goal is reached
