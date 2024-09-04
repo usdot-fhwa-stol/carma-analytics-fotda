@@ -45,8 +45,11 @@ def plot_message_frequencies(
             layout="constrained",
             figsize=[15, 2.5 * len(message_data)],
         )
+        # If it is all message types, the plots is assigned to an array of axes.
+        # If there is only one message type, the plots is assigned to an array of one axis.
         plots = plots if is_all_message_types else [plots]
         # Add simulation time to message data
+        # Zip call requires each parameter (including plots and message_data items) to be iterable.
         for msg_plot, (message_name, message_data_frame) in zip(
             plots, message_data.items()
         ):
