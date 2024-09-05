@@ -85,6 +85,7 @@ def plot_message_frequencies(
                     message_data_frame["Average Frequency (Hz)"],
                     message_name,
                 )
+
         fig.suptitle("Message Frequency Plots", fontsize=20)
         fig.supxlabel("Time (s)", fontsize=16)
         fig.supylabel("Message Frequency (Hz)", fontsize=16)
