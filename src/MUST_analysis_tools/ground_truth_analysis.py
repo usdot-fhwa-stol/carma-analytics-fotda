@@ -262,6 +262,11 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     time_offset_index = find_optimal_time_shift(gps_data_resampled['latitude'].to_numpy(), gps_data_resampled['longitude'].to_numpy(),
                                                 must_data_resampled['latitude'].to_numpy(), must_data_resampled['longitude'].to_numpy())
     time_offset = gps_data_resampled['epoch_time'][time_offset_index] - gps_data_resampled['epoch_time'][0]
+    gps_data_matched = gps_data_resampled
+    must_data_matched = must_data_resampled
+    must_data_matched['epoch_time'] = must_data_matched['epoch_time'] + time_offset
+    gps_data_matched = gps_data_matched[time_offset_index-1:time_offset_index-1 + len(must_data_matched)].reset_index(drop=True)
+
     print(f'time offset for test {test_name}: {time_offset}, static: {-gps_data['epoch_time'][0] + must_data['epoch_time'][0] + 117.5}')
     gps_data['sim time'] = gps_data['epoch_time'] - gps_data['epoch_time'][0]#  + (gps_data['epoch_time'][0] - must_data['epoch_time'][0] - 117.5)
     must_data['sim time'] = must_data['epoch_time'] - must_data['epoch_time'][0] + time_offset
@@ -346,8 +351,8 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     # Plot the data points
     map.plot(must_x, must_y, markersize=5, label=f'MUST track')
     map.plot(gps_x, gps_y, markersize=5, label=f'GPS track')
-    map.plot(gps_x_e1, gps_y_e1, markersize=5, label=f'GPS error bars')
-    map.plot(gps_x_e2, gps_y_e2, markersize=5, label=f'GPS error bars')
+    # map.plot(gps_x_e1, gps_y_e1, markersize=5, label=f'GPS error bars')
+    # map.plot(gps_x_e2, gps_y_e2, markersize=5, label=f'GPS error bars')
     # map.plot(shadow_x, shadow_y, markersize=5, label=f'GPS shadow track')
     ax_map.legend()
 
@@ -376,21 +381,31 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     plt.legend()
     output_folder = 'C:\\Users\\annika\\OneDrive\\Documents\\freight_cp\\Analysis'
     # plt.savefig(f'{output_folder}\\{test_name}_plots.png', dpi=100)
-    plt.show()
+    # plt.show()
     # plt.clf()
 
     # Metric 1: position accuracy (90% <30cm error)
-    # find matching start/end times
-    #   create same-ts interpolated track at a fixed frequency/start time?
-    #   find any points super close in time?
-    # compute haversine distance
-    # compute mean/stdev of error and print
+    distance_errors = np.array([haversine_distance(must_data_matched['latitude'].iloc[i],
+                                          must_data_matched['longitude'].iloc[i],
+                                          gps_data_matched['latitude'].iloc[i],
+                                          gps_data_matched['longitude'].iloc[i])
+                       for i in range(len(must_data_matched) - 1)])
+    distance_mean = np.mean(distance_errors)
+    distance_stdev = np.std(distance_errors)
+    distances_pct_below_limit = 100 * len(distance_errors[distance_errors < 0.3]) / len(distance_errors)
+    print(f'Metric 1, distance error <30cm. Mean error: {distance_mean}, stdev: {distance_stdev}, percentage below 30cm: {distances_pct_below_limit}%')
 
     # Metric 2: speed accuracy (90% <3mph error)
-    # find matching start/end times
-    #   create same-ts interpolated track at a fixed frequency/start time?
-    #   find any points super close in time?
-    # compute mean/stdev of error and print
+    speeds = np.array([haversine_distance(must_data_matched['latitude'].iloc[i],
+                                          must_data_matched['longitude'].iloc[i],
+                                          gps_data_matched['latitude'].iloc[i],
+                                          gps_data_matched['longitude'].iloc[i])
+                       for i in range(len(must_data_matched) - 1)])
+    distance_mean = np.mean(distances)
+    distance_stdev = np.std(distances)
+    distances_pct_below_limit = 100 * len(distances[distances < 0.3]) / len(distances)
+    print(f'Metric 2, speed error <3 mph. Mean error: {distance_mean}, stdev: {distance_stdev}, percentage below 3 mph: {distances_pct_below_limit}%')
+
 
 
 def main(args):
