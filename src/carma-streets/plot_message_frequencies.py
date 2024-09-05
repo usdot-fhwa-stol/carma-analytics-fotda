@@ -5,7 +5,6 @@ from pathlib import Path
 import pandas as pd
 from matplotlib import axes
 from matplotlib import pyplot as plt
-from measurement_time_metric import MeasurementTimeMetric
 from parse_kafka_logs import KafkaLogMessageType
 
 
@@ -86,9 +85,6 @@ def plot_message_frequencies(
                     message_data_frame["Average Frequency (Hz)"],
                     message_name,
                 )
-                if message_type == "sdsm":
-                    mt_metric = MeasurementTimeMetric(message_data_frame)
-                    mt_metric.plot_mt_interval_count(plots_dir)
 
         fig.suptitle("Message Frequency Plots", fontsize=20)
         fig.supxlabel("Time (s)", fontsize=16)

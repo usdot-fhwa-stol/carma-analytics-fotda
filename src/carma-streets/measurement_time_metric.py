@@ -1,8 +1,10 @@
+import argparse
 import math
 import re
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 from matplotlib import pyplot as plt
 from pandas import DataFrame
 
@@ -108,3 +110,37 @@ class MeasurementTimeMetric:
         fig.supxlabel("Measurement Time Interval (ms)", fontsize=12)
         fig.supylabel("Measurement Count", fontsize=12)
         fig.savefig(f"{plot_dir}/measurement_time_metric.png")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Script to plot measurement time interval count from CARMA Streets sensor data sharing message (SDSM) csv data."
+    )
+    parser.add_argument(
+        "--csv-dir", help="Directory to read csv data from.", type=Path, required=True
+    )
+    parser.add_argument(
+        "--plots-dir",
+        help="Directory to save generated plots.",
+        type=Path,
+        required=True,
+    )
+    args = parser.parse_args()
+
+    if args.csv_dir.is_dir():
+        if args.plots_dir.is_dir():
+            print(
+                f"WARNING: {args.plots_dir} already exists. Contents will be overwritten."
+            )
+        args.plots_dir.mkdir(exist_ok=True)
+
+        # Only interested in measurement time in SDSM csv file
+        for csv_file in args.csv_dir.glob("sdsm.csv"):
+            sdsm_data_frame = pd.read_csv(csv_file)
+            sdsm_data_frame["Time (s)"] = sdsm_data_frame["System Time (ms)"] / 1000
+            mtm = MeasurementTimeMetric(sdsm_data_frame)
+            mtm.plot_mt_interval_count(args.plots_dir)
+
+
+if __name__ == "__main__":
+    main()

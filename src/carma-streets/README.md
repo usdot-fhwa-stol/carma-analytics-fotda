@@ -33,3 +33,22 @@ options:
 ```
 ## Example Ouput:
 ![Alt text](docs/message_frequencies_example.png)
+
+## Plot Measurement Time Interval
+The `measurement_time_metric.py` is a python script to calculate measurement time distribution within a predefined intervals and plot the result in a bar chart.
+```
+usage: python3 measurement_time_metric.py [-h] --csv-dir CSV_DIR --plots-dir PLOTS_DIR
+
+Script to plot measurement time interval count from CARMA Streets sensor data sharing message (SDSM) csv data.
+
+options:
+  -h, --help            show this help message and exit
+  --csv-dir CSV_DIR     Directory to read csv data from.
+  --plots-dir PLOTS_DIR
+                        Directory to save generated plots.
+```
+### Example output
+```
+python3 measurement_time_metric.py  --csv-dir sdsm_kafka_30HZ_R1  --plots-dir sdsm_kafka_30HZ_R1_plots
+```
+![Alt text](docs/measurement_time_metric.png)
