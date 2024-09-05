@@ -56,6 +56,9 @@ class MeasurementTimeMetric:
         self.__extract_mt()
         mt_interval = self.__calc_mt_interval()
         mt_interval_count = self.__count_mt_interval(mt_interval)
+        if mt_interval_count.empty:
+            print("No measurement time to plot.")
+            return
         print(mt_interval_count)
         # Add 5 to offset the plot x-axis to plot bar in the middle position within an interval range.
         mt_index = [t[0] + 5 for t in mt_interval_count.index.tolist()]
@@ -65,7 +68,7 @@ class MeasurementTimeMetric:
         fig, plot = plt.subplots(
             1, sharex=True, layout="constrained", figsize=[15, 2.5]
         )
-        barContainer = plot.bar(mt_index, mt_interval_count_values, 10, 0)
+        bar_container = plot.bar(mt_index, mt_interval_count_values, 10, 0)
 
         # Modify x-axis ticks
         xtick_count = 20
@@ -80,7 +83,7 @@ class MeasurementTimeMetric:
             )
         )
         # Add metadata for bar plot
-        plot.bar_label(barContainer, padding=3)
+        plot.bar_label(bar_container, padding=3)
         plot.set_ylim(bottom=0)
         plot.set_xlim(left=0)
         plot.minorticks_on()
