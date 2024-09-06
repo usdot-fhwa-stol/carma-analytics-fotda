@@ -18,6 +18,12 @@ parser.add_argument(
     help="Minimum required RTF value. This will add a line in the generated plot",
 )
 
+parser.add_argument(
+    "--plots-dir",
+    type=Path,
+    help="Directory to store the generated plot"
+)
+
 if sys.stdin.isatty():
     parser.add_argument("filepath", type=Path)
 
@@ -73,4 +79,8 @@ ax.set_ylabel("Real Time Factor (RTF) [%]")
 ax.set_xlabel("Simulation Time [s]")
 ax.legend(loc="lower right")
 
-plt.show()
+if cli_args.plots_dir is None:
+    plt.show()
+else:
+    cli_args.plots_dir.mkdir(exist_ok=True, parents=True)
+    plt.savefig(cli_args.plots_dir / "rtf.png")

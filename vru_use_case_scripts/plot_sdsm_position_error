@@ -103,20 +103,21 @@ def get_unique_object_ids(df: pd.DataFrame):
 
 def plot_positions(times, distances, marker="o", title=None, axis=plt):
     axis.plot(times, distances, marker=marker, linewidth=0)
-    axis.axhline(y=1.0, linestyle="dashed", color="tab:red", label="Max Required")
+    axis.axhline(y=0.1415, linestyle="dashed", color="tab:red", label="Max Required")
+    axis.ylim([0.0, 0.2])
 
     if axis == plt:
         if title is not None:
             axis.title(title)
 
-        axis.ylabel("Euclidean Distance [m]")
-        axis.xlabel("Simulation Time [s]")
+        axis.ylabel("Euclidean Distance [m]", fontsize=14)
+        axis.xlabel("Simulation Time [s]", fontsize=14)
     else:
         if title is not None:
             axis.set_title(title)
 
-        axis.set_ylabel("Euclidean Distance [m]")
-        axis.set_xlabel("Simulation Time [s]")
+        axis.set_ylabel("Euclidean Distance [m]", fontsize=14)
+        axis.set_xlabel("Simulation Time [s]", fontsize=14)
 
     axis.legend(loc="best")
 
@@ -174,7 +175,15 @@ parser.add_argument(
     required=True,
 )
 
+parser.add_argument(
+    "--plots-dir",
+    type=Path,
+    required=True
+)
+
 cli_args = parser.parse_args()
+
+cli_args.plots_dir.mkdir(exist_ok=True, parents=True)
 
 detections_df = parse_positions_from_detection_csv(cli_args.detection_csv)
 sdsm_df = parse_positions_from_sdsm_csv(cli_args.sdsm_csv)
@@ -184,4 +193,5 @@ position_distances = calc_position_distances(detections_df, sdsm_df)
 for object_id, distance_data in position_distances.items():
     distances_np = np.asarray(distance_data).transpose()
     plot_positions(distances_np[0], distances_np[1], title=object_id)
-    plt.show()
+    plt.savefig(cli_args.plots_dir / f"{object_id}_sdsm_error.png")
+    plt.close()

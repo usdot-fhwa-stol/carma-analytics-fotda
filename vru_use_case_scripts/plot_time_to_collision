@@ -12,7 +12,7 @@ from scipy.interpolate import splrep, BSpline
 
 # This can be used to establish what constitutes a collision
 COLLISION_THRESHOLD_M = 5.0
-
+NEAR_MISS_THRESHOLD_S = 1.0 # to plot
 
 def parse_vehicle_odometry_from_csv(odometry_csv):
     return pd.read_csv(odometry_csv)
@@ -125,6 +125,8 @@ parser.add_argument(
     required=True,
 )
 
+parser.add_argument("--plots-dir", type=Path, default=Path("plots"))
+
 cli_args = parser.parse_args()
 
 vehicle_odometry_df = parse_vehicle_odometry_from_csv(cli_args.vehicle_odometry_csv)
@@ -144,12 +146,14 @@ times_to_collision_s = [
     ttc / 1_000 if ttc is not None else None for ttc in times_to_collision_ms
 ]
 
-plt.scatter(vehicle_odometry_df["Message Time (ms)"] / 1_000.0, times_to_collision_s)
+plt.scatter(vehicle_odometry_df["Message Time (ms)"] / 1_000.0, times_to_collision_s, label='Time-to-collision [s]')
 plt.title("Time-to-collision (TTC) v. Simulation Time")
 plt.ylabel("Time-to-collision (TTC) [s]")
-plt.xlabel("CDASim Time [s]")
+plt.xlabel("CDASim time [s]")
+plt.axhline(y=NEAR_MISS_THRESHOLD_S, color='r', linestyle='--', label='Near-miss threshold [s]')
 
-figures_dir = Path("figures")
-figures_dir.mkdir(exist_ok=True)
+plt.legend()
 
-plt.savefig(figures_dir / f"ttc.png")
+cli_args.plots_dir.mkdir(exist_ok=True)
+
+plt.savefig(cli_args.plots_dir / f"ttc.png")
