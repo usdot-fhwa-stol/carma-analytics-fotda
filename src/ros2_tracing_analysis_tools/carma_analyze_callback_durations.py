@@ -1,13 +1,13 @@
 #!/usr/bin/python3
 
 #  Copyright (C) 2023 LEIDOS.
-# 
+#
 #  Licensed under the Apache License, Version 2.0 (the "License"); you may not
 #  use this file except in compliance with the License. You may obtain a copy of
 #  the License at
-# 
+#
 #  http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 #  Unless required by applicable law or agreed to in writing, software
 #  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
 #  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -71,7 +71,7 @@ import os
 # this script) containing the analysis results for that trace session. Within that results folder, there will
 # be one .csv file containing a summary of the callback duration statistics for each analyzed callback.
 # Additionally, two plots (each stored as a separate .png file) will be generated for each callback: one containing
-# a line chart of callback durations vs. time, and one containing a histogram of the callback durations. 
+# a line chart of callback durations vs. time, and one containing a histogram of the callback durations.
 
 def get_timestamp_carma_engaged(data_util, callback_symbols, verbose=False):
     '''
@@ -89,17 +89,17 @@ def get_timestamp_carma_engaged(data_util, callback_symbols, verbose=False):
     timestamp_carma_engaged = 0.0
     first = True
 
-    # Find the earliest "SetGuidanceActive" service callback from the Trace Session. This timestamp will be used to 
+    # Find the earliest "SetGuidanceActive" service callback from the Trace Session. This timestamp will be used to
     #      approximate the timestamp that CARMA Platform was engaged.
     for obj, symbol in callback_symbols.items():
         owner_info = data_util.get_callback_owner_info(obj)
         if owner_info is None:
             owner_info = '[unknown]'
-        
+
         # Create dataframe of durations for this callback
         if ("SetGuidanceActive" in owner_info) or ("SetGuidanceActive" in symbol):
             duration_df = data_util.get_callback_durations(obj)
-        
+
             if first:
                 timestamp_carma_engaged = duration_df['timestamp'].iloc[0]
                 first = False
@@ -127,11 +127,11 @@ def get_timestamp_carma_started(data_util, callback_symbols, verbose=False):
 
     timestamp_carma_started = 0.0
     first = True
-    for obj, symbol in callback_symbols.items():    
-        
+    for obj, symbol in callback_symbols.items():
+
         # Create dataframe of durations for this callback
         duration_df = data_util.get_callback_durations(obj)
-        
+
         # Update 'carma_start_timestamp' if an earlier timestamp has been found
         if first:
             timestamp_carma_started = duration_df['timestamp'].iloc[0]
@@ -149,7 +149,7 @@ def plot_callback_durations_line_chart(duration_df, callback_description, result
     '''
     Plot callback durations vs. time for a given callback
 
-    :param duration_df: Pandas dataframe for a specific a callback. Contains duration for each time the callback was processed. 
+    :param duration_df: Pandas dataframe for a specific a callback. Contains duration for each time the callback was processed.
     :param callback_description: String describing the specific callback.
     :param results_directory: String containing the directory for which the generated plot will be stored.
     :param show_plots: Flag indicating whether the generated plot should be immediately displayed to the user before being saved.
@@ -157,27 +157,27 @@ def plot_callback_durations_line_chart(duration_df, callback_description, result
     :return: None
     '''
 
-    ax = duration_df.plot(x='timestamp', y='duration')      
+    ax = duration_df.plot(x='timestamp', y='duration', linestyle='', marker='o')
     plt.rc('axes', labelsize=12)  # Set font size of the axes labels
     plt.rc('legend', fontsize=10)  # Set font size of the legend text
     ax.get_legend().remove()
     ax.set_title(callback_description)
     ax.set_ylabel("Callback Duration (ms)")
     ax.set_xlabel("Seconds since CARMA was started (sec)")
-    
+
     filename = str(results_directory) + "/" + str(callback_description.replace("/","-")) + "-linechart.png"
     plt.savefig(filename, bbox_inches='tight')
     if(show_plots):
         plt.show()
     plt.close()
-    
+
     return
 
 def plot_callback_durations_histogram(duration_df, callback_description, results_directory, show_plots):
     '''
     Plot histogram of callback durations for a given callback
 
-    :param duration_df: Pandas dataframe for a specific a callback. Contains duration for each time the callback was processed. 
+    :param duration_df: Pandas dataframe for a specific a callback. Contains duration for each time the callback was processed.
     :param callback_description: String describing the specific callback.
     :param results_directory: String containing the directory for which the generated plot will be stored.
     :param show_plots: Flag indicating whether the generated plot should be immediately displayed to the user before being saved.
@@ -185,13 +185,13 @@ def plot_callback_durations_histogram(duration_df, callback_description, results
     :return: None
     '''
 
-    ax_hist = duration_df['duration'].hist()   
+    ax_hist = duration_df['duration'].hist()
     plt.rc('axes', labelsize=12)  # fontsize of the axes labels
     plt.rc('legend', fontsize=10)  # fontsize of the legend text
     ax_hist.set_title(callback_description)
     ax_hist.set_ylabel("Frequency")
     ax_hist.set_xlabel("Callback Duration (ms)")
-    
+
     filename = str(results_directory) + "/" + str(callback_description.replace("/","-")) + "-histogram.png"
     plt.savefig(filename, bbox_inches='tight')
     if(show_plots):
@@ -201,8 +201,8 @@ def plot_callback_durations_histogram(duration_df, callback_description, results
     return
 
 def analyze_callback_durations(data_util, callback_symbols, results_directory,
-                               timestamp_start_analysis, trace_session_filename, 
-                               components_to_analyze, callbacks_to_ignore, 
+                               timestamp_start_analysis, trace_session_filename,
+                               components_to_analyze, callbacks_to_ignore,
                                show_plots=False, verbose=False):
     '''
     Main function for analyzing callback durations. This function calls other functions as needed to
@@ -232,56 +232,50 @@ def analyze_callback_durations(data_util, callback_symbols, results_directory,
 
     for component in components_to_analyze:
         # For each component, log statisics and generate plots for callbacks. If a callback contains content
-        #     that matches a string in "callbacks_to_ignore", the callback will be skipped (no results or 
+        #     that matches a string in "callbacks_to_ignore", the callback will be skipped (no results or
         #     plots will be generated).
 
         if(verbose):
             print("*******************************************************************")
             print("Analyzing " + str(component))
-            print("*******************************************************************")    
-        
+            print("*******************************************************************")
+
         for obj, symbol in callback_symbols.items():
             owner_info = data_util.get_callback_owner_info(obj)
             if owner_info is None:
                 owner_info = "[unknown]"
-                
+
             # Skip callback if it is not related to the current 'component' being analyzed
             if (component not in owner_info) and (component not in symbol):
                 continue
-            
+
             # Skip callback if it includes content that user wants to ignore
             if any((callback in owner_info or callback in symbol) for callback in callbacks_to_ignore):
                 continue
-            
+
             # Generate descriptive information for this callback
             callback_description = ""
             if "Timer" in owner_info:
                 callback_description = component + " Timer Callback" + owner_info.split(",")[-1]
             if "Subscription" in owner_info:
                 callback_description = component + " Subscription Callback" + owner_info.split(",")[-1]
-            if "PlanTrajectory" in symbol:
-                # NOTE: Currently can't relate a PlanTrajectory Service Callback to the source node. 
-                #       As a workaround, it shouldn't be too difficult to relate the data to a specific 
-                #       Tactical Plugin for a given test.
-                callback_description = "PlanTrajectory Service Callback"
-            if "PlanManeuvers" in symbol:
-                # NOTE: Currently can't relate a PlanManeuvers Service Callback to the source node. 
-                #       As a workaround, it shouldn't be too difficult to relate the data to a specific 
-                #       Strategic Plugin for a given test.
-                callback_description = "PlanManeuvers Service Callback"
-            
+            if "plan_trajectory" in owner_info:
+                callback_description = component + " PlanTrajectory Callback" + owner_info.split(",")[-1]
+            if "plan_maneuvers" in owner_info:
+                callback_description = component + " PlanManeuvers Callback" + owner_info.split(",")[-1]
+
             # Create dataframe of durations for this callback
             duration_df = data_util.get_callback_durations(obj)
-            
+
             # Remove all entries that occurred before the given 'timestamp_start_analysis'
             duration_df = duration_df[duration_df['timestamp'] > timestamp_start_analysis]
-            
+
             # Update all timestamps to be "seconds since timestamp_start_analysis"
             duration_df['timestamp'] = duration_df['timestamp'] - timestamp_start_analysis
-            
+
             # Change timestamp from np.datetime64 to seconds for easier statistical analysis
             duration_df['timestamp'] = duration_df['timestamp'] / np.timedelta64(1, 's')
-            
+
             # If dataframe is empty, skip
             if(duration_df.empty):
                 if(verbose):
@@ -290,7 +284,7 @@ def analyze_callback_durations(data_util, callback_symbols, results_directory,
             else:
                 if(verbose):
                     print(callback_description)
-            
+
             # Extract statistics on the callback
             mean_duration_ms =    duration_df['duration'].mean()
             minimum_duration_ms = duration_df['duration'].min()
@@ -302,8 +296,8 @@ def analyze_callback_durations(data_util, callback_symbols, results_directory,
             # Store statistics in .csv
             csv_results_writer.writerow([component, callback_description, mean_duration_ms,
                                         minimum_duration_ms, median_duration_ms, maximum_duration_ms,
-                                        std_dev_duration_ms, total_count])   
-                     
+                                        std_dev_duration_ms, total_count])
+
             # Generate plots for callback duration
             plot_callback_durations_line_chart(duration_df, callback_description, results_directory, show_plots)
             plot_callback_durations_histogram(duration_df, callback_description, results_directory, show_plots)
@@ -316,12 +310,12 @@ def analyze_callback_durations(data_util, callback_symbols, results_directory,
                 print("Standard Deviation: " + str(std_dev_duration_ms) + " ms")
                 print("Count: " + str(total_count))
                 print("-------------------------")
-            
+
     # Close .csv file
     f.close()
     return
 
-def main():  
+def main():
 
     # Parse command line arguments to set 'verbose_flag' and 'show_plots_flag'
     verbose_flag = False # True if user wants debug information outputted directly to terminal
@@ -340,7 +334,7 @@ def main():
     trace_sessions = ["example-trace-directory-1",
                       "example-trace-directory-2",
                       "example-trace-directory-3"]
-    trace_session_directory = "/example-directory-containing-trace-sessions" 
+    trace_session_directory = "/example-directory-containing-trace-sessions"
 
     session_num = 1
     for trace_session in trace_sessions:
@@ -352,82 +346,76 @@ def main():
 
         # Create a folder that results and plots will be saved in
         results_directory = str(trace_session) + "-results"
-        os.makedirs(results_directory, exist_ok=True) 
+        os.makedirs(results_directory, exist_ok=True)
         current_directory = os.path.dirname(os.path.realpath(__file__))
         print("All generated statistics and plots will be stored in directory: " + str(current_directory) + "/" + str(results_directory))
 
         # Process data in tracing session
-        # References data loading steps from tracetools_analysis 'callback_durations.ipny' example 
+        # References data loading steps from tracetools_analysis 'callback_durations.ipny' example
         #       Jupyter Notebook: https://github.com/ros-tracing/tracetools_analysis/blob/foxy/tracetools_analysis/analysis/callback_duration.ipynb
         events = load_file(trace_path)
         handler = Ros2Handler.process(events)
-        data_util = Ros2DataModelUtil(handler.data) 
+        data_util = Ros2DataModelUtil(handler.data)
         callback_symbols = data_util.get_callback_symbols() # Mappings between a callback object and its resolved symbol.
 
         # Obtain informative timestamps from trace session
         timestamp_carma_started = get_timestamp_carma_started(data_util, callback_symbols, verbose_flag)
         timestamp_carma_engaged = get_timestamp_carma_engaged(data_util, callback_symbols, verbose_flag)
 
-        # TODO for user: Update the logical groups (add nodes, remove nodes, etc.) as needed to 
+        # TODO for user: Update the logical groups (add nodes, remove nodes, etc.) as needed to
         #      analyze nodes/components that you're interested in. The below logical groups are just an example,
         #      but include all functional ROS 2 strategic and tactical plugins at the time this
         #      script was created.
 
         # Organize ROS 2 nodes and services into logical groups
-        planning_nodes = ["arbitrator", 
+        planning_nodes = ["arbitrator",
                           "plan_delegator"]
 
-        strategic_plugin_nodes = ["route_following_plugin", 
+        strategic_plugin_nodes = ["route_following_plugin",
                                   "approaching_emergency_vehicle_plugin",
-                                  "lci_strategic_plugin", 
+                                  "lci_strategic_plugin",
                                   "sci_strategic_plugin",
-                                  "platoon_strategic_ihp"] 
+                                  "platoon_strategic_ihp"]
 
-        tactical_plugin_nodes = ["inlanecruising_plugin", 
-                                 "cooperative_lanechange", 
-                                 "stop_and_wait_plugin", 
+        tactical_plugin_nodes = ["inlanecruising_plugin",
+                                 "cooperative_lanechange",
+                                 "stop_and_wait_plugin",
                                  "yield_plugin",
                                  "intersection_transit_maneuvering",
                                  "light_controlled_intersection_tactical_plugin",
                                  "platooning_tactical_plugin",
-                                 "stop_controlled_intersection_tactical_plugin"] 
-        
-        control_nodes = ["trajectory_executor", 
-                         "pure_pursuit", 
-                         "twist_filter", 
+                                 "stop_controlled_intersection_tactical_plugin"]
+
+        control_nodes = ["trajectory_executor",
+                         "pure_pursuit",
+                         "twist_filter",
                          "twist_gate"]
 
-        # NOTE: Currently, service callback trace logs only contain the source node's base class (rather than the node's descriptive name).
-        #       An example of this is that trace logs will output several separate "PlanManeuvers Service Callback" analyses (1 for each activated Strategic Plugin), all
-        #       attributed to PluginBaseNode. This can make it challenging to analyze service callbacks, but typically a user can detect which node is responsible
-        #       for each service callback based on context from the analysis (for example, stop_and_wait_plugin will typically be called more frequently near
-        #       the end of a trace log).
-        planning_service_callbacks = ["PlanManeuvers", 
-                                      "PlanTrajectory"]
 
-        v2x_nodes = ["cpp_message", 
+        v2x_nodes = ["cpp_message",
                      "j2735_convertor",
                      "bsm_generator"]
 
         # Example of combining logical groups for planning and control ROS 2 stack
         components_to_analyze = planning_nodes + strategic_plugin_nodes + tactical_plugin_nodes + \
-                                    control_nodes + planning_service_callbacks + v2x_nodes
-        
+                                    control_nodes + v2x_nodes
+
         # TODO for user: These are callbacks to ignore; callbacks containing these strings typically do not affect
         #      CARMA Platform planning and controls, and can be edited as needed
-        callbacks_to_ignore = ["parameter_events", 
-                               "georeference", 
-                               "system_alert", 
-                               "ChangeState", 
-                               "PluginBaseNode", 
+        callbacks_to_ignore = ["parameter_events",
+                               "list_parameters", #ros2 service
+                               "georeference",
+                               "load_node", #ros2 service
+                               "system_alert",
+                               "ChangeState",
                                "carma_wm",
                                "ComponentManager"]
-        
-        # Perform statistical analysis on callbacks included in the trace session. Output results to 
+
+        # Perform statistical analysis on callbacks included in the trace session. Output results to
         #       a .csv file and save informative plots for each callback
         analyze_callback_durations(data_util, callback_symbols, results_directory,
                                timestamp_carma_started, trace_session,
-                               components_to_analyze, callbacks_to_ignore, 
+                               components_to_analyze, callbacks_to_ignore,
                                show_plots_flag, verbose_flag)
 
         session_num += 1
