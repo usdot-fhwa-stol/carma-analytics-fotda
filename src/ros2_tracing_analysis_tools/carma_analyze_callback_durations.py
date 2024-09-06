@@ -71,7 +71,7 @@ import os
 # this script) containing the analysis results for that trace session. Within that results folder, there will
 # be one .csv file containing a summary of the callback duration statistics for each analyzed callback.
 # Additionally, two plots (each stored as a separate .png file) will be generated for each callback: one containing
-# a line chart of callback durations vs. time, and one containing a histogram of the callback durations.
+# a scatter plot of callback durations vs. time, and one containing a histogram of the callback durations.
 
 def get_timestamp_carma_engaged(data_util, callback_symbols, verbose=False):
     '''
@@ -145,7 +145,7 @@ def get_timestamp_carma_started(data_util, callback_symbols, verbose=False):
 
     return timestamp_carma_started
 
-def plot_callback_durations_line_chart(duration_df, callback_description, results_directory, show_plots):
+def plot_callback_durations_scatter_plot(duration_df, callback_description, results_directory, show_plots):
     '''
     Plot callback durations vs. time for a given callback
 
@@ -165,7 +165,7 @@ def plot_callback_durations_line_chart(duration_df, callback_description, result
     ax.set_ylabel("Callback Duration (ms)")
     ax.set_xlabel("Seconds since CARMA was started (sec)")
 
-    filename = str(results_directory) + "/" + str(callback_description.replace("/","-")) + "-linechart.png"
+    filename = str(results_directory) + "/" + str(callback_description.replace("/","-")) + "-scatter_plot.png"
     plt.savefig(filename, bbox_inches='tight')
     if(show_plots):
         plt.show()
@@ -299,7 +299,7 @@ def analyze_callback_durations(data_util, callback_symbols, results_directory,
                                         std_dev_duration_ms, total_count])
 
             # Generate plots for callback duration
-            plot_callback_durations_line_chart(duration_df, callback_description, results_directory, show_plots)
+            plot_callback_durations_scatter_plot(duration_df, callback_description, results_directory, show_plots)
             plot_callback_durations_histogram(duration_df, callback_description, results_directory, show_plots)
 
             if(verbose):
