@@ -23,11 +23,11 @@ import pyproj
 MUST_STATIONARY_NOISE = 0.1 #meter/sec
 GPS_STATIONARY_NOISE = 0.1 #meter/sec
 
-intersection_center = [47.6278859, -122.1431239]
-lon_to_x = 6371000 * np.cos(intersection_center[0] * np.pi / 180)
-lat_to_y = 6371000
-x_to_lon = (1 / 1111111.0) / np.cos(intersection_center[0] * np.pi / 180)
-y_to_lat = (1 / 1111111.0)
+intersection_center = [-122.1431239, 47.6278859]
+lon_to_x = 111111.0 * np.cos(intersection_center[1] * np.pi / 180)
+lat_to_y = 111111.0
+x_to_lon = (1 / 111111.0) / np.cos(intersection_center[1] * np.pi / 180)
+y_to_lat = (1 / 111111.0)
 
 
 def datetime_to_unix_ts(datetime_in):
@@ -75,6 +75,34 @@ def compute_distance_error_haversine(lat1_orig, lon1_orig, lat2, lon2, offset):
         distance += haversine_distance(lat1[i], lon1[i], lat2[i], lon2[i]) / length
 
     return distance
+
+
+# trims x1 and offsets x2 to align, then computes the distance error
+def compute_distance_error_haversine_with_cap(lat1_orig, lon1_orig, lat2, lon2, offset):
+    cap1 = 1
+    # cap2 = 1
+    length = len(lat2)
+    lat1 = lat1_orig[offset:offset + length]
+    lon1 = lon1_orig[offset:offset + length]
+
+    distance = 0
+    count = 0
+    for i in range(length):
+        dist_i = haversine_distance(lat1[i], lon1[i], lat2[i], lon2[i])
+        if dist_i < cap1:
+            count += 1
+            distance += dist_i
+    # if count == 0:
+    #     for i in range(length):
+    #         if haversine_distance(lat1[i], lon1[i], lat2[i], lon2[i]) < cap2:
+    #             count += 1
+    #     if count == 0:
+    #         return np.inf
+    if count == 0:
+        return np.inf
+
+    # lower is better metric for distance
+    return distance / count
 
 
 def resample_df(df_original, period_ms):
@@ -131,6 +159,9 @@ def find_optimal_time_shift(lat1, lon1, lat2, lon2):
     dist_errors = np.zeros(overlap_region)
     for i in range(overlap_region):
         dist_errors[i] = compute_distance_error_haversine(lat1, lon1, lat2, lon2, i)
+    if np.isinf(np.min(dist_errors)):
+        print(f'Optimal timeshift not found')
+        exit()
     min_error_index = np.argmin(dist_errors)
     return min_error_index
 
@@ -217,12 +248,13 @@ def load_metadata(test_name, test_log_fname, gps_folder):
     return GPS_VEHICLE_ID, track_index, must_filename, gps_filename
 
 
-def generate_plots(test_name, test_log, intersection_image_path, gps_folder, must_folder):
+def generate_plots(test_name, test_log, intersection_image_path, gps_folder, must_folder, output_folder):
 
     GPS_VEHICLE_ID, track_index, must_filename, gps_filename = load_metadata(test_name, test_log, gps_folder)
+    plot_results = False
 
     must_header = ['server time', 'frame id', 'class id', 'vehicle id', 'image_x', 'image_y', 'image_width', 'image_height', 'latitude', 'longitude', 'speed', 'heading']
-    must_data = pd.read_csv(f'{must_folder}\\{must_filename}', sep='\\s+', names=must_header)
+    must_data = pd.read_csv(str(os.path.join(must_folder, must_filename)), sep='\\s+', names=must_header)
     # Convert to unix timestamp (epoch time) in UTC
     must_data['epoch_time'] = must_data['server time'].apply(str_to_unix_ts_pst)
     must_data.sort_values('epoch_time')
@@ -234,7 +266,7 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     must_data['heading'] = (must_data['heading']) % 360
 
     gps_header = ['timestamp', 'latitude', 'longitude', 'altitude', 'heading', 'speed', 'latitude stdev', 'longitude stdev', 'altitude stdev', 'heading error', 'speed error']
-    gps_data = pd.read_csv(f'{gps_folder}\\{gps_filename}', names=gps_header, skiprows=1)
+    gps_data = pd.read_csv(str(os.path.join(gps_folder, gps_filename)), names=gps_header, skiprows=1)
     gps_data['epoch_time'] = gps_data['timestamp']
 
     if 'track_index' not in locals() or track_index is None:
@@ -299,7 +331,7 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     must_data['speed_interpolated'] = [dist/time if time != 0 else 0 for dist, time in zip(distances, time_diffs)]
     must_data['speed_interpolated'] = must_data['speed_interpolated'].round(2)
     must_data.loc[must_data['speed_interpolated'] < MUST_STATIONARY_NOISE, 'speed_interpolated'] = 0
-    N = 1
+    N = 50
     must_data['speed_interpolated'] = np.convolve(must_data['speed_interpolated'].to_numpy(), np.ones(N) / N, mode='same')
 
     must_data['heading_interpolated'] = [0] + [latlon_angle(must_data['latitude'].iloc[i],
@@ -307,9 +339,10 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
                                                     must_data['latitude'].iloc[i + 1],
                                                     must_data['longitude'].iloc[i + 1])
                                 for i in range(len(must_data) - 1)]
-    must_data['heading_interpolated'] = (np.convolve(must_data['heading_interpolated'].to_numpy(), np.ones(N) / N, mode='same') % 360)
+    must_data['heading_interpolated'] = np.convolve(must_data['heading_interpolated'].to_numpy(), np.ones(N) / N, mode='same')
 
-    must_data['heading_unwrapped'] = np.unwrap(must_data['heading'], period=360, discont=270)
+    must_data['heading_unwrapped'] = must_data['heading_interpolated']
+    must_data['heading_interpolated'] = must_data['heading_interpolated'] % 360
     gps_data['heading_unwrapped'] = np.unwrap(gps_data['heading'], period=360, discont=270)
 
     shadow_data = gps_data.copy()
@@ -342,62 +375,68 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
                                  (camera_height / (camera_height - vehicle_height) - 1)
                                 for i in range(len(gps_data))]
 
-    # Create a Basemap instance
-    intersection_image = imread(intersection_image_path)
-    # Set the bounds of the map (in lat/lon coordinates)
-    lower_left_longitude = -122.143605  # Lower-left corner longitude
-    lower_left_latitude = 47.627545  # Lower-left corner latitude
-    upper_right_longitude = -122.142310  # Upper-right corner longitude
-    upper_right_latitude = 47.628340  # Upper-right corner latitude
-    map = Basemap(projection='merc', llcrnrlat=lower_left_latitude, urcrnrlat=upper_right_latitude,
-                llcrnrlon=lower_left_longitude, urcrnrlon=upper_right_longitude, resolution='i', ax=ax_map)
+    if plot_results:
+        # Create a Basemap instance
+        intersection_image = imread(intersection_image_path)
+        # Set the bounds of the map (in lat/lon coordinates)
+        lower_left_longitude = -122.143605  # Lower-left corner longitude
+        lower_left_latitude = 47.627545  # Lower-left corner latitude
+        upper_right_longitude = -122.142310  # Upper-right corner longitude
+        upper_right_latitude = 47.628340  # Upper-right corner latitude
+        map = Basemap(projection='merc', llcrnrlat=lower_left_latitude, urcrnrlat=upper_right_latitude,
+                    llcrnrlon=lower_left_longitude, urcrnrlon=upper_right_longitude, resolution='i', ax=ax_map)
 
-    # Show the image as the background
-    map.imshow(intersection_image, origin='upper')
+        # Show the image as the background
+        map.imshow(intersection_image, origin='upper')
 
-    # Convert lat/lon to map projection coordinates
-    must_x, must_y = map(must_data['longitude'], must_data['latitude'])
-    gps_x, gps_y = map(gps_data['longitude'], gps_data['latitude'])
-    gps_x_e1, gps_y_e1 = map(gps_data['longitude'] + 3*x_to_lon, gps_data['latitude'] + 3*y_to_lat)
-    gps_x_e2, gps_y_e2 = map(gps_data['longitude'] - 3*x_to_lon, gps_data['latitude'] - 3*y_to_lat)
-    shadow_x, shadow_y = map(shadow_data['lon_shadow'], shadow_data['lat_shadow'])
+        # Convert lat/lon to map projection coordinates
+        must_x, must_y = map(must_data['longitude'], must_data['latitude'])
+        gps_x, gps_y = map(gps_data['longitude'], gps_data['latitude'])
+        dist = 0.3
+        x_above = dist*x_to_lon*np.cos((-gps_data['heading'].to_numpy()) * np.pi / 180)
+        y_above = dist*y_to_lat*np.sin((-gps_data['heading'].to_numpy()) * np.pi / 180)
+        x_below = dist*x_to_lon*np.cos((-gps_data['heading'].to_numpy() - 180) * np.pi / 180)
+        y_below = dist*y_to_lat*np.sin((-gps_data['heading'].to_numpy() - 180) * np.pi / 180)
+        gps_x_e1, gps_y_e1 = map(gps_data['longitude'] + x_above, gps_data['latitude'] + y_above)
+        gps_x_e2, gps_y_e2 = map(gps_data['longitude'] + x_below, gps_data['latitude'] + y_below)
+        shadow_x, shadow_y = map(shadow_data['lon_shadow'], shadow_data['lat_shadow'])
 
-    # Plot the data points
-    map.plot(must_x, must_y, markersize=5, label=f'MUST track')
-    map.plot(gps_x, gps_y, markersize=5, label=f'GPS track')
-    # map.plot(gps_x_e1, gps_y_e1, markersize=5, label=f'GPS error bars')
-    # map.plot(gps_x_e2, gps_y_e2, markersize=5, label=f'GPS error bars')
-    # map.plot(shadow_x, shadow_y, markersize=5, label=f'GPS shadow track')
-    ax_map.legend()
+        # Plot the data points
+        map.plot(must_x, must_y, markersize=5, label=f'MUST track')
+        map.plot(gps_x, gps_y, markersize=5, label=f'GPS track')
+        map.plot(gps_x_e1, gps_y_e1, markersize=5, label=f'GPS error bars')
+        map.plot(gps_x_e2, gps_y_e2, markersize=5, label=f'GPS error bars')
+        # map.plot(shadow_x, shadow_y, markersize=5, label=f'GPS shadow track')
+        ax_map.legend()
 
-    ax2 = fig.add_subplot(gs[0, 2])
-    ax3 = fig.add_subplot(gs[1, 2])
-    ax2.plot(must_data['sim time'], must_data['speed'], label='MUST speed')
-    ax2.plot(gps_data['sim time'], gps_data['speed'], label='GPS speed')
-    ax2.plot(must_data['sim time'], must_data['speed_interpolated'], label='MUST speed (interpolated)')
-    ax2.legend()
-    ax3.plot(must_data['sim time'], must_data['heading_unwrapped'], label='MUST heading')
-    ax3.plot(gps_data['sim time'], gps_data['heading_unwrapped'], label='GPS heading')
-    ax3.plot(must_data['sim time'], must_data['heading_interpolated'], label='MUST heading (interpolated)')
+        ax2 = fig.add_subplot(gs[0, 2])
+        ax3 = fig.add_subplot(gs[1, 2])
+        ax2.plot(must_data['sim time'], must_data['speed'], label='MUST speed')
+        ax2.plot(gps_data['sim time'], gps_data['speed'], label='GPS speed')
+        ax2.plot(must_data['sim time'], must_data['speed_interpolated'], label='MUST speed (interpolated)')
+        ax2.legend()
+        ax3.plot(must_data['sim time'], must_data['heading_unwrapped'], label='MUST heading')
+        ax3.plot(gps_data['sim time'], gps_data['heading_unwrapped'], label='GPS heading')
+        ax3.plot(must_data['sim time'], must_data['heading_interpolated'], label='MUST heading (interpolated)')
 
-    ax2.set_title('speed vs. time')
-    ax2.set_xlabel('time (seconds)')
-    ax2.set_ylabel('speed (m/s)')
-    ax2.set_xlim(must_data['sim time'][0], must_data['sim time'][len(must_data) - 1])
-    ax3.set_title('heading vs. time')
-    ax3.set_xlabel('time (seconds)')
-    ax3.set_ylabel('heading (degrees)')
-    ax3.set_ylim(0, 360)
-    ax3.set_xlim(must_data['sim time'][0], must_data['sim time'][len(must_data) - 1])
+        ax2.set_title('speed vs. time')
+        ax2.set_xlabel('time (seconds)')
+        ax2.set_ylabel('speed (m/s)')
+        ax2.set_xlim(must_data['sim time'][0], must_data['sim time'][len(must_data) - 1])
+        ax3.set_title('heading vs. time')
+        ax3.set_xlabel('time (seconds)')
+        ax3.set_ylabel('heading (degrees)')
+        ax3.set_ylim(0, 360)
+        ax3.set_xlim(must_data['sim time'][0], must_data['sim time'][len(must_data) - 1])
 
-    fig.suptitle(f'Test {test_name}')
-    fig = plt.gcf()
-    plt.legend()
-    output_folder = 'C:\\Users\\annika\\OneDrive\\Documents\\freight_cp\\Analysis'
-    # plt.savefig(f'{output_folder}\\{test_name}_plots.png', dpi=100)
-    # plt.show()
-    # plt.clf()
+        fig.suptitle(f'Test {test_name}')
+        fig = plt.gcf()
+        plt.legend()
+        plt.savefig(os.path.join(output_folder, f'{test_name}_latlon_heading_speed.png'), dpi=100)
+        # plt.show()
+        plt.clf()
 
+    print(f'Test {test_name}')
     # Metric 1: position accuracy (90% <30cm error)
     distance_errors = np.array([haversine_distance(must_data_matched['latitude'].iloc[i],
                                           must_data_matched['longitude'].iloc[i],
@@ -407,51 +446,75 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     distance_mean = np.mean(distance_errors)
     distance_stdev = np.std(distance_errors)
     distances_pct_below_limit = 100 * len(distance_errors[distance_errors < 0.3]) / len(distance_errors)
-    print(f'Metric 1, distance error <30cm. Mean error: {distance_mean}, stdev: {distance_stdev}, percentage below 30cm: {distances_pct_below_limit}%')
+    print(f'Metric 1, distance error <0.3m. Mean error: {distance_mean:.2f}, stdev: {distance_stdev:.2f}, percentage below 0.3m: {distances_pct_below_limit:.2f}%')
+    if plot_results:
+        fig = plt.figure()
+        fig.add_subplot(111, projection='3d')
+        ax = fig.get_axes()
+        ax = ax[0]
+        ax.set_title(f'Test {test_name}')
+        ax.set_xlabel('x (m)')
+        ax.set_ylabel('y (m)')
+        ax.set_zlabel('time (seconds)')
+        must_x = (must_data['longitude'].to_numpy() - intersection_center[0]) * lon_to_x
+        must_y = (must_data['latitude'].to_numpy() - intersection_center[1]) * lat_to_y
+        gps_x = (gps_data['longitude'].to_numpy() - intersection_center[0]) * lon_to_x
+        gps_y = (gps_data['latitude'].to_numpy() - intersection_center[1]) * lat_to_y
+        ax.scatter(must_x, must_y, must_data['sim time'], label=f'MUST data')
+        ax.scatter(gps_x, gps_y, gps_data['sim time'], label=f'gps data')
+        ax.set_xlim(np.min(must_x) - 1, np.max(must_x) + 1)
+        ax.set_ylim(np.min(must_y) - 1, np.max(must_y) + 1)
+        ax.set_zlim(must_data['sim time'][0], must_data['sim time'][len(must_data)-1])
+        plt.savefig(os.path.join(output_folder, f'{test_name}_position_comparison.png'), dpi=100)
+        # plt.show()
+        plt.clf()
 
     # Metric 2: speed accuracy (90% <3mph error)
     speeds = np.array([haversine_distance(must_data_matched['latitude'].iloc[i],
                                           must_data_matched['longitude'].iloc[i],
                                           gps_data_matched['latitude'].iloc[i],
                                           gps_data_matched['longitude'].iloc[i])
-                       for i in range(len(must_data_matched) - 1)])
+                       for i in range(len(must_data_matched) - 1)]) * 2.23694
     speed_mean = np.mean(distances)
     speed_stdev = np.std(distances)
     # Compute metric performance, plus 3mph -> m/s to match data
-    speed_pct_below_limit = 100 * len(speeds[speeds < (3 / 2.23694)]) / len(speeds)
-    print(f'Metric 2, speed error <3 mph. Mean error: {speed_mean}, stdev: {speed_stdev}, percentage below 3 mph: {speed_pct_below_limit}%')
+    speed_pct_below_limit = 100 * len(speeds[speeds < 3]) / len(speeds)
+    print(f'Metric 2, speed error <3 mph. Mean error: {speed_mean:.2f}, stdev: {speed_stdev:.2f}, percentage below 3 mph: {speed_pct_below_limit:.2f}%')
 
     # Metric 3: heading accuracy (90% <3 degrees error)
     must_data_matched['heading_unwrapped'] = np.unwrap(must_data_matched['heading'].to_numpy(), period=360, discont=270)
     gps_data_matched['heading_unwrapped'] = np.unwrap(gps_data_matched['heading'].to_numpy(), period=360, discont=270)
-    heading_errors = gps_data_matched['heading_unwrapped'] - must_data_matched['heading_unwrapped']
-    heading_mean = np.mean(distance_errors)
-    heading_stdev = np.std(distance_errors)
+    heading_errors = np.abs(gps_data_matched['heading_unwrapped'] - must_data_matched['heading_unwrapped'])
+    heading_mean = np.mean(heading_errors)
+    heading_stdev = np.std(heading_errors)
     heading_pct_below_limit = 100 * len(heading_errors[heading_errors < 3]) / len(heading_errors)
-    print(f'Metric 3, heading error <3 degrees. Mean error: {heading_mean}, stdev: {heading_stdev}, percentage below 3 deg: {heading_pct_below_limit}%')
+    print(f'Metric 3, heading error <3 degrees. Mean error: {heading_mean:.2f}, stdev: {heading_stdev:.2f}, percentage below 3 deg: {heading_pct_below_limit:.2f}%')
 
     # Metric 4: detection frequency (30hz +- 3hz)
     recording_freqs = np.array([1 / (must_data['epoch_time'].iloc[i+1] - must_data['epoch_time'].iloc[i])
                        for i in range(len(must_data) - 1)])
     freq_mean = np.mean(recording_freqs)
     freq_stdev = np.std(distance_errors)
-    freq_pct_below_limit = 100 * len(recording_freqs[recording_freqs > 30]) / len(recording_freqs)
+    freq_pct_below_limit = 100 * (len(recording_freqs[recording_freqs > 27])) / len(recording_freqs)
     # insert histogram. X axis frequency (0-30), Y axis percentage
-    print(f'Metric 4, distance error <30cm. Mean error: {distance_mean}, stdev: {distance_stdev}, percentage below 30cm: {distances_pct_below_limit}%')
+    print(f'Metric 4, detection frequency 30hz +- 3hz. Mean frequency: {freq_mean:.2f}, stdev: {freq_stdev:.2f}, percentage above 27hz: {freq_pct_below_limit:.2f}%')
 
-    # Metric 5: Object type staying consistent (90% object types the same)
+    # Metric 5: Object type staying consistent (>90% the same class)
     classes_present = np.bincount(np.int32(must_data['class id'].to_numpy()))
     most_common_class = np.argmax(classes_present)
 
     pct_mathing_class = 100 * classes_present[most_common_class] / len(must_data)
-    print(f'Metric 5, distance error <30cm. Most common class: {most_common_class}, percentage matching class: {pct_mathing_class}%')
+    print(f'Metric 5, >90% the same class. Most common class: {most_common_class}, percentage matching class: {pct_mathing_class:.2f}%')
+    print()
 
 
 def main(args):
-    intersection_image = 'C:\\Users\\annika\\OneDrive\\Documents\\freight_cp\\must_sensor_intersection_1.png'
-    test_log = 'C:\\Users\\annika\\OneDrive\\Documents\\freight_cp\\CARMA-Freight-MUST Test plan log sheet.xlsx - Test Log.csv'
-    novatel_folder = 'C:\\Users\\annika\\OneDrive\\Documents\\freight_cp\\Novatel Data'
-    udp_folder = 'C:\\Users\\annika\\OneDrive\\Documents\\freight_cp\\MUST UDP Data'
+    base_folder = os.path.join('C:', 'Users', 'annika', 'OneDrive', 'Documents', 'freight_cp')
+    intersection_image = os.path.join(base_folder, 'must_sensor_intersection_1.png')
+    test_log = os.path.join(base_folder, 'CARMA-Freight-MUST Test plan log sheet.xlsx - Test Log.csv')
+    novatel_folder = os.path.join(base_folder, 'Novatel Data')
+    udp_folder = os.path.join(base_folder, 'MUST UDP Data')
+    output_folder = os.path.join(base_folder, 'Analysis')
     test_names = ['MUST-NR_1', 'MUST-NR_2', 'MUST-NR_3', 'MUST-NR_4',
                   'MUST-NS_1', 'MUST-NS_4', 'MUST-NS_5',
                   'MUST-NL_2', 'MUST-NL_3', # 'MUST-NL_1',
@@ -464,9 +527,9 @@ def main(args):
                   # 'MUST-WS_1', 'MUST-WS_2', # 'MUST-WS_3',
                   'MUST-WR_1', 'MUST-WR_3', # 'MUST-WR_2',
                   'MUST-WL_3'] # 'MUST-WL_2', # 'MUST-WL_1',
-    # test_names = ['MUST-NR_2', 'MUST-NS_5']
+    test_names = ['MUST-EL_3']
     for test_name in test_names:
-        generate_plots(test_name, test_log, intersection_image, novatel_folder, udp_folder)
+        generate_plots(test_name, test_log, intersection_image, novatel_folder, udp_folder, output_folder)
 
 
 if __name__ == "__main__":
