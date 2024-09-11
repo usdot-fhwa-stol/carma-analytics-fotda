@@ -10,6 +10,7 @@ from mpl_toolkits.basemap import Basemap
 from matplotlib.image import imread
 import os
 import pyproj
+from pathlib import Path
 
 # ## Notes about this file:
 
@@ -89,34 +90,59 @@ def load_metadata(test_name, test_log_fname, gps_folder):
         print(f'Unable to get test {test_name}, {len(test_log)} matches found')
         print(test_log.head(5))
         exit()
-
-    GPS_VEHICLE_ID = int(test_log['Vehicle ID'][0])
-    track_index = test_log['Track Index'][0]
-    if math.isnan(track_index):
-        track_index = None
-    else:
-        track_index = int(track_index)
     must_filename = test_log['UDP file name'][0]
-    filenames = os.listdir(gps_folder)
-    filenames = [f for f in filenames if os.path.isfile(os.path.join(gps_folder, f))]
-    for filename in filenames:
-        check_str = f'{test_name.split('_')[0]}_R-{test_name.split('_')[1]}'
-        if filename[:len(check_str)] == check_str:
-            gps_filename = filename
-    if 'gps_filename' not in locals():
-        print(f'Unable to get vehicle file for test {test_name}')
-        exit()
-    return GPS_VEHICLE_ID, track_index, must_filename, gps_filename
+
+    if gps_folder is not None:
+        GPS_VEHICLE_ID = int(test_log['Vehicle ID'][0])
+        track_index = test_log['Track Index'][0]
+        if math.isnan(track_index):
+            track_index = None
+        else:
+            track_index = int(track_index)
+        filenames = os.listdir(gps_folder)
+        filenames = [f for f in filenames if os.path.isfile(os.path.join(gps_folder, f))]
+        for filename in filenames:
+            check_str = f'{test_name.split("_")[0]}_R-{test_name.split("_")[1]}'
+            if filename[:len(check_str)] == check_str:
+                gps_filename = filename
+        if 'gps_filename' not in locals():
+            print(f'Unable to get vehicle file for test {test_name}')
+            exit()
+        return GPS_VEHICLE_ID, track_index, must_filename, gps_filename
+    return None, None, must_filename, None
 
 
-def generate_plots(test_name, test_log, intersection_image_path, gps_folder, must_folder):
+def interpolate_timestamps_track_id_sorted_data(track_ids, timestamps):
+    track_id_list = np.unique(track_ids)
+    timestamps_interpolated = []
+    for track_id in track_id_list:
+        interpolate_timestamps_instance = interpolate_timestamps(timestamps[track_ids == track_id])
+        timestamps_interpolated.extend(interpolate_timestamps_instance)
+    return np.ndarray.flatten(timestamps_interpolated)
+
+
+def interpolate_timestamps(timestamps):
+    expected_fps = 14
+    rising_edges = np.flatnonzero((timestamps[1:] > timestamps[:-1])) + 1
+    falling_edges = np.flatnonzero((timestamps[1:] < timestamps[:-1])) + 1
+    if len(rising_edges) > 0:
+
+    timestamps[0:rising_edges[0]]
+    # timestamp_bins = np.unique(timestamps, return_counts=True)
+    # freq = np.mean(timestamp_bins[:, 1])
+    return timestamps
+
+
+def generate_plots(test_name, test_log, intersection_image_path, gps_folder, must_folder, output_folder):
 
     GPS_VEHICLE_ID, track_index, must_filename, gps_filename = load_metadata(test_name, test_log, gps_folder)
 
-    must_header = ['server time', 'frame id', 'class id', 'vehicle id', 'image_x', 'image_y', 'image_width', 'image_height', 'latitude', 'longitude', 'speed', 'heading']
-    must_data = pd.read_csv(f'{must_folder}\\{must_filename}', sep='\\s+', names=must_header)
+    must_header = ['class', 'x', 'y', 'heading', 'speed', 'size', 'confidence', 'track_id', 'epoch_time']
+    must_data = pd.read_csv(str(os.path.join(must_folder, must_filename)), names=must_header)
+    must_data['track_id'] = must_data['track_id'].astype(np.int32)
     # Convert to unix timestamp (epoch time) in UTC
-    must_data['epoch_time'] = must_data['server time'].apply(str_to_unix_ts_pst)
+    must_data['epoch_time'] = must_data['epoch_time'].astype(np.int32)
+    must_data['epoch_time'] = interpolate_timestamps_track_id_sorted_data(must_data['track_id'].to_numpy(), must_data['epoch_time'].to_numpy())
     must_data.sort_values('epoch_time')
     must_data = must_data[must_data['vehicle id'] == GPS_VEHICLE_ID].reset_index(drop=True)
     must_data = must_data.drop(['server time'], axis=1)
@@ -275,25 +301,27 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
 
 
 def main(args):
-    intersection_image = 'C:\\Users\\annika\\OneDrive\\Documents\\freight_cp\\must_sensor_intersection_1.png'
-    test_log = 'C:\\Users\\annika\\OneDrive\\Documents\\freight_cp\\CARMA-Freight-MUST Test plan log sheet.xlsx - Test Log.csv'
-    novatel_folder = 'C:\\Users\\annika\\OneDrive\\Documents\\freight_cp\\Novatel Data'
-    udp_folder = 'C:\\Users\\annika\\OneDrive\\Documents\\freight_cp\\MUST UDP Data'
-    test_names = ['MUST-NR_1', 'MUST-NR_2', 'MUST-NR_3', 'MUST-NR_4',
-                  'MUST-NS_1', 'MUST-NS_4', 'MUST-NS_5',
-                  'MUST-NL_2', 'MUST-NL_3', # 'MUST-NL_1',
-                  # 'MUST-ES_1', 'MUST-ES_2', 'MUST-ES_3',
-                  'MUST-ER_1', 'MUST-ER_2', # 'MUST-ER_3',
-                  'MUST-EL_2', 'MUST-EL_3', #  'MUST-EL_1',
-                  'MUST-SS_1', 'MUST-SS_2', # 'MUST-SS_3',
-                  'MUST-SR_1', 'MUST-SR_2', 'MUST-SR_3',
-                  'MUST-SL_2', 'MUST-SL_3', # 'MUST-SL_1',
-                  # 'MUST-WS_1', 'MUST-WS_2', # 'MUST-WS_3',
-                  'MUST-WR_1', 'MUST-WR_3', # 'MUST-WR_2',
-                  'MUST-WL_3'] # 'MUST-WL_2', # 'MUST-WL_1',
+    base_folder = os.path.join(Path.home(), 'fcp_ws', 'other')
+    intersection_image = os.path.join(base_folder, 'must_sensor_intersection_1.png')
+    test_log = os.path.join(base_folder, 'MUST_log_sheet_UW_test_1.csv')
+    udp_folder = os.path.join(base_folder, 'UW test with modified code')
+    output_folder = os.path.join(base_folder, 'Analysis')
+    # test_names = ['MUST-NR_1', 'MUST-NR_2', 'MUST-NR_3', 'MUST-NR_4',
+    #               'MUST-NS_1', 'MUST-NS_4', 'MUST-NS_5',
+    #               'MUST-NL_2', 'MUST-NL_3', # 'MUST-NL_1',
+    #               # 'MUST-ES_1', 'MUST-ES_2', 'MUST-ES_3',
+    #               'MUST-ER_1', 'MUST-ER_2', # 'MUST-ER_3',
+    #               'MUST-EL_2', 'MUST-EL_3', #  'MUST-EL_1',
+    #               'MUST-SS_1', 'MUST-SS_2', # 'MUST-SS_3',
+    #               'MUST-SR_1', 'MUST-SR_2', 'MUST-SR_3',
+    #               'MUST-SL_2', 'MUST-SL_3', # 'MUST-SL_1',
+    #               # 'MUST-WS_1', 'MUST-WS_2', # 'MUST-WS_3',
+    #               'MUST-WR_1', 'MUST-WR_3', # 'MUST-WR_2',
+    #               'MUST-WL_3'] # 'MUST-WL_2', # 'MUST-WL_1',
     # test_names = ['MUST-NR_2', 'MUST-NS_5']
+    test_names = ['MUST-T1_1', 'MUST-T1_2', 'MUST-T1_3', 'MUST-T1_4']
     for test_name in test_names:
-        generate_plots(test_name, test_log, intersection_image, novatel_folder, udp_folder)
+        generate_plots(test_name, test_log, intersection_image, None, udp_folder, output_folder)
 
 
 if __name__ == "__main__":
