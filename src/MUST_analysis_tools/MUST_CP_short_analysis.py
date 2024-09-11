@@ -10,6 +10,7 @@ from mpl_toolkits.basemap import Basemap
 from matplotlib.image import imread
 import os
 import pyproj
+from pathlib import Path
 
 # ## Notes about this file:
 
@@ -239,7 +240,7 @@ def load_metadata(test_name, test_log_fname, gps_folder):
     filenames = os.listdir(gps_folder)
     filenames = [f for f in filenames if os.path.isfile(os.path.join(gps_folder, f))]
     for filename in filenames:
-        check_str = f'{test_name.split('_')[0]}_R-{test_name.split('_')[1]}'
+        check_str = f'{test_name.split("_")[0]}_R-{test_name.split("_")[1]}'
         if filename[:len(check_str)] == check_str:
             gps_filename = filename
     if 'gps_filename' not in locals():
@@ -310,7 +311,7 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     must_data_matched['epoch_time'] = must_data_matched['epoch_time'] + time_offset
     gps_data_matched = gps_data_matched[time_offset_index-1:time_offset_index-1 + len(must_data_matched)].reset_index(drop=True)
 
-    print(f'time offset for test {test_name}: {time_offset}, static: {-gps_data['epoch_time'][0] + must_data['epoch_time'][0] + 117.5}')
+    print(f"time offset for test {test_name}: {time_offset}, static: {-gps_data['epoch_time'][0] + must_data['epoch_time'][0] + 117.5}")
     gps_data['sim time'] = gps_data['epoch_time'] - gps_data['epoch_time'][0]#  + (gps_data['epoch_time'][0] - must_data['epoch_time'][0] - 117.5)
     must_data['sim time'] = must_data['epoch_time'] - must_data['epoch_time'][0] + time_offset
     # Set up the figure and axes
@@ -509,7 +510,7 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
 
 
 def main(args):
-    base_folder = os.path.join('C:', 'Users', 'annika', 'OneDrive', 'Documents', 'freight_cp')
+    base_folder = os.path.join(Path.home(), 'fcp_ws', 'other')
     intersection_image = os.path.join(base_folder, 'must_sensor_intersection_1.png')
     test_log = os.path.join(base_folder, 'CARMA-Freight-MUST Test plan log sheet.xlsx - Test Log.csv')
     novatel_folder = os.path.join(base_folder, 'Novatel Data')
