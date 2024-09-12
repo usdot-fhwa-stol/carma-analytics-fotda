@@ -11,6 +11,16 @@ from matplotlib.image import imread
 import os
 import pyproj
 from pathlib import Path
+from enum import Enum
+
+class Object_class(Enum):
+    person = 0
+    bicycle = 1
+    car = 2
+    motorcycle = 3
+    bus = 4
+    truck = 7
+    traffic_light = 9
 
 # ## Notes about this file:
 
@@ -179,7 +189,7 @@ def find_sub_tracks(time, lat, lon):
     return break_indices
 
 
-def select_sub_track_user_input(must_data, gps_data, test_name, intersection_image_path):
+def select_sub_track_user_input(must_data, gps_data, test_name, intersection_image_path, output_folder):
 
     # Set up the figure and axes
     fig, ax = plt.subplots(figsize=(10, 10))
@@ -215,7 +225,8 @@ def select_sub_track_user_input(must_data, gps_data, test_name, intersection_ima
     plt.legend()
     plt.title(f'Vehicle tracks {test_name}')
     plt.tight_layout()
-    plt.show()
+    plt.savefig(os.path.join(output_folder, f'{test_name}_tracks_by_vehicle_id.png'), dpi=100)
+    # plt.show()
 
 
 def load_metadata(test_name, test_log_fname, gps_folder):
@@ -259,7 +270,7 @@ def interpolate_timestamps(timestamps):
         if rising_edges[0] > expected_fps or len(timestamps) - rising_edges[-1] > expected_fps:
             return None
         # start times, no front offset so use fixed fps
-        timestamps_updated[0:rising_edges[0]] = timestamps[rising_edges[0]] - np.arange(rising_edges[0]) / expected_fps
+        timestamps_updated[0:rising_edges[0]] = timestamps[rising_edges[0]] - (np.arange(rising_edges[0])[::-1] + 1) / expected_fps
         # end times, no rear offset so use fixed fps
         timestamps_updated[rising_edges[-1]:] = timestamps[rising_edges[-1]] + np.arange(len(timestamps) - rising_edges[-1]) / expected_fps
         for i in range(len(rising_edges) - 1):
@@ -269,7 +280,8 @@ def interpolate_timestamps(timestamps):
             timestamps_updated[rising_edges[i]:rising_edges[i+1]] = timestamps[rising_edges[i]] + np.arange(length) / length
     # No data to align to, cannot predict timestamps
     else:
-        return None
+        print(f'Time series too short to properly align, making a guess')
+        timestamps_updated = timestamps[0] + (np.arange(len(timestamps)) - 1) / expected_fps
 
     return timestamps_updated
 
@@ -285,12 +297,15 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     GPS_VEHICLE_ID, track_index, must_filename, gps_filename = load_metadata(test_name, test_log, gps_folder)
     plot_results = True
 
-    must_header = ['class', 'x', 'y', 'heading', 'speed', 'size', 'confidence', 'vehicle id', 'epoch_time']
+    must_header = ['class str', 'x', 'y', 'heading', 'speed', 'size', 'confidence', 'vehicle id', 'epoch_time']
     must_data = pd.read_csv(str(os.path.join(must_folder, must_filename)), names=must_header)
     must_data['vehicle id'] = must_data['vehicle id'].astype(np.int32)
+    must_data['class id'] = [Object_class[must_data['class str'].iloc[i]].value
+                                for i in range(len(must_data))]
     # Convert to unix timestamp (epoch time) in UTC
     must_data['epoch_time'] = must_data['epoch_time'].astype(np.int32)
     must_data = must_data[must_data['vehicle id'] == GPS_VEHICLE_ID].reset_index(drop=True)
+    must_data = must_data.tail(-1)
     must_data['latitude'], must_data['longitude'] = lat_lon_from_x_y_must(must_data['x'].to_numpy(), must_data['y'].to_numpy())
     must_data.sort_values('epoch_time')
     # Speed is in mph -> m/s
@@ -303,7 +318,7 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     gps_data['epoch_time'] = gps_data['timestamp']
 
     if 'track_index' not in locals() or track_index is None:
-        select_sub_track_user_input(must_data, gps_data, test_name, intersection_image_path)
+        select_sub_track_user_input(must_data, gps_data, test_name, intersection_image_path, output_folder)
         return
     # else:
     #     return
@@ -355,25 +370,27 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
 
     # This block computes an interpolated velocity column
     # Calculate distance between consecutive pedestrian points
-    distances = [0] + [haversine_distance(must_data['latitude'].iloc[i],
+    distances = [haversine_distance(must_data['latitude'].iloc[i],
                                           must_data['longitude'].iloc[i],
                                           must_data['latitude'].iloc[i + 1],
                                           must_data['longitude'].iloc[i + 1])
                        for i in range(len(must_data) - 1)]
     # Calculate time differences between consecutive points
-    time_diffs = [0] + [(must_data['epoch_time'].iloc[i+1] - must_data['epoch_time'].iloc[i])
+    time_diffs = [(must_data['epoch_time'].iloc[i+1] - must_data['epoch_time'].iloc[i])
                         for i in range(len(must_data)-1)]
-    must_data['speed_interpolated'] = [dist/time if time != 0 else 0 for dist, time in zip(distances, time_diffs)]
+    speed_interpolated = [dist/time if time != 0 else 0 for dist, time in zip(distances, time_diffs)]
+    must_data['speed_interpolated'] = [speed_interpolated[0]] + speed_interpolated
     must_data['speed_interpolated'] = must_data['speed_interpolated'].round(2)
     must_data.loc[must_data['speed_interpolated'] < MUST_STATIONARY_NOISE, 'speed_interpolated'] = 0
-    N = 28
+    N = min(14, len(must_data))
     must_data['speed_interpolated'] = np.convolve(must_data['speed_interpolated'].to_numpy(), np.ones(N) / N, mode='same')
 
-    must_data['heading_interpolated'] = [0] + [latlon_angle(must_data['latitude'].iloc[i],
+    heading_interpolated = [latlon_angle(must_data['latitude'].iloc[i],
                                                     must_data['longitude'].iloc[i],
                                                     must_data['latitude'].iloc[i + 1],
                                                     must_data['longitude'].iloc[i + 1])
                                 for i in range(len(must_data) - 1)]
+    must_data['heading_interpolated'] = [heading_interpolated[0]] + heading_interpolated
     must_data['heading_interpolated'] = np.convolve(must_data['heading_interpolated'].to_numpy(), np.ones(N) / N, mode='same')
 
     must_data['heading_unwrapped'] = must_data['heading_interpolated']
@@ -408,19 +425,19 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
         # Plot the data points
         map.plot(must_x, must_y, markersize=5, label=f'MUST track')
         map.plot(gps_x, gps_y, markersize=5, label=f'GPS track')
-        map.plot(gps_x_e1, gps_y_e1, markersize=5, label=f'GPS error bars')
-        map.plot(gps_x_e2, gps_y_e2, markersize=5, label=f'GPS error bars')
+        # map.plot(gps_x_e1, gps_y_e1, markersize=5, label=f'GPS error bars')
+        # map.plot(gps_x_e2, gps_y_e2, markersize=5, label=f'GPS error bars')
         ax_map.legend()
 
         ax2 = fig.add_subplot(gs[0, 2])
         ax3 = fig.add_subplot(gs[1, 2])
         ax2.plot(must_data['sim time'], must_data['speed'], label='MUST speed')
         ax2.plot(gps_data['sim time'], gps_data['speed'], label='GPS speed')
-        ax2.plot(must_data['sim time'], must_data['speed_interpolated'], label='MUST speed (interpolated)')
+        # ax2.plot(must_data['sim time'], must_data['speed_interpolated'], label='MUST speed (interpolated)')
         ax2.legend()
         ax3.plot(must_data['sim time'], must_data['heading'], label='MUST heading')
         ax3.plot(gps_data['sim time'], gps_data['heading_unwrapped'], label='GPS heading')
-        ax3.plot(must_data['sim time'], must_data['heading_interpolated'], label='MUST heading (interpolated)')
+        # ax3.plot(must_data['sim time'], must_data['heading_interpolated'], label='MUST heading (interpolated)')
 
         ax2.set_title('speed vs. time')
         ax2.set_xlabel('time (seconds)')
@@ -468,7 +485,7 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
         ax.set_xlim(np.min(must_x) - 1, np.max(must_x) + 1)
         ax.set_ylim(np.min(must_y) - 1, np.max(must_y) + 1)
         ax.set_zlim(must_data['sim time'][0], must_data['sim time'][len(must_data)-1])
-        # plt.savefig(os.path.join(output_folder, f'{test_name}_position_comparison.png'), dpi=100)
+        plt.savefig(os.path.join(output_folder, f'{test_name}_position_comparison.png'), dpi=100)
         # plt.show()
         plt.clf()
 
@@ -499,12 +516,12 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     # insert histogram. X axis frequency (0-30), Y axis percentage
     print(f'Metric 4, detection frequency 30hz +- 3hz. Mean frequency: {freq_mean:.2f}, stdev: {freq_stdev:.2f}, percentage above 27hz: {freq_pct_below_limit:.2f}%')
 
-    # # Metric 5: Object type staying consistent (>90% the same class)
-    # classes_present = np.bincount(np.int32(must_data['class id'].to_numpy()))
-    # most_common_class = np.argmax(classes_present)
-    #
-    # pct_mathing_class = 100 * classes_present[most_common_class] / len(must_data)
-    # print(f'Metric 5, >90% the same class. Most common class: {most_common_class}, percentage matching class: {pct_mathing_class:.2f}%')
+    # Metric 5: Object type staying consistent (>90% the same class)
+    classes_present = np.bincount(np.int32(must_data['class id'].to_numpy()))
+    most_common_class = np.argmax(classes_present)
+
+    pct_mathing_class = 100 * classes_present[most_common_class] / len(must_data)
+    print(f'Metric 5, >90% the same class. Most common class: {most_common_class}, percentage matching class: {pct_mathing_class:.2f}%')
     print()
 
 
@@ -530,7 +547,7 @@ def main(args):
     #               'MUST-WR_1', 'MUST-WR_3', # 'MUST-WR_2',
     #               'MUST-WL_3'] # 'MUST-WL_2', # 'MUST-WL_1',
     # test_names = ['MUST-EL_3']
-    test_names = ['MUST-NR_1', 'MUST-NS_4', 'MUST-EL_2',]
+    test_names = ['MUST-NR_1', 'MUST-NS_4', 'MUST-EL_2', 'MUST-ES_3']
     for test_name in test_names:
         generate_plots(test_name, test_log, intersection_image, novatel_folder, udp_folder, output_folder)
 
