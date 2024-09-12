@@ -12,6 +12,7 @@ import os
 import pyproj
 from pathlib import Path
 from enum import Enum
+import cv2
 
 class Object_class(Enum):
     person = 0
@@ -40,6 +41,26 @@ lon_to_x = 111111.0 * np.cos(intersection_center[1] * np.pi / 180)
 lat_to_y = 111111.0
 x_to_lon = (1 / 111111.0) / np.cos(intersection_center[1] * np.pi / 180)
 y_to_lat = (1 / 111111.0)
+
+K = np.array([[1120, 0, 638], [0, 1330, 384], [0, 0, 1]])
+d = np.array([-0.562, 0.06, 0.01, 0.009, 0])
+newcameramatrix = np.array([[326, 0, 724], [0, 523, 375], [0, 0, 1]])
+H_und_final = np.array([[-4.82123442e-02, 2.95270511e-02, 1.73626347e+01],
+                        [ 5.02026236e-02, 2.21597888e-02, -4.89406274e+01],
+                        [-4.43067120e-04, -2.93027231e-03, 1.00000000e+00]])
+H_und_nometers = np.array([[-7.93599077e-01, -6.50039543e-01, 5.84020354e+02],
+                        [-6.64004545e-01, -1.86580638e+00, 9.74007023e+02],
+                        [-4.43067120e-04, -2.93027231e-03, 1.00000000e+00]])
+
+
+def image_xy_to_local_xy_meters(image_xs, image_ys):
+    distorted_points = np.float32(np.vstack((image_xs, image_ys + 20)).T).reshape(-1, 1, 2)
+    image_coords_und = cv2.undistortPoints(distorted_points, K, d, P=newcameramatrix)
+    image_coords = cv2.perspectiveTransform(image_coords_und, H_und_nometers)
+    # local_coords_conv = (M_img_to_meters @ np.array([[image_coords[0, 0, 0]], [image_coords[0, 0, 1]], [1]])).T[0:2]
+    local_coords = cv2.perspectiveTransform(image_coords_und, H_und_final)
+
+    return local_coords[:, 0, 0] + 1, local_coords[:, 0, 1] - 2
 
 
 def datetime_to_unix_ts(datetime_in):
@@ -297,15 +318,19 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     GPS_VEHICLE_ID, track_index, must_filename, gps_filename = load_metadata(test_name, test_log, gps_folder)
     plot_results = True
 
-    must_header = ['class str', 'x', 'y', 'heading', 'speed', 'size', 'confidence', 'vehicle id', 'epoch_time']
-    must_data = pd.read_csv(str(os.path.join(must_folder, must_filename)), names=must_header)
+    must_header = ['server time', 'frame id', 'class id', 'vehicle id', 'image_x', 'image_y', 'image_width', 'image_height', 'latitude', 'longitude', 'speed', 'heading']
+    # must_header = ['class str', 'x', 'y', 'heading', 'speed', 'size', 'confidence', 'vehicle id', 'epoch_time']
+    # must_data = pd.read_csv(str(os.path.join(must_folder, must_filename)), names=must_header)
+    must_data = pd.read_csv(str(os.path.join(must_folder, must_filename)), sep='\\s+', names=must_header)
+    must_data['epoch_time'] = must_data['server time'].apply(str_to_unix_ts_pst)
     must_data['vehicle id'] = must_data['vehicle id'].astype(np.int32)
-    must_data['class id'] = [Object_class[must_data['class str'].iloc[i]].value
-                                for i in range(len(must_data))]
+    # must_data['class id'] = [Object_class[must_data['class str'].iloc[i]].value
+    #                             for i in range(len(must_data))]
     # Convert to unix timestamp (epoch time) in UTC
-    must_data['epoch_time'] = must_data['epoch_time'].astype(np.int32)
+    # must_data['epoch_time'] = must_data['epoch_time'].astype(np.int32)
     must_data = must_data[must_data['vehicle id'] == GPS_VEHICLE_ID].reset_index(drop=True)
     must_data = must_data.tail(-1)
+    must_data['x'], must_data['y'] = image_xy_to_local_xy_meters(must_data['image_x'].to_numpy(), must_data['image_y'].to_numpy())
     must_data['latitude'], must_data['longitude'] = lat_lon_from_x_y_must(must_data['x'].to_numpy(), must_data['y'].to_numpy())
     must_data.sort_values('epoch_time')
     # Speed is in mph -> m/s
@@ -317,7 +342,7 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     gps_data = pd.read_csv(str(os.path.join(gps_folder, gps_filename)), names=gps_header, skiprows=1)
     gps_data['epoch_time'] = gps_data['timestamp']
 
-    if 'track_index' not in locals() or track_index is None:
+    if 'track_index' not in locals() or track_index is None or True:
         select_sub_track_user_input(must_data, gps_data, test_name, intersection_image_path, output_folder)
         return
     # else:
@@ -328,7 +353,7 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     valid_data_indices = range(break_indices[track_index], break_indices[track_index + 1])
     must_data = must_data.iloc[valid_data_indices[1:]].reset_index(drop=True)
 
-    must_data['epoch_time'] = interpolate_timestamps(must_data['epoch_time'].to_numpy())
+    # must_data['epoch_time'] = interpolate_timestamps(must_data['epoch_time'].to_numpy())
 
     # gps_data['datetime'] = pd.to_datetime(gps_data['epoch_time'], unit='s')
     # gps_data = gps_data.set_index('datetime')
@@ -528,26 +553,26 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
 def main(args):
     base_folder = os.path.join(Path.home(), 'fcp_ws', 'other')
     intersection_image = os.path.join(base_folder, 'must_sensor_intersection_1.png')
-    # test_log = os.path.join(base_folder, 'CARMA-Freight-MUST Test plan log sheet.xlsx - Test Log.csv')
-    test_log = os.path.join(base_folder, 'MUST_log_sheet_UW_test_1.csv')
+    test_log = os.path.join(base_folder, 'CARMA-Freight-MUST Test plan log sheet.xlsx - Test Log.csv')
+    # test_log = os.path.join(base_folder, 'MUST_log_sheet_UW_test_1.csv')
     novatel_folder = os.path.join(base_folder, 'Novatel Data')
-    # udp_folder = os.path.join(base_folder, 'MUST UDP Data')
-    udp_folder = os.path.join(base_folder, 'UW test with modified code')
-    output_folder = os.path.join(base_folder, 'Analysis_UWTest')
-    # test_names = ['MUST-NR_1', 'MUST-NR_2', 'MUST-NR_3', 'MUST-NR_4',
-    #               'MUST-NS_1', 'MUST-NS_4', 'MUST-NS_5',
-    #               'MUST-NL_2', 'MUST-NL_3', # 'MUST-NL_1',
-    #               # 'MUST-ES_1', 'MUST-ES_2', 'MUST-ES_3',
-    #               'MUST-ER_1', 'MUST-ER_2', # 'MUST-ER_3',
-    #               'MUST-EL_2', 'MUST-EL_3', #  'MUST-EL_1',
-    #               'MUST-SS_1', 'MUST-SS_2', # 'MUST-SS_3',
-    #               'MUST-SR_1', 'MUST-SR_2', 'MUST-SR_3',
-    #               'MUST-SL_2', 'MUST-SL_3', # 'MUST-SL_1',
-    #               # 'MUST-WS_1', 'MUST-WS_2', # 'MUST-WS_3',
-    #               'MUST-WR_1', 'MUST-WR_3', # 'MUST-WR_2',
-    #               'MUST-WL_3'] # 'MUST-WL_2', # 'MUST-WL_1',
+    udp_folder = os.path.join(base_folder, 'MUST UDP Data')
+    # udp_folder = os.path.join(base_folder, 'UW test with modified code')
+    output_folder = os.path.join(base_folder, 'Analysis_UWTest2')
+    test_names = ['MUST-NR_1', 'MUST-NR_2', 'MUST-NR_3', 'MUST-NR_4',
+                  'MUST-NS_1', 'MUST-NS_4', 'MUST-NS_5',
+                  'MUST-NL_2', 'MUST-NL_3', # 'MUST-NL_1',
+                  # 'MUST-ES_1', 'MUST-ES_2', 'MUST-ES_3',
+                  'MUST-ER_1', 'MUST-ER_2', # 'MUST-ER_3',
+                  'MUST-EL_2', 'MUST-EL_3', #  'MUST-EL_1',
+                  'MUST-SS_1', 'MUST-SS_2', # 'MUST-SS_3',
+                  'MUST-SR_1', 'MUST-SR_2', 'MUST-SR_3',
+                  'MUST-SL_2', 'MUST-SL_3', # 'MUST-SL_1',
+                  # 'MUST-WS_1', 'MUST-WS_2', # 'MUST-WS_3',
+                  'MUST-WR_1', 'MUST-WR_3', # 'MUST-WR_2',
+                  'MUST-WL_3'] # 'MUST-WL_2', # 'MUST-WL_1',
     # test_names = ['MUST-EL_3']
-    test_names = ['MUST-NR_1', 'MUST-NS_4', 'MUST-EL_2', 'MUST-ES_3']
+    # test_names = ['MUST-NR_1', 'MUST-NS_4', 'MUST-EL_2']
     for test_name in test_names:
         generate_plots(test_name, test_log, intersection_image, novatel_folder, udp_folder, output_folder)
 
