@@ -1,3 +1,5 @@
+import random
+
 import numpy as np
 import cv2
 import skimage
@@ -139,7 +141,10 @@ def measure_reproj_error(K, d, distorted_points, object_points, object_points_me
     newcameramatrix, roi = cv2.getOptimalNewCameraMatrix(K, d, (1280, 720), 1, (1280, 720))
     undistorted_points = cv2.undistortPoints(distorted_points, K, d, P=newcameramatrix)
     H_und_nometers, status = cv2.findHomography(undistorted_points, object_points, method=cv2.RANSAC)
-    H_und_final = M_img_to_meters @ H_und_nometers
+    try:
+        H_und_final = M_img_to_meters @ H_und_nometers
+    except ValueError:
+        return 10000
     # print(f'homography matrix meters: {H_und_final}')
 
     # Reproject the object points
@@ -179,8 +184,8 @@ def optimize_intrinsics(img_points, object_points, frame, reference):
     position_multiplier = [1, 0.2, 1, 0.2, 0.1, 0.01, 0.001, 0.001, 0.0001]
     while Temperature > 0.02:
         iter += 1
-        Temperature *= 0.99
-        print(f'Temperature: {Temperature}, iteration: {iter}, reproj_error: {measure_reproj_error(K, d, distorted_points, object_points, object_points_meters)}')
+        Temperature *= 0.97
+        # print(f'Temperature: {Temperature}, iteration: {iter}, reproj_error: {measure_reproj_error(K, d, distorted_points, object_points, object_points_meters)}')
         for currently_updating in range(9):
             still_updating = True
             while still_updating:
@@ -190,13 +195,20 @@ def optimize_intrinsics(img_points, object_points, frame, reference):
                 rep_up = measure_reproj_error(K_up, d_up, distorted_points, object_points, object_points_meters)
                 K_down, d_down = step_K_d(K, d, -step, currently_updating, currently_updating_map_K)
                 rep_down = measure_reproj_error(K_down, d_down, distorted_points, object_points, object_points_meters)
-                if rep_cur <= rep_up and rep_cur <= rep_down:
+                choice = random.random()*2 + 1
+
+                if rep_cur <= rep_up + 0.0001 and rep_cur <= rep_down + 0.0001:
+                    if choice < np.power(Temperature, 0.2):
+                        if rep_up <= rep_cur and rep_up <= rep_down:
+                            K, d = K_up, d_up
+                        else:
+                            K, d = K_down, d_down
                     still_updating = False
                 elif rep_up <= rep_cur and rep_up <= rep_down:
                     K, d = K_up, d_up
                 else:
                     K, d = K_down, d_down
-    print(f'------DONE--------')
+    # print(f'------DONE--------')
     newcameramatrix, roi = cv2.getOptimalNewCameraMatrix(K, d, (1280, 720), 1, (1280, 720))
     undistorted_points = cv2.undistortPoints(distorted_points, K, d, P=newcameramatrix)
     H_und_nometers, status = cv2.findHomography(undistorted_points, object_points, method=cv2.RANSAC)
@@ -208,21 +220,26 @@ def optimize_intrinsics(img_points, object_points, frame, reference):
     reprojected_points = reprojected_points.reshape(-1, 2)
     error = np.linalg.norm(object_points_meters - reprojected_points, axis=1)
     mean_error = np.mean(error)
-    print(f'reprojection error: {mean_error}')
+    # if mean_error < 0.35:
+    # print('----------------------------')
     print(f'K: {K}')
     print(f'd: {d}')
     print(f'newcameramatrix: {newcameramatrix}')
     print(f'H: {H_und_final}')
+    print(f'reprojection error: {mean_error}')
+    print('----------------------------')
+    # else:
+    #     print(f'reprojection error: {mean_error}')
 
-    und = cv2.undistort(gray_camera_image, K, d, None, newcameramatrix)
-    result = cv2.warpPerspective(und, H_und_nometers, (1280, 720))
-    # Display results
-    cv2.imshow('frame_warped', result)
-    added_image = cv2.addWeighted(gray_maps_image, 0.4, result, 0.5, 0)
-    cv2.imshow('overlay', added_image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-    return K, d
+    # und = cv2.undistort(gray_camera_image, K, d, None, newcameramatrix)
+    # result = cv2.warpPerspective(und, H_und_nometers, (1280, 720))
+    # # Display results
+    # cv2.imshow('frame_warped', result)
+    # added_image = cv2.addWeighted(gray_maps_image, 0.4, result, 0.5, 0)
+    # cv2.imshow('overlay', added_image)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    return K, d, mean_error
 
 
 def main():
@@ -299,8 +316,8 @@ def main():
     # points_allowed2 = (object_points[:, 0] > allowed_corners[0, 0]) & (object_points[:, 0] < allowed_corners[1, 0]) & (object_points[:, 1] > allowed_corners[0, 1])
     # pt 50 (28 in accepted) -1 x pixel objects
     # pt  (15 in accepted) [526, 259
-    img_points = np.float32([img_points[i] for i in points_allowed])
-    object_points = np.float32([object_points[i] for i in points_allowed])
+    # img_points = np.float32([img_points[i] for i in points_allowed])
+    # object_points = np.float32([object_points[i] for i in points_allowed])
     # object_points_meters_allowed = np.float32([object_points_meters[i] for i in points_allowed])
     object_points_3d = np.float32(np.append(object_points, np.zeros((len(object_points), 1)), 1))
     object_points_norm = np.float32(np.append(object_points, np.ones((len(object_points), 1)), 1))
@@ -319,7 +336,12 @@ def main():
     # d = np.array([-0.50, 0.0, -0.001, 0.0011, 0.0])
     d = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
 
-    K, d = optimize_intrinsics(img_points, object_points, frame, reference)
+    min_reproj_error = 10000
+    for i in range(20):
+        K_tmp, d_tmp, reproj_error = optimize_intrinsics(img_points, object_points, frame, reference)
+        if reproj_error < min_reproj_error:
+            K = K_tmp
+            d = d_tmp
 
     # rep_error2, K2, d2, rvecs, tvecs = cv2.calibrateCamera([object_points_3d], [img_points], (1280, 720), None, None)
     newcameramatrix, roi = cv2.getOptimalNewCameraMatrix(K, d, (1280, 720), 1, (1280, 720))
@@ -360,11 +382,11 @@ def main():
     # display_pairs(gray_camera_image, img_points, gray_maps_image, object_points)
 
     # Display results
-    # cv2.imshow('frame_warped', result)
-    # added_image = cv2.addWeighted(gray_maps_image, 0.4, result, 0.5, 0)
-    # cv2.imshow('overlay', added_image)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    cv2.imshow('frame_warped', result)
+    added_image = cv2.addWeighted(gray_maps_image, 0.4, result, 0.5, 0)
+    cv2.imshow('overlay', added_image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":

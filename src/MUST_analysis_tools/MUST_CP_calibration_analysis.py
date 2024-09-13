@@ -104,23 +104,94 @@ M_img_to_latlon = np.array([[img_x_to_lon, 0, lower_left_longitude],
 #  [ 1.79096710e-02  9.25862127e-03 -6.65917596e+00]
 #  [-1.00703971e-04 -1.39090899e-03  1.00000000e+00]]
 
-# Intersection 0.3111535608768463
-K = [[9.67481868e+02, 0.00000000e+00, 6.46144849e+02],
- [0.00000000e+00, 1.02946621e+03, 3.49298579e+02],
- [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]]
-d = [-0.80916231,  0.52110152,  0.0016839,  -0.00374791, -0.14427669]
-newcameramatrix = [[104.30975877,   0.,         255.37791574],
- [  0.,         344.09854501, 244.28976651],
- [  0.,           0.,           1.        ]]
-H = [[-1.60736160e-01,  4.37323614e-02,  2.05116017e+01],
- [ 2.16078130e-01,  3.09327514e-02, -6.94170640e+01],
- [-7.65483284e-04, -5.58295093e-03,  1.00000000e+00]]
+# # Intersection 0.3111535608768463
+# # Quite good
+# K = [[9.67481868e+02, 0.00000000e+00, 6.46144849e+02],
+#  [0.00000000e+00, 1.02946621e+03, 3.49298579e+02],
+#  [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]]
+# d = [-0.80916231,  0.52110152,  0.0016839,  -0.00374791, -0.14427669]
+# newcameramatrix = [[104.30975877,   0.,         255.37791574],
+#  [  0.,         344.09854501, 244.28976651],
+#  [  0.,           0.,           1.        ]]
+# H = [[-1.60736160e-01,  4.37323614e-02,  2.05116017e+01],
+#  [ 2.16078130e-01,  3.09327514e-02, -6.94170640e+01],
+#  [-7.65483284e-04, -5.58295093e-03,  1.00000000e+00]]
 
-def image_xy_to_local_xy_meters(image_xs, image_ys):
+# # Intersection 0.308316171169281
+# # Good, top left/right meh
+# K = [[9.55446941e+02, 0.00000000e+00, 6.42755045e+02],
+#  [0.00000000e+00, 1.10529923e+03, 3.93271960e+02],
+#  [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]]
+# d = [-7.95306168e-01,  3.23083873e-01,  4.53204202e-04, -2.91438668e-02, 1.15545090e-02]
+# newcameramatrix = [[542.94733087,   0.,         585.54157833],
+#  [  0.,         551.39945831, 402.59043169],
+#  [  0.,           0.,           1.        ]]
+# H = [[-3.52545664e-02,  3.44100246e-02, -3.01476420e+00],
+#  [ 4.31464548e-02,  2.43783923e-02, -4.18002903e+01],
+#  [-2.01743900e-04, -3.89314072e-03,  1.00000000e+00]]
+
+# # Intersection 0.29929041862487793
+# # Okay
+# K = [[1.11471890e+03, 0.00000000e+00, 6.40272752e+02],
+#  [0.00000000e+00, 1.29345437e+03, 3.91566781e+02],
+#  [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]]
+# d = [-1.16250129,  0.70058963, -0.00344463, -0.04282112, -0.01051898],
+# newcameramatrix = [[579.97690153,   0.,         530.42913328],
+#  [  0.,         595.46969942, 383.25276888],
+#  [  0.,           0.,           1.        ]]
+# H = [[-3.60011503e-02,  3.46174107e-02, -3.29580234e+00],
+#  [ 4.43074686e-02,  2.30061271e-02, -3.87521256e+01],
+#  [-2.09345344e-04, -3.98561922e-03,  1.00000000e+00]]
+
+# All 0.8685863614082336
+# Insanely good with 3/4 height offset
+K = [[8.88730423e+02, 0.00000000e+00, 6.29019650e+02],
+ [0.00000000e+00, 1.11557049e+03, 3.64531944e+02],
+ [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]]
+d = [-5.33402562e-01,  1.31052753e-01,  5.47765301e-03, 4.61787259e-04, 2.01708172e-02]
+newcameramatrix = [[502.41048518,   0.,         632.41972543],
+ [  0.,         642.09241708, 375.92236659],
+ [  0.,           0.,           1.        ]]
+H = [[-4.98131259e-02,  4.21563707e-02,  1.78770989e+00],
+ [ 6.09274042e-02,  3.07399157e-02, -6.02174639e+01],
+ [-2.26319283e-04, -4.55027047e-03,  1.00000000e+00]]
+
+# # All 0.8723028302192688
+# Pretty standard
+# K = [[9.45426887e+02, 0.00000000e+00, 6.30928847e+02],
+#  [0.00000000e+00, 1.21116544e+03, 3.71247552e+02],
+#  [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]]
+# d = [-0.74687287,  0.28117547,  0.00589267, -0.02718714, -0.00338749]
+# newcameramatrix = [[470.78032868,   0.,         536.21545682],
+#  [  0.,         579.6291949,  396.88877831],
+#  [  0.,           0.,           1.        ]]
+# H = [[-3.94412599e-02,  3.47599388e-02, -2.08209532e+00],
+#  [ 4.71093076e-02,  2.45160582e-02, -4.18839120e+01],
+#  [-2.19238585e-04, -3.73376602e-03,  1.00000000e+00]]
+
+# All 0.9052174687385559
+# Insanely good with 3/4 height offset
+K = [[8.94429165e+02, 0.00000000e+00, 6.45495370e+02],
+ [0.00000000e+00, 1.12363936e+03, 4.20210159e+02],
+ [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]]
+d = [-0.51498051,  0.10524621, -0.00603029, -0.02139855,  0.00616998]
+newcameramatrix = [[387.33544107,   0.,         534.09059684],
+ [  0.,         505.10401128, 436.17367482],
+ [  0.,           0.,           1.        ]]
+H = [[-3.97993872e-02,  3.28462721e-02, -4.92638699e-01],
+ [ 4.46409655e-02,  2.33137596e-02, -3.89476217e+01],
+ [-2.71362493e-04, -3.28251998e-03,  1.00000000e+00]]
+
+K = np.array(K)
+d = np.array(d)
+newcameramatrix = np.array(newcameramatrix)
+H = np.array(H)
+
+def image_xy_to_local_xy_meters(image_xs, image_ys, bbox_height):
 
     H_und_final_2 = M_img_to_latlon @ np.linalg.inv(M_img_to_meters) @ H
     print(H_und_final_2)
-    distorted_points = np.float32(np.vstack((image_xs, image_ys + 20)).T).reshape(-1, 1, 2)
+    distorted_points = np.float32(np.vstack((image_xs, image_ys + bbox_height*0.75)).T).reshape(-1, 1, 2)
     image_coords_und = cv2.undistortPoints(distorted_points, K, d, P=newcameramatrix)
     # image_coords = cv2.perspectiveTransform(image_coords_und, H_und_nometers)
     # local_coords_conv = (M_img_to_meters @ np.array([[image_coords[0, 0, 0]], [image_coords[0, 0, 1]], [1]])).T[0:2]
@@ -128,7 +199,7 @@ def image_xy_to_local_xy_meters(image_xs, image_ys):
     latlon_coords = cv2.perspectiveTransform(image_coords_und, H_und_final_2)
 
     # return local_coords[:, 0, 0] + 1, local_coords[:, 0, 1] - 2
-    return latlon_coords[:, 0, 0], latlon_coords[:, 0, 1]
+    return latlon_coords[:, 0, 0] + 1*x_to_lon, latlon_coords[:, 0, 1] - 2*y_to_lat
 
 
 def datetime_to_unix_ts(datetime_in):
@@ -419,7 +490,8 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     must_data = must_data.tail(-1)
     # must_data['x'], must_data['y'] = image_xy_to_local_xy_meters(must_data['image_x'].to_numpy(), must_data['image_y'].to_numpy())
     # must_data['latitude'], must_data['longitude'] = lat_lon_from_x_y_must(must_data['x'].to_numpy(), must_data['y'].to_numpy())
-    # must_data['longitude'], must_data['latitude'] = image_xy_to_local_xy_meters(must_data['image_x'].to_numpy(), must_data['image_y'].to_numpy())
+    must_data['longitude'], must_data['latitude'] = image_xy_to_local_xy_meters(
+        must_data['image_x'].to_numpy(), must_data['image_y'].to_numpy(), must_data['image_height'].to_numpy())
     must_data.sort_values('epoch_time')
     # Speed is in mph -> m/s
     # must_data['speed'] = must_data['speed'] / 2.23694
@@ -430,7 +502,7 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     gps_data = pd.read_csv(str(os.path.join(gps_folder, gps_filename)), names=gps_header, skiprows=1)
     gps_data['epoch_time'] = gps_data['timestamp']
 
-    if 'track_index' not in locals() or track_index is None:
+    if 'track_index' not in locals() or track_index is None or True:
         select_sub_track_user_input(must_data, gps_data, test_name, intersection_image_path, output_folder)
         return
     # else:
@@ -651,7 +723,7 @@ def main(args):
     novatel_folder = os.path.join(base_folder, 'Novatel Data')
     udp_folder = os.path.join(base_folder, 'MUST UDP Data')
     # udp_folder = os.path.join(base_folder, 'UW test with modified code 2')
-    output_folder = os.path.join(base_folder, 'Analysis_UWTest2')
+    output_folder = os.path.join(base_folder, 'Analysis_calibration')
     test_names = ['MUST-NR_1', 'MUST-NR_2', 'MUST-NR_3', 'MUST-NR_4',
                   'MUST-NS_1', 'MUST-NS_4', 'MUST-NS_5',
                   'MUST-NL_2', 'MUST-NL_3', # 'MUST-NL_1',
