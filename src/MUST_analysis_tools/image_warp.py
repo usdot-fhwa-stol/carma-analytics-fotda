@@ -336,15 +336,26 @@ def main():
     # d = np.array([-0.50, 0.0, -0.001, 0.0011, 0.0])
     d = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
 
-    min_reproj_error = 10000
-    for i in range(20):
-        K_tmp, d_tmp, reproj_error = optimize_intrinsics(img_points, object_points, frame, reference)
-        if reproj_error < min_reproj_error:
-            K = K_tmp
-            d = d_tmp
+    K = [[9.67481868e+02, 0.00000000e+00, 6.46144849e+02],
+         [0.00000000e+00, 1.02946621e+03, 3.49298579e+02],
+         [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]]
+    d = [-0.80916231, 0.52110152, 0.0016839, -0.00374791, -0.14427669]
+    newcameramatrix = [[104.30975877, 0., 255.37791574],
+                       [0., 344.09854501, 244.28976651],
+                       [0., 0., 1.]]
+    H_und_nometers = [[-1.60736160e-01, 4.37323614e-02, 2.05116017e+01],
+         [2.16078130e-01, 3.09327514e-02, -6.94170640e+01],
+         [-7.65483284e-04, -5.58295093e-03, 1.00000000e+00]]
+
+    # min_reproj_error = 10000
+    # for i in range(20):
+    #     K_tmp, d_tmp, reproj_error = optimize_intrinsics(img_points, object_points, frame, reference)
+    #     if reproj_error < min_reproj_error:
+    #         K = K_tmp
+    #         d = d_tmp
 
     # rep_error2, K2, d2, rvecs, tvecs = cv2.calibrateCamera([object_points_3d], [img_points], (1280, 720), None, None)
-    newcameramatrix, roi = cv2.getOptimalNewCameraMatrix(K, d, (1280, 720), 1, (1280, 720))
+    # newcameramatrix, roi = cv2.getOptimalNewCameraMatrix(K, d, (1280, 720), 1, (1280, 720))
     # print(f'newmcaeramatrix: {newcameramatrix}')
     # print(K)
     # print(d)
@@ -370,11 +381,11 @@ def main():
     H_und_final = M_img_to_meters @ H_und_nometers
     print(f'homography matrix meters: {H_und_final}')
     # Reproject the object points
-    reprojected_points = cv2.perspectiveTransform(undistorted_points, H_und_final)
+    reprojected_points = cv2.perspectiveTransform(undistorted_points, H_und_nometers)
     reprojected_points = reprojected_points.reshape(-1, 2)
 
     # Compute reprojection error
-    error = np.linalg.norm(object_points_meters - reprojected_points, axis=1)
+    error = np.linalg.norm(object_points - reprojected_points, axis=1)
     mean_error = np.mean(error)
     # print(f'\n\n')
     print(f'reprojection error: {mean_error}')

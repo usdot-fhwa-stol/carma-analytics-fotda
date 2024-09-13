@@ -44,6 +44,8 @@ lon_to_x = 111111.0 * np.cos(intersection_center[1] * np.pi / 180)
 lat_to_y = 111111.0
 x_to_lon = (1 / 111111.0) / np.cos(intersection_center[1] * np.pi / 180)
 y_to_lat = (1 / 111111.0)
+print(x_to_lon)
+print(y_to_lat)
 lower_left_longitude = -122.143605  # Lower-left corner longitude
 lower_left_latitude = 47.627545  # Lower-left corner latitude
 upper_right_longitude = -122.142310  # Upper-right corner longitude
@@ -143,18 +145,23 @@ M_img_to_latlon = np.array([[img_x_to_lon, 0, lower_left_longitude],
 #  [ 4.43074686e-02,  2.30061271e-02, -3.87521256e+01],
 #  [-2.09345344e-04, -3.98561922e-03,  1.00000000e+00]]
 
-# All 0.8685863614082336
-# Insanely good with 3/4 height offset
-K = [[8.88730423e+02, 0.00000000e+00, 6.29019650e+02],
- [0.00000000e+00, 1.11557049e+03, 3.64531944e+02],
- [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]]
-d = [-5.33402562e-01,  1.31052753e-01,  5.47765301e-03, 4.61787259e-04, 2.01708172e-02]
-newcameramatrix = [[502.41048518,   0.,         632.41972543],
- [  0.,         642.09241708, 375.92236659],
- [  0.,           0.,           1.        ]]
-H = [[-4.98131259e-02,  4.21563707e-02,  1.78770989e+00],
- [ 6.09274042e-02,  3.07399157e-02, -6.02174639e+01],
- [-2.26319283e-04, -4.55027047e-03,  1.00000000e+00]]
+# # All 0.8685863614082336
+# # Insanely good with 3/4 height offset
+# K = [[8.88730423e+02, 0.00000000e+00, 6.29019650e+02],
+#  [0.00000000e+00, 1.11557049e+03, 3.64531944e+02],
+#  [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]]
+# d = [-5.33402562e-01,  1.31052753e-01,  5.47765301e-03, 4.61787259e-04, 2.01708172e-02]
+# newcameramatrix = [[502.41048518,   0.,         632.41972543],
+#  [  0.,         642.09241708, 375.92236659],
+#  [  0.,           0.,           1.        ]]
+# # H undistorted, pixel coords -> latlon
+# H = [[ 2.76427066e-02,  5.55785368e-01, -1.22143222e+02],
+#  [-1.07785197e-02, -2.16718663e-01,  4.76271630e+01],
+#  [-2.26319283e-04, -4.55027047e-03,  1.00000000e+00]]
+# # H undistorted, pixel coords -> local x/y in meters
+# # H = [[-4.98131259e-02,  4.21563707e-02,  1.78770989e+00],
+# #  [ 6.09274042e-02,  3.07399157e-02, -6.02174639e+01],
+# #  [-2.26319283e-04, -4.55027047e-03,  1.00000000e+00]]
 
 # # All 0.8723028302192688
 # Pretty standard
@@ -181,25 +188,28 @@ newcameramatrix = [[387.33544107,   0.,         534.09059684],
 H = [[-3.97993872e-02,  3.28462721e-02, -4.92638699e-01],
  [ 4.46409655e-02,  2.33137596e-02, -3.89476217e+01],
  [-2.71362493e-04, -3.28251998e-03,  1.00000000e+00]]
+H = M_img_to_latlon @ np.linalg.inv(M_img_to_meters) @ H
+print(H)
 
 K = np.array(K)
 d = np.array(d)
 newcameramatrix = np.array(newcameramatrix)
 H = np.array(H)
 
-def image_xy_to_local_xy_meters(image_xs, image_ys, bbox_height):
+def image_xy_to_latlon(image_xs, image_ys, bbox_width, bbox_height):
 
-    H_und_final_2 = M_img_to_latlon @ np.linalg.inv(M_img_to_meters) @ H
-    print(H_und_final_2)
-    distorted_points = np.float32(np.vstack((image_xs, image_ys + bbox_height*0.75)).T).reshape(-1, 1, 2)
+    # H_und_final_2 = M_img_to_latlon @ np.linalg.inv(M_img_to_meters) @ H
+    # print(H_und_final_2)
+    distorted_points = np.float32(np.vstack((image_xs + bbox_width*0.5, image_ys + bbox_height*0.75)).T).reshape(-1, 1, 2)
     image_coords_und = cv2.undistortPoints(distorted_points, K, d, P=newcameramatrix)
     # image_coords = cv2.perspectiveTransform(image_coords_und, H_und_nometers)
     # local_coords_conv = (M_img_to_meters @ np.array([[image_coords[0, 0, 0]], [image_coords[0, 0, 1]], [1]])).T[0:2]
     # local_coords = cv2.perspectiveTransform(image_coords_und, H_und_final)
-    latlon_coords = cv2.perspectiveTransform(image_coords_und, H_und_final_2)
+    latlon_coords = cv2.perspectiveTransform(image_coords_und, H)
 
     # return local_coords[:, 0, 0] + 1, local_coords[:, 0, 1] - 2
-    return latlon_coords[:, 0, 0] + 1*x_to_lon, latlon_coords[:, 0, 1] - 2*y_to_lat
+    # return latlon_coords[:, 0, 0] + 1*x_to_lon, latlon_coords[:, 0, 1] - 2*y_to_lat  # 0.5, 0.75 0.868
+    return latlon_coords[:, 0, 0] + 0.5*x_to_lon, latlon_coords[:, 0, 1] - 0.5*y_to_lat  # 0.5, 0.75 0.905
 
 
 def datetime_to_unix_ts(datetime_in):
@@ -385,7 +395,7 @@ def select_sub_track_user_input(must_data, gps_data, test_name, intersection_ima
     plt.legend()
     plt.title(f'Vehicle tracks {test_name}')
     plt.tight_layout()
-    plt.savefig(os.path.join(output_folder, f'{test_name}_tracks_by_vehicle_id.png'), dpi=100)
+    plt.savefig(os.path.join(output_folder, f'{test_name}_tracks_by_vehicle_id_0.5_0.7.png'), dpi=100)
     # plt.show()
     plt.clf()
 
@@ -490,8 +500,9 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     must_data = must_data.tail(-1)
     # must_data['x'], must_data['y'] = image_xy_to_local_xy_meters(must_data['image_x'].to_numpy(), must_data['image_y'].to_numpy())
     # must_data['latitude'], must_data['longitude'] = lat_lon_from_x_y_must(must_data['x'].to_numpy(), must_data['y'].to_numpy())
-    must_data['longitude'], must_data['latitude'] = image_xy_to_local_xy_meters(
-        must_data['image_x'].to_numpy(), must_data['image_y'].to_numpy(), must_data['image_height'].to_numpy())
+    must_data['longitude'], must_data['latitude'] = image_xy_to_latlon(
+        must_data['image_x'].to_numpy(), must_data['image_y'].to_numpy(),
+        must_data['image_width'].to_numpy(), must_data['image_height'].to_numpy())
     must_data.sort_values('epoch_time')
     # Speed is in mph -> m/s
     # must_data['speed'] = must_data['speed'] / 2.23694
