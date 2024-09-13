@@ -3,6 +3,7 @@ import cv2
 import skimage
 import os
 import csv
+import copy
 
 zero_pos = [-122.143246, 47.627705]
 lon_to_x = 111111.0 * np.cos(zero_pos[1] * np.pi / 180)
@@ -61,7 +62,7 @@ def image_xy_to_local_xy_meters(image_x, image_y):
     return local_coords[0, 0, 0], local_coords[0, 0, 1]
 
 
-def draw_points(image, points):
+def draw_points(image, points, labels=True):
     """
     Draws points on the image and labels them if provided.
 
@@ -73,11 +74,12 @@ def draw_points(image, points):
     for i, point in enumerate(points):
         x, y = int(point[0]), int(point[1])
         cv2.circle(image, (x, y), 5, (0, 255, 0), -1)
-        cv2.putText(image, str(i), (x + 10, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1,
-                    cv2.LINE_AA)
+        if labels:
+            cv2.putText(image, str(i), (x + 10, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1,
+                        cv2.LINE_AA)
 
 
-def display_pairs(image1, points1, image2, points2):
+def display_pairs(image1, points1, image2, points2, labels=True):
     """
     Displays two images side by side with corresponding points and labels.
 
@@ -90,8 +92,8 @@ def display_pairs(image1, points1, image2, points2):
     - labels2: Labels for points on the second image.
     """
     # Draw points and labels on images
-    draw_points(image1, points1)
-    draw_points(image2, points2)
+    draw_points(image1, points1, labels=labels)
+    draw_points(image2, points2, labels=labels)
 
     # Resize images to the same height for side-by-side display
     height1, width1 = image1.shape[:2]
@@ -133,6 +135,96 @@ def test_homography():
     print()
 
 
+def measure_reproj_error(K, d, distorted_points, object_points, object_points_meters):
+    newcameramatrix, roi = cv2.getOptimalNewCameraMatrix(K, d, (1280, 720), 1, (1280, 720))
+    undistorted_points = cv2.undistortPoints(distorted_points, K, d, P=newcameramatrix)
+    H_und_nometers, status = cv2.findHomography(undistorted_points, object_points, method=cv2.RANSAC)
+    H_und_final = M_img_to_meters @ H_und_nometers
+    # print(f'homography matrix meters: {H_und_final}')
+
+    # Reproject the object points
+    reprojected_points = cv2.perspectiveTransform(undistorted_points, H_und_final)
+    reprojected_points = reprojected_points.reshape(-1, 2)
+    error = np.linalg.norm(object_points_meters - reprojected_points, axis=1)
+    mean_error = np.mean(error)
+    return mean_error
+
+
+def step_K_d(K, d, step, currently_updating, currently_updating_map_K):
+    if currently_updating <= 3:
+        K2 = copy.copy(K)
+        K2[tuple(currently_updating_map_K[currently_updating])] += step
+        return K2, d
+    else:
+        d2 = copy.copy(d)
+        d2[currently_updating - 4] += step
+        return K, d2
+
+
+def optimize_intrinsics(img_points, object_points, frame, reference):
+    gray_camera_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    gray_maps_image = cv2.cvtColor(reference, cv2.COLOR_BGR2GRAY)
+    object_points_norm = np.float32(np.append(object_points, np.ones((len(object_points), 1)), 1))
+    object_points_meters = np.float32((M_img_to_meters @ object_points_norm.T).T[:, 0:2])
+    K_init = np.array([[1000.0, 0, 640.0], [0, 1000.0, 360.0], [0, 0, 1]])
+    d_init = np.array([-0.5, 0.1, 0.01, 0.0, 0.0])
+    K = K_init
+    d = d_init
+    currently_updating_map_K = [[0, 0], [0, 2], [1, 1], [1, 2]]
+
+    distorted_points = img_points.reshape(-1, 1, 2)
+    Temperature = 5
+    iter = 0
+    # 0-3 -> K, 4-8 -> d
+    position_multiplier = [1, 0.2, 1, 0.2, 0.1, 0.01, 0.001, 0.001, 0.0001]
+    while Temperature > 0.02:
+        iter += 1
+        Temperature *= 0.99
+        print(f'Temperature: {Temperature}, iteration: {iter}, reproj_error: {measure_reproj_error(K, d, distorted_points, object_points, object_points_meters)}')
+        for currently_updating in range(9):
+            still_updating = True
+            while still_updating:
+                step = Temperature * position_multiplier[currently_updating]
+                rep_cur = measure_reproj_error(K, d, distorted_points, object_points, object_points_meters)
+                K_up, d_up = step_K_d(K, d, step, currently_updating, currently_updating_map_K)
+                rep_up = measure_reproj_error(K_up, d_up, distorted_points, object_points, object_points_meters)
+                K_down, d_down = step_K_d(K, d, -step, currently_updating, currently_updating_map_K)
+                rep_down = measure_reproj_error(K_down, d_down, distorted_points, object_points, object_points_meters)
+                if rep_cur <= rep_up and rep_cur <= rep_down:
+                    still_updating = False
+                elif rep_up <= rep_cur and rep_up <= rep_down:
+                    K, d = K_up, d_up
+                else:
+                    K, d = K_down, d_down
+    print(f'------DONE--------')
+    newcameramatrix, roi = cv2.getOptimalNewCameraMatrix(K, d, (1280, 720), 1, (1280, 720))
+    undistorted_points = cv2.undistortPoints(distorted_points, K, d, P=newcameramatrix)
+    H_und_nometers, status = cv2.findHomography(undistorted_points, object_points, method=cv2.RANSAC)
+    H_und_final = M_img_to_meters @ H_und_nometers
+    # print(f'homography matrix meters: {H_und_final}')
+
+    # Reproject the object points
+    reprojected_points = cv2.perspectiveTransform(undistorted_points, H_und_final)
+    reprojected_points = reprojected_points.reshape(-1, 2)
+    error = np.linalg.norm(object_points_meters - reprojected_points, axis=1)
+    mean_error = np.mean(error)
+    print(f'reprojection error: {mean_error}')
+    print(f'K: {K}')
+    print(f'd: {d}')
+    print(f'newcameramatrix: {newcameramatrix}')
+    print(f'H: {H_und_final}')
+
+    und = cv2.undistort(gray_camera_image, K, d, None, newcameramatrix)
+    result = cv2.warpPerspective(und, H_und_nometers, (1280, 720))
+    # Display results
+    cv2.imshow('frame_warped', result)
+    added_image = cv2.addWeighted(gray_maps_image, 0.4, result, 0.5, 0)
+    cv2.imshow('overlay', added_image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    return K, d
+
+
 def main():
     reference = cv2.imread('/home/annika/Documents/LEIDOS/Freight CP/must_sensor_intersection_1_rescaled.png')
     gray_maps_image = cv2.cvtColor(reference, cv2.COLOR_BGR2GRAY)
@@ -144,39 +236,75 @@ def main():
     gray_camera_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     # pts1 = np.float32([[157, 443], [458, 265], [756, 313], [1106, 667]])
     # Points from the MUST sensor view, must_sensor_image.png
-    img_points = np.float32([[22, 673], [362, 630], [160, 441], [54, 360], [854, 584], [1106, 667], [784, 358], [832, 325],
+    img_points = [[22, 673], [362, 630], [160, 441], [54, 360], [854, 584], [1106, 667], [784, 358], [832, 325],
                        [673, 268], [775, 206], [512, 188], [558, 175], [526, 257], [199, 371], [346, 286], [246, 236],
                        [132, 634], [184, 681], [707, 631], [119, 576], [130, 518], [716, 246], [797, 200], [462, 407],
                        [754, 315], [760, 340], [698, 344], [169, 317], [163, 272], [346, 207], [170, 386], [45, 451],
                        [286, 515], [229, 419], [102, 540], [45, 581], [66, 567], [92, 664], [137, 702], [36, 489],
                        [33, 416], [37, 403], [42, 390], [865, 706], [306, 303], [481, 285], [211, 572], [162, 610],
-                       [325, 321], [310, 315], [609, 274], [584, 285], [757, 538], [682, 507], [923, 609], [1029, 646]])
+                       [325, 321], [310, 315], [609, 274], [584, 285], [757, 538], [682, 507], [923, 609], [1029, 646]]
 
     # pts2 = np.float32([[285, 343], [627, 313*scale*y_scale], [694*scale*x_scale, 501*scale*y_scale], [480*scale*x_scale, 670]])
     # pts2 = np.float32([[285, 343], [627, 313], [694, 501], [480, 670]])
     # Points from google maps, must_sensor_intersection_1_rescaled.png
-    object_points = np.float32([[132, 425], [346, 497], [288, 342], [108, 52], [479, 585], [480, 670], [640, 530], [705, 538],
+    object_points = [[132, 425], [346, 497], [288, 342], [108, 52], [479, 585], [480, 670], [640, 530], [705, 538],
                        [732, 436], [1062, 428], [885, 188], [971, 191], [677, 346], [340, 288], [525, 270], [518, 4],
                        [235, 446], [256, 473], [433, 562], [234, 415], [249, 387], [818, 439], [1138, 436], [472, 446],
                        [688, 502], [653, 512], [613, 493], [325, 126], [343, 4], [706, 8], [310, 288], [145, 257],
                        [349, 444], [349, 361], [223, 389], [164, 389], [187, 389], [200, 446], [225, 469], [138, 300],
                        [105, 180], [105, 153], [106, 128], [432, 595], [472, 271], [613, 360], [296, 443], [259, 444],
-                       [472, 310], [470, 289], [682, 411], [651, 410], [482, 558], [486, 538], [480, 612], [479, 642]])
-    object_points_3d = np.float32(np.append(object_points, np.zeros((len(object_points), 1)), 1))
+                       [472, 310], [470, 289], [682, 411], [651, 410], [482, 558], [486, 538], [480, 612], [479, 642]]
 
-    # img_points2, object_points2 = load_csv_data('/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-NL_2_vehicle_image_data.csv')
-    # display_pairs(gray_camera_image, img_points2, gray_maps_image, object_points2)
+    vehicle_files = ['/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-EL_2_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-EL_3_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-ER_1_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-ER_2_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-NL_2_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-NL_3_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-NR_1_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-NR_2_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-NR_3_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-NR_4_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-NS_1_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-NS_4_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-NS_5_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-SL_2_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-SL_3_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-SR_1_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-SR_2_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-SS_1_vehicle_image_data.csv',
+                    '/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-SS_2_vehicle_image_data.csv']
+    # vehicle_files = ['/home/annika/fcp_ws/other/Analysis_UWTest2/MUST-NL_2_vehicle_image_data.csv']
 
-    object_points_norm = np.float32(np.append(object_points, np.ones((len(object_points), 1)), 1))
-    object_points_meters = np.float32((M_img_to_meters @ object_points_norm.T).T[:, 0:2])
+    # img_points = []
+    # object_points = []
+    # for vehicle_file in vehicle_files:
+    #     img_points_tmp, object_points_tmp = load_csv_data(vehicle_file)
+    #     img_points.extend(img_points_tmp[::10])
+    #     object_points.extend(object_points_tmp[::10])
+        # display_pairs(gray_camera_image, img_points2, gray_maps_image, object_points2, labels=False)
 
-    points_allowed = [1, 17, 16, 19, 34, 36, 2, 30, 13, 32, 33, 44, 14, 23, 45, 12, 8, 26, 24, 25, 6, 18, 4, 7,
-                      46, 47, 48, 49, 50, 51, 52, 53, 54, 55]
+    img_points = np.float32(img_points)
+    object_points = np.float32(object_points)
+
+    # points_allowed = [1, 17, 16, 19, 34, 36, 2, 30, 13, 32, 33, 44, 14, 23, 45, 12, 8, 26, 24, 25, 6, 18, 4, 7,
+    #                   46, 47, 48, 49, 50, 51, 52, 53, 54, 55]
+    allowed_corners = np.array([[208, 220], [770, 624]])
+    points_allowed = np.arange(len(object_points))[
+        (object_points[:, 0] > allowed_corners[0, 0]) &
+        (object_points[:, 0] < allowed_corners[1, 0]) &
+        (object_points[:, 1] > allowed_corners[0, 1]) &
+        (object_points[:, 1] < allowed_corners[1, 1])
+        ]
+    # points_allowed2 = (object_points[:, 0] > allowed_corners[0, 0]) & (object_points[:, 0] < allowed_corners[1, 0]) & (object_points[:, 1] > allowed_corners[0, 1])
     # pt 50 (28 in accepted) -1 x pixel objects
     # pt  (15 in accepted) [526, 259
-    img_points_allowed = np.float32([img_points[i] for i in points_allowed])
-    object_points_allowed = np.float32([object_points[i] for i in points_allowed])
-    object_points_meters_allowed = np.float32([object_points_meters[i] for i in points_allowed])
+    img_points = np.float32([img_points[i] for i in points_allowed])
+    object_points = np.float32([object_points[i] for i in points_allowed])
+    # object_points_meters_allowed = np.float32([object_points_meters[i] for i in points_allowed])
+    object_points_3d = np.float32(np.append(object_points, np.zeros((len(object_points), 1)), 1))
+    object_points_norm = np.float32(np.append(object_points, np.ones((len(object_points), 1)), 1))
+    object_points_meters = np.float32((M_img_to_meters @ object_points_norm.T).T[:, 0:2])
 
     # Camera matrix and distortion coefficients
     # K = np.array([[1120, 0, 638], [0, 1330, 384], [0, 0, 1]])
@@ -187,27 +315,29 @@ def main():
     # BR, BL better
     # K = np.array([[1140, 0, 550], [0, 1390, 300], [0, 0, 1]])
     # d = np.array([-0.60, 0.1014, 0.0197, 0.0073, 0])
-    K = np.array([[1140, 0, 550], [0, 1390, 300], [0, 0, 1]])
-    d = np.array([-0.7, 0.1014, 0.0197, 0.0073, 0])
-    # K = np.array([[1000, 0, 640], [0, 1000, 360] ,[0, 0, 1]])
-    # d = np.array([[0, 0, 0, 0, 0.0]])
-    # rep_error2, K, d, rvecs, tvecs = cv2.calibrateCamera([object_points_3d], [img_points], (1280, 720), None, None)
+    K = np.array([[1000, 0, 640], [0, 1000, -360], [0, 0, 1]])
+    # d = np.array([-0.50, 0.0, -0.001, 0.0011, 0.0])
+    d = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
+
+    K, d = optimize_intrinsics(img_points, object_points, frame, reference)
+
+    # rep_error2, K2, d2, rvecs, tvecs = cv2.calibrateCamera([object_points_3d], [img_points], (1280, 720), None, None)
     newcameramatrix, roi = cv2.getOptimalNewCameraMatrix(K, d, (1280, 720), 1, (1280, 720))
-    print(f'newmcaeramatrix: {newcameramatrix}')
-    print(K)
-    print(d)
+    # print(f'newmcaeramatrix: {newcameramatrix}')
+    # print(K)
+    # print(d)
     # Undistort the camera image
     und = cv2.undistort(gray_camera_image, K, d, None, newcameramatrix)
 
     # Undistort the points
     distorted_points = img_points.reshape(-1, 1, 2)
     undistorted_points = cv2.undistortPoints(distorted_points, K, d, P=newcameramatrix)
-    distorted_points_allowed = img_points_allowed.reshape(-1, 1, 2)
-    undistorted_points_allowed = cv2.undistortPoints(distorted_points_allowed, K, d, P=newcameramatrix)
+    # distorted_points_allowed = img_points_allowed.reshape(-1, 1, 2)
+    # undistorted_points_allowed = cv2.undistortPoints(distorted_points_allowed, K, d, P=newcameramatrix)
 
     # Find homography
     # H_und_nometers, status = cv2.findHomography(undistorted_points, object_points, method=cv2.RANSAC)
-    H_und_nometers, status = cv2.findHomography(undistorted_points_allowed, object_points_allowed, method=cv2.RANSAC)
+    H_und_nometers, status = cv2.findHomography(undistorted_points, object_points, method=cv2.RANSAC)
     print(f'homography matrix image coords: {H_und_nometers}')
 
     # Warp perspective of the camera image
@@ -218,11 +348,11 @@ def main():
     H_und_final = M_img_to_meters @ H_und_nometers
     print(f'homography matrix meters: {H_und_final}')
     # Reproject the object points
-    reprojected_points = cv2.perspectiveTransform(undistorted_points_allowed, H_und_final)
+    reprojected_points = cv2.perspectiveTransform(undistorted_points, H_und_final)
     reprojected_points = reprojected_points.reshape(-1, 2)
 
     # Compute reprojection error
-    error = np.linalg.norm(object_points_meters_allowed - reprojected_points, axis=1)
+    error = np.linalg.norm(object_points_meters - reprojected_points, axis=1)
     mean_error = np.mean(error)
     # print(f'\n\n')
     print(f'reprojection error: {mean_error}')
@@ -230,11 +360,11 @@ def main():
     # display_pairs(gray_camera_image, img_points, gray_maps_image, object_points)
 
     # Display results
-    cv2.imshow('frame_warped', result)
-    added_image = cv2.addWeighted(gray_maps_image, 0.4, result, 0.5, 0)
-    cv2.imshow('overlay', added_image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # cv2.imshow('frame_warped', result)
+    # added_image = cv2.addWeighted(gray_maps_image, 0.4, result, 0.5, 0)
+    # cv2.imshow('overlay', added_image)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
