@@ -212,30 +212,29 @@ def generate_plots(test_name, test_log, intersection_image_path, must_folder, ou
     print(f'Metric 7, detection frequency 30hz +- 3hz. Mean frequency: {freq_mean:.2f}, stdev: {freq_stdev:.2f}, percentage above 27hz: {freq_pct_below_limit:.2f}%')
     metric_7_pass = bool(freq_pct_below_limit >= 90)
 
-    # Metric 6: confidence score >90% for >90% of vehicle tracks
+    # Metric 8: 90% of vehicle IDs do not fluctuate
     vehicle_ids = np.unique(must_data['vehicle id'].to_numpy())
     pct_mathing_class = 0
-    passed_count = 0
+    track_counts = []
     for vehicle_id in vehicle_ids:
         this_vehicle_data = must_data[must_data['vehicle id'] == vehicle_id]
         # confidence_pct_below_limit += confidence_pct_below_limit_veh
-        classes_present = np.bincount(np.int32(this_vehicle_data['class id'].to_numpy()))
-        most_common_class = np.argmax(classes_present)
+        num_tracks = len(find_sub_tracks(this_vehicle_data['epoch_time'].to_numpy(),
+                                        this_vehicle_data['latitude'].to_numpy(), this_vehicle_data['longitude'].to_numpy())) - 2
+        track_counts.append(num_tracks)
+    track_counts = np.array(track_counts)
+    tracks_mean = np.mean(track_counts)
+    tracks_stdev = np.std(track_counts)
+    tracks_pct_below_limit = 100 * len(track_counts[track_counts < 1]) / len(track_counts)
 
-        pct_mathing_class_veh = 100 * classes_present[most_common_class] / len(this_vehicle_data)
-        pct_mathing_class += pct_mathing_class_veh
-        if pct_mathing_class_veh > 90:
-            passed_count += 1
-    pct_mathing_class /= len(vehicle_ids)
-    passed_pct_class = 100 * passed_count / len(vehicle_ids)
-    print(f'Metric 8, >90% the same class. Mean class consistency: {pct_mathing_class}%, percentage >90%: {passed_pct_class}%')
-    metric_8_pass = bool(passed_pct_class >= 90)
+    print(f'Metric 8, >90% of IDs do not fluctuate. Mean number of ID swaps: {tracks_mean:.2f}, stdev: {tracks_stdev:.2f}, percentage that did not fluctuate: {tracks_pct_below_limit}%')
+    metric_8_pass = bool(tracks_pct_below_limit >= 90)
 
     with open(os.path.join(output_folder, f'long_metrics.csv'), 'a') as outfile:
         writer = csv.writer(outfile)
         writer.writerow([test_name, confidence_mean, confidence_stdev, passed_pct_confidence, int(metric_6_pass),
                          freq_mean, freq_stdev, freq_pct_below_limit, int(metric_7_pass),
-                         pct_mathing_class, '', passed_pct_class, int(metric_8_pass)])
+                         tracks_mean, tracks_stdev, tracks_pct_below_limit, int(metric_8_pass)])
 
 
 def main(args):
