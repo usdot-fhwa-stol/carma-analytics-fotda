@@ -71,6 +71,20 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     return abs(distance)
 
 
+# Finds sequential points that differ by more than the break_time or break_distance
+# Return a list of those break points, [[0], [break_1_index], ..., [-1]]
+def find_sub_tracks(time, lat, lon):
+    break_time = 5.0 # seconds
+    break_dist = 5 # meters
+    break_indices = []
+    for i in range(1, len(time)):
+        if haversine_distance(lat[i-1], lon[i-1], lat[i], lon[i]) > break_dist or time[i] - time[i-1] > break_time:
+            break_indices.append(i)
+    break_indices = [0] + break_indices + [len(time)]
+    return break_indices
+
+
+# Loads filenames/similar from the test log
 def load_metadata(test_name, test_log_fname):
     header = ['Test numbering', 'Test Case ID', 'Run #', 'Corrected?', 'Original',
               'TimeStamp', 'Description', 'Vehicle Speed', 'Vehicle Lane', 'Date', 'Pass/Fail',
@@ -88,48 +102,32 @@ def load_metadata(test_name, test_log_fname):
     return must_filename
 
 
+# Convert MUST sensor output local x/y in meters to lat/lon
 def lat_lon_from_x_y_must(x, y):
     longitude = MUST_sensor_loc[0] + x * x_to_lon
     latitude = MUST_sensor_loc[1] + y * y_to_lat
     return latitude, longitude
 
 
-def find_sub_tracks(time, lat, lon):
-    break_time = 5.0 # seconds
-    break_dist = 5 # meters
-    break_indices = []
-    for i in range(1, len(time)):
-        if haversine_distance(lat[i-1], lon[i-1], lat[i], lon[i]) > break_dist or time[i] - time[i-1] > break_time:
-            break_indices.append(i)
-    break_indices = [0] + break_indices + [len(time)]
-    return break_indices
-
-
+# Do the analysis and plot the results
 def generate_plots(test_name, test_log, intersection_image_path, must_folder, output_folder):
 
+    ## Load data from test log
     must_filename = load_metadata(test_name, test_log)
     plot_results = True
 
+    ## Load MUST sensor data
     must_header = ['class str', 'x', 'y', 'heading', 'speed', 'size', 'confidence', 'vehicle id', 'epoch_time']
     must_data = pd.read_csv(str(os.path.join(must_folder, must_filename)), names=must_header)
     must_data['class id'] = must_data['class str'].apply(lambda x: Object_class(x).value)
     must_data['vehicle id'] = must_data['vehicle id'].astype(np.int32)
-    # Convert to unix timestamp (epoch time) in UTC
-    must_data['latitude'], must_data['longitude'] = lat_lon_from_x_y_must(must_data['x'].to_numpy(),
-                                                                          must_data['y'].to_numpy())
+    # Get lat/lon from local x/y coordinates
+    must_data['latitude'], must_data['longitude'] = lat_lon_from_x_y_must(must_data['x'].to_numpy(), must_data['y'].to_numpy())
     must_data.sort_values('epoch_time')
-
     must_data['sim time'] = must_data['epoch_time'] - must_data['epoch_time'][0]
 
+    ## Create lat/lon figure of all vehicle tracks
     # We are working under the assumption that there are NO vehicles with duplicate IDs
-    # tracks = []
-    # break_indices = find_sub_tracks(must_data['epoch_time'].to_numpy(),
-    #                                                 must_data['latitude'].to_numpy(), must_data['longitude'].to_numpy())
-    # valid_data_indices = range(break_indices[track_index], break_indices[track_index + 1])
-    # must_data = must_data.iloc[valid_data_indices[1:]].reset_index(drop=True)
-
-    must_data['heading_unwrapped'] = np.unwrap(must_data['heading'], period=360, discont=270)
-
     if plot_results:
         # Set up the figure and axes
         fig = plt.figure(figsize=(12, 12), dpi=100)
@@ -150,38 +148,17 @@ def generate_plots(test_name, test_log, intersection_image_path, must_folder, ou
             veh_x, veh_y = map(this_vehicle_data['longitude'], this_vehicle_data['latitude'])
             map.plot(veh_x, veh_y, markersize=5, label=vehicle_id)
 
-        # # Plot the data points
-        # map.plot(must_x, must_y, markersize=5, label=f'MUST track')
-        # ax_map.legend()
-
-        # ax2 = fig.add_subplot(gs[0, 2])
-        # ax3 = fig.add_subplot(gs[1, 2])
-        # ax2.plot(must_data['sim time'], must_data['speed'], label='MUST speed')
-        # ax2.legend()
-        # ax3.plot(must_data['sim time'], must_data['heading_unwrapped'], label='MUST heading')
-        #
-        # ax2.set_title('speed vs. time')
-        # ax2.set_xlabel('time (seconds)')
-        # ax2.set_ylabel('speed (m/s)')
-        # ax2.set_xlim(must_data['sim time'][0], must_data['sim time'][len(must_data) - 1])
-        # ax3.set_title('heading vs. time')
-        # ax3.set_xlabel('time (seconds)')
-        # ax3.set_ylabel('heading (degrees)')
-        # ax3.set_ylim(0, 360)
-        # ax3.set_xlim(must_data['sim time'][0], must_data['sim time'][len(must_data) - 1])
-
         fig.suptitle(f'Test {test_name}')
-        fig = plt.gcf()
-        # plt.legend()
         plt.savefig(os.path.join(output_folder, f'{test_name}_latlon.png'), dpi=100)
         # plt.show()
         # plt.clf()
 
+    ## Compute and print/store metrics
+    print(f'Test {test_name}')
     # Metric 6: confidence score >90% for >90% of vehicle tracks
     vehicle_ids = np.unique(must_data['vehicle id'].to_numpy())
     confidence_mean = 0
     confidence_stdev = 0
-    # confidence_pct_below_limit = 0
     passed_count = 0
     for vehicle_id in vehicle_ids:
         this_vehicle_data = must_data[must_data['vehicle id'] == vehicle_id]
@@ -191,13 +168,10 @@ def generate_plots(test_name, test_log, intersection_image_path, must_folder, ou
         confidence_pct_below_limit_veh = 100 * len(confidences[confidences > 90]) / len(confidences)
         confidence_mean += confidence_mean_veh
         confidence_stdev += confidence_stdev_veh
-        # confidence_pct_below_limit += confidence_pct_below_limit_veh
         if confidence_pct_below_limit_veh > 90:
             passed_count += 1
     confidence_mean /= len(vehicle_ids)
     confidence_stdev /= len(vehicle_ids)
-    # confidence_pct_below_limit /= len(vehicle_ids)
-
     passed_pct_confidence = 100 * passed_count / len(vehicle_ids)
     print(f'Metric 6, confidence score >90% per-vehicle data. Mean confidence: {confidence_mean}, stdev: {confidence_stdev}, percentage >90%: {passed_pct_confidence}%')
     metric_6_pass = bool(passed_pct_confidence >= 90)
@@ -226,7 +200,6 @@ def generate_plots(test_name, test_log, intersection_image_path, must_folder, ou
     tracks_mean = np.mean(track_counts)
     tracks_stdev = np.std(track_counts)
     tracks_pct_below_limit = 100 * len(track_counts[track_counts < 1]) / len(track_counts)
-
     print(f'Metric 8, >90% of IDs do not fluctuate. Mean number of ID swaps: {tracks_mean:.2f}, stdev: {tracks_stdev:.2f}, percentage that did not fluctuate: {tracks_pct_below_limit}%')
     metric_8_pass = bool(tracks_pct_below_limit >= 90)
 
@@ -238,15 +211,22 @@ def generate_plots(test_name, test_log, intersection_image_path, must_folder, ou
 
 
 def main(args):
+    ## Folder/data paths
     base_folder = os.path.join(Path.home(), 'fcp_ws', 'other')
     intersection_image = os.path.join(base_folder, 'must_sensor_intersection_1.png')
     test_log = os.path.join(base_folder, 'MUST_CP_Week2_test_log.csv')
-    # udp_folder = os.path.join(base_folder, 'MUST UDP Data_Week2_v1.0')
-    # output_folder = os.path.join(base_folder, 'Analysis_Week2_v1.0')
     udp_folder = os.path.join(base_folder, 'MUST UDP Data_Week2_v1.0', 'uw_processed_9-18')
     output_folder = os.path.join(base_folder, 'Analysis_Week2_uw_processed_9-18')
-    test_names = ['MUST-LT_1', 'MUST-LT_2']
 
+    # Writing header for metrics file
+    with open(os.path.join(output_folder, f'long_metrics.csv'), 'w') as outfile:
+        writer = csv.writer(outfile)
+        writer.writerow(
+            ['test name', 'confidence mean', 'confidence stdev', 'confidence pct below limit', 'metric 6 pass/fail',
+             'freq mean', 'freq stdev', 'freq pct below limit', 'metric 7 pass/fail',
+             'tracks mean', 'tracks stdev', 'tracks pct below limit', 'metric 8 pass/fail', ])
+
+    test_names = ['MUST-LT_1', 'MUST-LT_2']
     for test_name in test_names:
         generate_plots(test_name, test_log, intersection_image, udp_folder, output_folder)
 

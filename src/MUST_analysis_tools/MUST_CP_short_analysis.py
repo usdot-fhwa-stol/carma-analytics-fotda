@@ -53,20 +53,11 @@ lon_to_x = 111111.0 * np.cos(intersection_center[1] * np.pi / 180)
 lat_to_y = 111111.0
 x_to_lon = (1 / 111111.0) / np.cos(intersection_center[1] * np.pi / 180)
 y_to_lat = (1 / 111111.0)
+# Set the bounds of the map (in lat/lon coordinates)
 lower_left_longitude = -122.1436116  # Lower-left corner longitude
 lower_left_latitude = 47.6275314  # Lower-left corner latitude
 upper_right_longitude = -122.1423166  # Upper-right corner longitude
 upper_right_latitude = 47.6283264  # Upper-right corner latitude
-
-lower_left_x = (lower_left_longitude - zero_pos[0]) * lon_to_x
-lower_left_y = (lower_left_latitude - zero_pos[1]) * lat_to_y
-upper_right_x = (upper_right_longitude - zero_pos[0]) * lon_to_x
-upper_right_y = (upper_right_latitude - zero_pos[1]) * lat_to_y
-img_x_to_local_x = (upper_right_x - lower_left_x) / 1280.0
-img_y_to_local_y = (upper_right_y - lower_left_y) / 720.0
-img_x_to_lon = (upper_right_longitude - lower_left_longitude) / 1280.0
-img_y_to_lat = (upper_right_latitude - lower_left_latitude) / 720.0
-# image to lat/lon
 
 # Haversine function to calculate distance between two lat-long points
 def haversine_distance(lat1, lon1, lat2, lon2):
@@ -79,7 +70,7 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     distance = 6371 * c * 1000  # Convert to meters
     return abs(distance)
 
-
+# Local angle from lat/lon coords
 def latlon_angle(lat1, lon1, lat2, lon2):
     geodesic = pyproj.Geod(ellps='WGS84')
     fwd_azimuth, back_azimuth, distance = geodesic.inv(lon1, lat1, lon2, lat2)
@@ -99,34 +90,8 @@ def compute_distance_error_haversine(lat1_orig, lon1_orig, lat2, lon2, offset):
     return distance
 
 
-# trims x1 and offsets x2 to align, then computes the distance error
-def compute_distance_error_haversine_with_cap(lat1_orig, lon1_orig, lat2, lon2, offset):
-    cap1 = 1
-    # cap2 = 1
-    length = len(lat2)
-    lat1 = lat1_orig[offset:offset + length]
-    lon1 = lon1_orig[offset:offset + length]
-
-    distance = 0
-    count = 0
-    for i in range(length):
-        dist_i = haversine_distance(lat1[i], lon1[i], lat2[i], lon2[i])
-        if dist_i < cap1:
-            count += 1
-            distance += dist_i
-    # if count == 0:
-    #     for i in range(length):
-    #         if haversine_distance(lat1[i], lon1[i], lat2[i], lon2[i]) < cap2:
-    #             count += 1
-    #     if count == 0:
-    #         return np.inf
-    if count == 0:
-        return np.inf
-
-    # lower is better metric for distance
-    return distance / count
-
-
+# Resample pandas dataframe to specified period
+# Creates a standard timeseries slightly inside of the min/max timestamps of the input data, then interpolates the data to match those timestamps
 def resample_df(df_original, period_ms):
     columns = ['latitude', 'longitude', 'speed']
     start_time = df_original['epoch_time'][0]
@@ -143,15 +108,7 @@ def resample_df(df_original, period_ms):
     return df_resampled
 
 
-# from https://stackoverflow.com/questions/2566412/find-nearest-value-in-numpy-array
-def find_nearest_index(array,value):
-    idx = np.searchsorted(array, value, side="left")
-    if idx > 0 and (idx == len(array) or math.fabs(value - array[idx-1]) < math.fabs(value - array[idx])):
-        return idx-1
-    else:
-        return idx
-
-
+# Interpolate the data in a given series to match the given target timestamps
 # Assumes that main_time spans series_time, slightly further on both sides
 def resample_series(main_time, series_time, series_data):
     overlap_length = len(main_time)
@@ -188,6 +145,8 @@ def find_optimal_time_shift(lat1, lon1, lat2, lon2):
     return min_error_index
 
 
+# Finds sequential points that differ by more than the break_time or break_distance
+# Return a list of those break points, [[0], [break_1_index], ..., [-1]]
 def find_sub_tracks(time, lat, lon):
     break_time = 5.0 # seconds
     break_dist = 5 # meters
@@ -199,6 +158,7 @@ def find_sub_tracks(time, lat, lon):
     return break_indices
 
 
+# Show subtracks to the user to get them to update the test log with an index, in the rare case that our vehicle is not the first subtrack
 def select_sub_track_user_input(must_data, gps_data, test_name, intersection_image_path, output_folder):
 
     # Set up the figure and axes
@@ -206,11 +166,6 @@ def select_sub_track_user_input(must_data, gps_data, test_name, intersection_ima
 
     # Create a Basemap instance
     intersection_image = imread(intersection_image_path)
-    # Set the bounds of the map (in lat/lon coordinates)
-    lower_left_longitude = -122.143605  # Lower-left corner longitude
-    lower_left_latitude = 47.627545  # Lower-left corner latitude
-    upper_right_longitude = -122.142310  # Upper-right corner longitude
-    upper_right_latitude = 47.628340  # Upper-right corner latitude
     map = Basemap(projection='merc', llcrnrlat=lower_left_latitude, urcrnrlat=upper_right_latitude,
                 llcrnrlon=lower_left_longitude, urcrnrlon=upper_right_longitude, resolution='i', ax=ax)
 
@@ -240,6 +195,7 @@ def select_sub_track_user_input(must_data, gps_data, test_name, intersection_ima
     plt.clf()
 
 
+# Loads filenames/similar from the test log
 def load_metadata(test_name, test_log_fname, gps_folder):
     header = ['Test numbering', 'Test Case ID', 'Run #', 'Corrected?', 'Original',
               'TimeStamp', 'Description', 'Vehicle Speed', 'Vehicle Lane', 'Date', 'Pass/Fail',
@@ -276,55 +232,14 @@ def load_metadata(test_name, test_log_fname, gps_folder):
     return GPS_VEHICLE_ID, track_index, must_filename, gps_filename, gprmc_filename
 
 
-def interpolate_timestamps(timestamps):
-    expected_fps = 14.0
-    timestamps_updated = np.zeros(len(timestamps))
-    rising_edges = np.flatnonzero((timestamps[1:] > timestamps[:-1])) + 1
-    if len(rising_edges) > 0:
-        # Too long head or tail to accomodate the expected fps, cannot predict timestamps
-        if rising_edges[0] > expected_fps or len(timestamps) - rising_edges[-1] > expected_fps:
-            return None
-        # start times, no front offset so use fixed fps
-        timestamps_updated[0:rising_edges[0]] = timestamps[rising_edges[0]] - (np.arange(rising_edges[0])[::-1] + 1) / expected_fps
-        # end times, no rear offset so use fixed fps
-        timestamps_updated[rising_edges[-1]:] = timestamps[rising_edges[-1]] + np.arange(len(timestamps) - rising_edges[-1]) / expected_fps
-        for i in range(len(rising_edges) - 1):
-            length = rising_edges[i+1] - rising_edges[i]
-            # Divide evenly to fill in times, by the second
-            # DEFINITELY not perfect, but if there are missed frames the only alternative is to guess which frame was missed?
-            timestamps_updated[rising_edges[i]:rising_edges[i+1]] = timestamps[rising_edges[i]] + np.arange(length) / length
-    # No data to align to, cannot predict timestamps
-    else:
-        print(f'Time series too short to properly align, making a guess')
-        timestamps_updated = timestamps[0] + (np.arange(len(timestamps)) - 1) / expected_fps
-
-    return timestamps_updated
-
-
+# Convert MUST sensor output local x/y in meters to lat/lon
 def lat_lon_from_x_y_must(x, y):
     longitude = MUST_sensor_loc[0] + x * x_to_lon
     latitude = MUST_sensor_loc[1] + y * y_to_lat
     return latitude, longitude
 
 
-def get_image_correspondences_vehicle_gps(vehicle_time, vehicle_lat, vehicle_lon, camera_time, camera_x, camera_y, bbox_height, test_name, output_folder):
-    camera_data = np.int32(np.vstack((camera_x, camera_y)).T + np.vstack((np.zeros(len(bbox_height)), bbox_height * 0.75)).T)
-    vehicle_data = []
-    for timestamp in camera_time:
-        best_vehicle_index = np.argmin(np.abs(vehicle_time - timestamp))
-        vehicle_google_x_m = (vehicle_lon[best_vehicle_index] - zero_pos[0]) * lon_to_x
-        vehicle_google_y_m = -(vehicle_lat[best_vehicle_index] - zero_pos[1]) * lat_to_y
-        vehicle_google_x_img = (vehicle_google_x_m - lower_left_x) / img_x_to_local_x
-        vehicle_google_y_img = (vehicle_google_y_m + upper_right_y) / img_y_to_local_y
-        vehicle_data.append([int(vehicle_google_x_img), int(vehicle_google_y_img)])
-
-    with open(os.path.join(output_folder, f'{test_name}_vehicle_image_data.csv'), 'w') as outfile:
-        writer = csv.writer(outfile)
-        writer.writerow(['camera x', 'camera y', 'google x', 'google y'])
-        for i in range(len(camera_data)):
-            writer.writerow([camera_data[i][0], camera_data[i][1], vehicle_data[i][0], vehicle_data[i][1]])
-
-
+# Computing UTC time from the GPRMC message
 def recover_timestamp_from_gps_time(date_str_arr, seconds_in_day_arr, message_timestamps):
     # Create a combined datetime array
     datetime_array = pd.to_datetime(date_str_arr) + pd.to_timedelta(seconds_in_day_arr, unit='s')
@@ -336,15 +251,17 @@ def recover_timestamp_from_gps_time(date_str_arr, seconds_in_day_arr, message_ti
     datetime_pacific = datetime_utc.tz_convert('America/Los_Angeles')
     timestamps_pacific = np.array(datetime_pacific.astype('int64') / 1e9)
 
-    print(f'diff to message timestamp: {np.mean(timestamps_pacific - message_timestamps)}')
     return timestamps_pacific
 
 
+# Do the analysis and plot the results
 def generate_plots(test_name, test_log, intersection_image_path, gps_folder, must_folder, output_folder):
 
+    ## Load data from test log
     GPS_VEHICLE_ID, track_index, must_filename, gps_filename, gprmc_filename = load_metadata(test_name, test_log, gps_folder)
     plot_results = True
 
+    ## Load MUST sensor data
     # must_header = ['server time', 'frame id', 'class id', 'vehicle id', 'image_x', 'image_y', 'image_width', 'image_height', 'latitude', 'longitude', 'speed', 'heading']
     # must_data = pd.read_csv(str(os.path.join(must_folder, must_filename)), sep='\\s+', names=must_header)
     # must_data['epoch_time'] = must_data['server time'].apply(str_to_unix_ts_pst)
@@ -352,40 +269,41 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     must_data = pd.read_csv(str(os.path.join(must_folder, must_filename)), names=must_header)
     must_data['class id'] = must_data['class str'].apply(lambda x: Object_class(x).value)
     must_data['vehicle id'] = must_data['vehicle id'].astype(np.int32)
-    # Convert to unix timestamp (epoch time) in UTC
-    # must_data['epoch_time'] = must_data['epoch_time'].astype(np.int32)
     must_data = must_data[must_data['vehicle id'] == GPS_VEHICLE_ID].reset_index(drop=True)
+    # Remove first line because the heading and speed are always zero
     must_data = must_data.tail(-1)
-    # must_data['x'], must_data['y'] = image_xy_to_local_xy_meters(must_data['image_x'].to_numpy(), must_data['image_y'].to_numpy())
+    # Get lat/lon from local x/y coordinates
     must_data['latitude'], must_data['longitude'] = lat_lon_from_x_y_must(must_data['x'].to_numpy(), must_data['y'].to_numpy())
-    # must_data['longitude'], must_data['latitude'] = image_xy_to_local_xy_meters(must_data['image_x'].to_numpy(), must_data['image_y'].to_numpy())
     must_data.sort_values('epoch_time')
     # must_data['heading'] = (must_data['heading'] + 180) % 360
 
+    ## Load GPS and GPRMC data
     gps_header = ['timestamp', 'latitude', 'longitude', 'altitude', 'heading', 'speed', 'latitude stdev', 'longitude stdev', 'altitude stdev', 'heading error', 'speed error']
     gps_data = pd.read_csv(str(os.path.join(gps_folder, gps_filename)), names=gps_header, skiprows=1)
     gps_data['epoch_time'] = gps_data['timestamp']
     # gps_data['heading'] = (gps_data['heading'] + 180) % 360
-
     gprmc_header = ['message_timestamp', 'date', 'seconds_in_day', 'latitude', 'longitude', 'heading', 'speed']
     gprmc_data = pd.read_csv(str(os.path.join(gps_folder, gprmc_filename)), names=gprmc_header, skiprows=1)
     gprmc_data['epoch_time'] = recover_timestamp_from_gps_time(gprmc_data['date'].to_numpy(), gprmc_data['seconds_in_day'].to_numpy(), gprmc_data['message_timestamp'].to_numpy())
     gprmc_data['longitude'] = -gprmc_data['longitude']
     # gprmc_data['heading'] = (gprmc_data['heading'] + 180) % 360
 
+    ## If track index is undefined in the test log, show the user so they can enter the track ID
     if 'track_index' not in locals() or track_index is None:
         select_sub_track_user_input(must_data, gps_data, test_name, intersection_image_path, output_folder)
         return
-
+    ## If there is a track ID defined, grab all data in that track
     break_indices = find_sub_tracks(must_data['epoch_time'].to_numpy(),
                                                     must_data['latitude'].to_numpy(), must_data['longitude'].to_numpy())
     valid_data_indices = range(break_indices[track_index], break_indices[track_index + 1])
     must_data = must_data.iloc[valid_data_indices[1:]].reset_index(drop=True)
 
+    ## Resample data to 50hz, for time synchronization and metric comparisons
     gps_data_resampled = resample_df(gps_data, 0.02)
     must_data_resampled = resample_df(must_data, 0.02)
     gprmc_data_resampled = resample_df(gprmc_data, 0.02)
 
+    ## Compute and apply the optimal time shift
     time_offset_index = find_optimal_time_shift(gprmc_data_resampled['latitude'].to_numpy(), gprmc_data_resampled['longitude'].to_numpy(),
                                                 must_data_resampled['latitude'].to_numpy(), must_data_resampled['longitude'].to_numpy())
     time_offset = gprmc_data_resampled['epoch_time'][time_offset_index] - gprmc_data_resampled['epoch_time'][0]
@@ -394,30 +312,19 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     must_data_matched['epoch_time'] = must_data_matched['epoch_time'] + time_offset
     gps_data_matched = gps_data_matched[time_offset_index-1:time_offset_index-1 + len(must_data_matched)].reset_index(drop=True)
 
-    print(f"time offset for test {test_name}: {time_offset}, static: {-gps_data['epoch_time'][0] + must_data['epoch_time'][0] + 117.5}")
     gps_data['sim time'] = gps_data['epoch_time'] - gps_data['epoch_time'][0]#  + (gps_data['epoch_time'][0] - must_data['epoch_time'][0] - 117.5)
     must_data['sim time'] = must_data['epoch_time'] - must_data['epoch_time'][0] + time_offset
     gprmc_data['sim time'] = gprmc_data['epoch_time'] - gprmc_data['epoch_time'][0]
 
-    # get_image_correspondences_vehicle_gps(gps_data['sim time'].to_numpy(), gps_data['latitude'].to_numpy(), gps_data['longitude'].to_numpy(),
-    #                                       must_data['sim time'].to_numpy(), must_data['image_x'].to_numpy(), must_data['image_y'].to_numpy(),
-    #                                       must_data['image_height'].to_numpy(), test_name, output_folder)
-
-    # Set up the figure and axes
-    fig = plt.figure(figsize=(20, 12), dpi=100)
-    gs = gridspec.GridSpec(2, 3, figure=fig)
-    ax_map = fig.add_subplot(gs[:, :2])
-
-    gps_data['heading_unwrapped'] = np.unwrap(gps_data['heading'], period=360, discont=270)
-
+    ## Create and save the lat/lon, heading, and speed plots
     if plot_results:
-        # Create a Basemap instance
+        # Set up the figure and axes
+        fig = plt.figure(figsize=(20, 12), dpi=100)
+        gs = gridspec.GridSpec(2, 3, figure=fig)
+        ax_map = fig.add_subplot(gs[:, :2])
+
+        # Create a Basemap instance to plot lat/lon on an image
         intersection_image = imread(intersection_image_path)
-        # Set the bounds of the map (in lat/lon coordinates)
-        lower_left_longitude = -122.143605  # Lower-left corner longitude
-        lower_left_latitude = 47.627545  # Lower-left corner latitude
-        upper_right_longitude = -122.142310  # Upper-right corner longitude
-        upper_right_latitude = 47.628340  # Upper-right corner latitude
         map = Basemap(projection='merc', llcrnrlat=lower_left_latitude, urcrnrlat=upper_right_latitude,
                     llcrnrlon=lower_left_longitude, urcrnrlon=upper_right_longitude, resolution='i', ax=ax_map)
 
@@ -436,9 +343,8 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
         gps_x_e1, gps_y_e1 = map(gps_data['longitude'] + x_above, gps_data['latitude'] + y_above)
         gps_x_e2, gps_y_e2 = map(gps_data['longitude'] + x_below, gps_data['latitude'] + y_below)
 
-        # Plot the data points
-        map.plot(must_x, must_y, markersize=5, label=f'MUST track')
-        map.plot(gps_x, gps_y, markersize=5, label=f'GPS track')
+        map.plot(must_x, must_y, markersize=10, label=f'MUST track')
+        map.plot(gps_x, gps_y, markersize=10, label=f'GPS track')
         # map.plot(gprmc_x, gprmc_y, markersize=5, label=f'GPRMC track')
         # map.plot(gps_x_e1, gps_y_e1, markersize=5, label=f'GPS error bars')
         # map.plot(gps_x_e2, gps_y_e2, markersize=5, label=f'GPS error bars')
@@ -473,6 +379,7 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
         # plt.show()
         plt.clf()
 
+    ## Compute and print/store metrics
     print(f'Test {test_name}')
     # Metric 1: position accuracy (90% <30cm error)
     distance_errors = np.array([haversine_distance(must_data_matched['latitude'].iloc[i],
@@ -486,28 +393,28 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     print(f'Metric 1, distance error <0.3m. Mean error: {distance_mean:.2f}, stdev: {distance_stdev:.2f}, percentage below 0.3m: {distances_pct_below_limit:.2f}%')
     metric_1_pass = bool(distances_pct_below_limit >= 90)
 
-    # This plot visualizes the position vs. time from gps and the MUST sensor, to get better insight if the distance error metric looks worse than you expect
-    if plot_results:
-        fig = plt.figure()
-        fig.add_subplot(111, projection='3d')
-        ax = fig.get_axes()
-        ax = ax[0]
-        ax.set_title(f'Test {test_name}')
-        ax.set_xlabel('x (m)')
-        ax.set_ylabel('y (m)')
-        ax.set_zlabel('time (seconds)')
-        must_x = (must_data['longitude'].to_numpy() - intersection_center[0]) * lon_to_x
-        must_y = (must_data['latitude'].to_numpy() - intersection_center[1]) * lat_to_y
-        gps_x = (gps_data['longitude'].to_numpy() - intersection_center[0]) * lon_to_x
-        gps_y = (gps_data['latitude'].to_numpy() - intersection_center[1]) * lat_to_y
-        ax.scatter(must_x, must_y, must_data['sim time'], label=f'MUST data')
-        ax.scatter(gps_x, gps_y, gps_data['sim time'], label=f'gps data')
-        ax.set_xlim(np.min(must_x) - 1, np.max(must_x) + 1)
-        ax.set_ylim(np.min(must_y) - 1, np.max(must_y) + 1)
-        ax.set_zlim(must_data['sim time'][0], must_data['sim time'][len(must_data)-1])
-        # plt.savefig(os.path.join(output_folder, f'{test_name}_position_comparison.png'), dpi=100)
-        # plt.show()
-        # plt.clf()
+    # # This plot visualizes the position vs. time from gps and the MUST sensor, to get better insight if the distance error metric looks worse than you expect
+    # if plot_results:
+    #     fig = plt.figure()
+    #     fig.add_subplot(111, projection='3d')
+    #     ax = fig.get_axes()
+    #     ax = ax[0]
+    #     ax.set_title(f'Test {test_name}')
+    #     ax.set_xlabel('x (m)')
+    #     ax.set_ylabel('y (m)')
+    #     ax.set_zlabel('time (seconds)')
+    #     must_x = (must_data['longitude'].to_numpy() - intersection_center[0]) * lon_to_x
+    #     must_y = (must_data['latitude'].to_numpy() - intersection_center[1]) * lat_to_y
+    #     gps_x = (gps_data['longitude'].to_numpy() - intersection_center[0]) * lon_to_x
+    #     gps_y = (gps_data['latitude'].to_numpy() - intersection_center[1]) * lat_to_y
+    #     ax.scatter(must_x, must_y, must_data['sim time'], label=f'MUST data')
+    #     ax.scatter(gps_x, gps_y, gps_data['sim time'], label=f'gps data')
+    #     ax.set_xlim(np.min(must_x) - 1, np.max(must_x) + 1)
+    #     ax.set_ylim(np.min(must_y) - 1, np.max(must_y) + 1)
+    #     ax.set_zlim(must_data['sim time'][0], must_data['sim time'][len(must_data)-1])
+    #     # plt.savefig(os.path.join(output_folder, f'{test_name}_position_comparison.png'), dpi=100)
+    #     plt.show()
+    #     # plt.clf()
 
     # Metric 2: speed accuracy (90% <3mph error)
     speed_errors = np.abs(np.array([must_data_matched['speed'].iloc[i] - gps_data_matched['speed'].iloc[i]
@@ -535,60 +442,59 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     freq_mean = 1 / np.mean(recording_periods)
     freq_stdev = np.std(1 / recording_periods)
     freq_pct_below_limit = 100 * len(recording_periods[recording_periods < (1.0 / (30 - 3))]) / len(recording_periods)
-
-    # recording_freqs = np.array([1 / (must_data['epoch_time'].iloc[i+1] - must_data['epoch_time'].iloc[i])
-    #                    for i in range(len(must_data) - 1)])
-    # freq_mean = np.mean(recording_freqs)
-    # freq_stdev = np.std(distance_errors)
-    # freq_pct_below_limit = 100 * (len(recording_freqs[recording_freqs > 27])) / len(recording_freqs)
     # insert histogram. X axis frequency (0-30), Y axis percentage
     print(f'Metric 4, detection frequency 30hz +- 3hz. Mean frequency: {freq_mean:.2f}, stdev: {freq_stdev:.2f}, percentage above 27hz: {freq_pct_below_limit:.2f}%')
     metric_4_pass = bool(freq_pct_below_limit >= 90)
 
-    # Metric 5: Object type staying consistent (>90% the same class)
-    classes_present = np.bincount(np.int32(must_data['class id'].to_numpy()))
-    most_common_class = np.argmax(classes_present)
+    # Metric 5: 90% of vehicle IDs do not fluctuate
+    vehicle_ids = np.unique(must_data['vehicle id'].to_numpy())
+    pct_mathing_class = 0
+    track_counts = []
+    for vehicle_id in vehicle_ids:
+        this_vehicle_data = must_data[must_data['vehicle id'] == vehicle_id]
+        num_tracks = len(find_sub_tracks(this_vehicle_data['epoch_time'].to_numpy(),
+                                        this_vehicle_data['latitude'].to_numpy(), this_vehicle_data['longitude'].to_numpy())) - 2
+        track_counts.append(num_tracks)
+    track_counts = np.array(track_counts)
+    tracks_mean = np.mean(track_counts)
+    tracks_stdev = np.std(track_counts)
+    tracks_pct_below_limit = 100 * len(track_counts[track_counts < 1]) / len(track_counts)
 
-    pct_mathing_class = 100 * classes_present[most_common_class] / len(must_data)
-    print(f'Metric 5, >90% the same class. Most common class: {most_common_class}, percentage matching class: {pct_mathing_class:.2f}%')
-    metric_5_pass = bool(pct_mathing_class >= 90)
+    print(f'Metric 5 >90% of IDs do not fluctuate. Mean number of ID swaps: {tracks_mean:.2f}, stdev: {tracks_stdev:.2f}, percentage that did not fluctuate: {tracks_pct_below_limit}%')
+    metric_5_pass = bool(tracks_pct_below_limit >= 90)
+
     print()
+    # Store metrics to CSV
     with open(os.path.join(output_folder, f'short_metrics.csv'), 'a') as outfile:
         writer = csv.writer(outfile)
         writer.writerow([test_name, distance_mean, distance_stdev, distances_pct_below_limit, int(metric_1_pass),
                          speed_mean, speed_stdev, speed_pct_below_limit, int(metric_2_pass),
                          heading_mean, heading_stdev, heading_pct_below_limit, int(metric_3_pass),
                          freq_mean, freq_stdev, freq_pct_below_limit, int(metric_4_pass),
-                         most_common_class, pct_mathing_class, int(metric_5_pass), ])
+                         tracks_mean, tracks_stdev, tracks_pct_below_limit, int(metric_5_pass), ])
 
 
 def main(args):
+    ## Folder/data paths
     base_folder = os.path.join(Path.home(), 'fcp_ws', 'other')
     intersection_image = os.path.join(base_folder, 'must_sensor_intersection_1.png')
     test_log = os.path.join(base_folder, 'MUST_CP_Week2_test_log_uw_process_9-12.csv')
-    # test_log = os.path.join(base_folder, 'MUST_log_sheet_UW_test_2.csv')
     novatel_folder = os.path.join(base_folder, 'Novatel Data_Week2_v1.0')
     udp_folder = os.path.join(base_folder, 'MUST UDP Data_Week2_v1.0', 'uw_processed_9-13')
-    # udp_folder = os.path.join(base_folder, 'UW test with modified code 2')
     output_folder = os.path.join(base_folder, 'Analysis_Week2_uw_processed_9-13')
-    # test_names = ['MUST-NR_1', 'MUST-NR_2', 'MUST-NR_3', 'MUST-NR_4',
-    #               'MUST-NS_1', 'MUST-NS_4', 'MUST-NS_5',
-    #               'MUST-NL_2', 'MUST-NL_3', # 'MUST-NL_1',
-    #               # 'MUST-ES_1', 'MUST-ES_2', 'MUST-ES_3',
-    #               'MUST-ER_1', 'MUST-ER_2', # 'MUST-ER_3',
-    #               'MUST-EL_2', 'MUST-EL_3', #  'MUST-EL_1',
-    #               'MUST-SS_1', 'MUST-SS_2', # 'MUST-SS_3',
-    #               'MUST-SR_1', 'MUST-SR_2', 'MUST-SR_3',
-    #               'MUST-SL_2', 'MUST-SL_3', # 'MUST-SL_1',
-    #               # 'MUST-WS_1', 'MUST-WS_2', # 'MUST-WS_3',
-    #               'MUST-WR_1', 'MUST-WR_3', # 'MUST-WR_2',
-    #               'MUST-WL_3'] # 'MUST-WL_2', # 'MUST-WL_1',
+
+    # Writing header for metrics file
+    with open(os.path.join(output_folder, f'short_metrics.csv'), 'w') as outfile:
+        writer = csv.writer(outfile)
+        writer.writerow(['test name', 'distance mean', 'distance stdev', 'distance pct below limit', 'metric 1 pass/fail',
+                         'speed mean', 'speed stdev', 'speed pct below limit', 'metric 2 pass/fail',
+                         'heading mean', 'heading stdev', 'heading pct below limit', 'metric 3 pass/fail',
+                         'freq mean', 'freq stdev', 'freq pct below limit', 'metric 4 pass/fail',
+                         'tracks mean', 'tracks stdev', 'tracks pct below limit', 'metric 5 pass/fail', ])
+
     test_names = ['MUST-NR_1', 'MUST-ER_1', 'MUST-SR_1', 'MUST-WR_1',
                   'MUST-NS_1', 'MUST-ES_1', 'MUST-SS_1', 'MUST-WS_1',
                   'MUST-NL_1', 'MUST-EL_1', 'MUST-SL_1', 'MUST-WL_1']
-    # test_names = ['MUST-ER_1'] # Can include in
-    # test_names = ['MUST-NS_1']
-
     for test_name in test_names:
         generate_plots(test_name, test_log, intersection_image, novatel_folder, udp_folder, output_folder)
 
