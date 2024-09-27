@@ -25,3 +25,8 @@ The other files, `MUST_CP_calibration_analysis.py` and `compute_homography_image
 
 ## Running the code
 
+python3 MUST_CP_short_analysis.py intersection_image_path test_log_path novatel_folder_path udp_folder_path output_folder_path
+In the specified output folder, you will get one lat/lon image per test case, and one line in the short_metrics.csv file
+
+python3 MUST_CP_long_analysis.py intersection_image_path test_log_path udp_folder_path output_folder_path
+In the specified output folder, you will get one lat/lon image per test case, and one line in the long_metrics.csv file
