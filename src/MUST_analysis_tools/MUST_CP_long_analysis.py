@@ -13,9 +13,17 @@ import csv
 MUST_STATIONARY_NOISE = 0.1 #meter/sec
 GPS_STATIONARY_NOISE = 0.1 #meter/sec
 
-zero_pos = np.array([-122.143246, 47.627705])
-MUST_sensor_loc = [-122.143246, 47.627705]
-intersection_center = [-122.1431239, 47.6278859]
+MUST_sensor_loc = np.array([-122.143246, 47.627705])  # [longitude, latitude]
+intersection_center = np.array([-122.1431239, 47.6278859])  # [longitude, latitude]
+
+# Conversion done using a local tangent plane approximation (accurate to <1mm at 1km), with a zero point of
+#   [lat_zero, lon_zero] -> intersection_center
+# For small regions on the earth, latitude and longitude lines are essentially perpendicular and can be used as a
+#   cartesian coordinate system. The convention used here is NWU (x -> north, y -> west, z -> up (here we use 2D so z is
+#   ignored)). 90 degrees of longitude is defined as 1/4 the earth circumference, or ~10 million meters. Therefore,
+#   latitude is equal to: meters_per_degree(90 degrees / 10E6 meters) * (lat - lat_zero). The longitudinal circumference
+#   is a function of latitude, proportional to the cos of latitude. longitude is equal to: meters_per_degree(
+#   90 degrees / 10E6 meters * cos(lat_zero)) * (lon - lon_zero).
 lon_to_x = 111111.0 * np.cos(intersection_center[1] * np.pi / 180)
 lat_to_y = 111111.0
 x_to_lon = (1 / 111111.0) / np.cos(intersection_center[1] * np.pi / 180)
