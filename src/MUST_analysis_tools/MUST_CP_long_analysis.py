@@ -1,26 +1,13 @@
 import numpy as np
 from matplotlib import pyplot as plt
-import matplotlib.gridspec as gridspec
 import pandas as pd
 import sys
-import copy
-from datetime import datetime, timedelta
-import math
 from mpl_toolkits.basemap import Basemap
 from matplotlib.image import imread
 import os
-import pyproj
 from pathlib import Path
 from enum import Enum
 import csv
-
-# ## Notes about this file:
-
-# # Methodology:
-# Most of the data analysis is done with resampled data rather than raw. The vehicle GPS used in the original UW testing
-#   in Washington was the novatel PwrPak6D-E2 from the white pacifica, ~50hz output frequency and ~10-30cm accuracy. The
-#   output from the MUST sensor was ~12-15hz. Both data series were resampled to a consistent 50hz with the same main
-#   time series so they are directly comparable for the metrics.
 
 # GPS stationary noise accounting - Make speed zero for values below this number
 MUST_STATIONARY_NOISE = 0.1 #meter/sec
@@ -150,8 +137,6 @@ def generate_plots(test_name, test_log, intersection_image_path, must_folder, ou
 
         fig.suptitle(f'Test {test_name}')
         plt.savefig(os.path.join(output_folder, f'{test_name}_latlon.png'), dpi=100)
-        # plt.show()
-        # plt.clf()
 
     ## Compute and print/store metrics
     print(f'Test {test_name}')
@@ -188,11 +173,9 @@ def generate_plots(test_name, test_log, intersection_image_path, must_folder, ou
 
     # Metric 8: 90% of vehicle IDs do not fluctuate
     vehicle_ids = np.unique(must_data['vehicle id'].to_numpy())
-    pct_mathing_class = 0
     track_counts = []
     for vehicle_id in vehicle_ids:
         this_vehicle_data = must_data[must_data['vehicle id'] == vehicle_id]
-        # confidence_pct_below_limit += confidence_pct_below_limit_veh
         num_tracks = len(find_sub_tracks(this_vehicle_data['epoch_time'].to_numpy(),
                                         this_vehicle_data['latitude'].to_numpy(), this_vehicle_data['longitude'].to_numpy())) - 2
         track_counts.append(num_tracks)
@@ -213,7 +196,7 @@ def generate_plots(test_name, test_log, intersection_image_path, must_folder, ou
 def main(args):
     ## Folder/data paths
     base_folder = os.path.join(Path.home(), 'fcp_ws', 'other')
-    intersection_image = os.path.join(base_folder, 'must_sensor_intersection_1.png')
+    intersection_image = 'must_sensor_intersection_1.png'
     test_log = os.path.join(base_folder, 'MUST_CP_Week2_test_log.csv')
     udp_folder = os.path.join(base_folder, 'MUST UDP Data_Week2_v1.0', 'uw_processed_9-18')
     output_folder = os.path.join(base_folder, 'Analysis_Week2_uw_processed_9-18')

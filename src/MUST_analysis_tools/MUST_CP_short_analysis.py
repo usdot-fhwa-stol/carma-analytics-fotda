@@ -3,9 +3,6 @@ from matplotlib import pyplot as plt
 import matplotlib.gridspec as gridspec
 import pandas as pd
 import sys
-import copy
-from datetime import datetime, timedelta
-import pytz
 import math
 from mpl_toolkits.basemap import Basemap
 from matplotlib.image import imread
@@ -13,8 +10,8 @@ import os
 import pyproj
 from pathlib import Path
 from enum import Enum
-import cv2
 import csv
+
 
 class Object_class(Enum):
     person = 0
@@ -34,14 +31,6 @@ class Object_class(Enum):
         # If the value doesn't match any member, return `Object_class.other`
         return cls.other
 
-# ## Notes about this file:
-
-# # Methodology:
-# Most of the data analysis is done with resampled data rather than raw. The vehicle GPS used in the original UW testing
-#   in Washington was the novatel PwrPak6D-E2 from the white pacifica, ~50hz output frequency and ~10-30cm accuracy. The
-#   output from the MUST sensor was ~12-15hz. Both data series were resampled to a consistent 50hz with the same main
-#   time series so they are directly comparable for the metrics.
-
 # GPS stationary noise accounting - Make speed zero for values below this number
 MUST_STATIONARY_NOISE = 0.1 #meter/sec
 GPS_STATIONARY_NOISE = 0.1 #meter/sec
@@ -59,6 +48,7 @@ lower_left_latitude = 47.6275314  # Lower-left corner latitude
 upper_right_longitude = -122.1423166  # Upper-right corner longitude
 upper_right_latitude = 47.6283264  # Upper-right corner latitude
 
+
 # Haversine function to calculate distance between two lat-long points
 def haversine_distance(lat1, lon1, lat2, lon2):
     from math import radians, sin, cos, sqrt, atan2
@@ -69,6 +59,7 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     c = 2 * atan2(sqrt(a), sqrt(1-a))
     distance = 6371 * c * 1000  # Convert to meters
     return abs(distance)
+
 
 # Local angle from lat/lon coords
 def latlon_angle(lat1, lon1, lat2, lon2):
@@ -262,9 +253,6 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     plot_results = True
 
     ## Load MUST sensor data
-    # must_header = ['server time', 'frame id', 'class id', 'vehicle id', 'image_x', 'image_y', 'image_width', 'image_height', 'latitude', 'longitude', 'speed', 'heading']
-    # must_data = pd.read_csv(str(os.path.join(must_folder, must_filename)), sep='\\s+', names=must_header)
-    # must_data['epoch_time'] = must_data['server time'].apply(str_to_unix_ts_pst)
     must_header = ['class str', 'x', 'y', 'heading', 'speed', 'size', 'confidence', 'vehicle id', 'epoch_time']
     must_data = pd.read_csv(str(os.path.join(must_folder, must_filename)), names=must_header)
     must_data['class id'] = must_data['class str'].apply(lambda x: Object_class(x).value)
@@ -477,7 +465,7 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
 def main(args):
     ## Folder/data paths
     base_folder = os.path.join(Path.home(), 'fcp_ws', 'other')
-    intersection_image = os.path.join(base_folder, 'must_sensor_intersection_1.png')
+    intersection_image = 'must_sensor_intersection_1.png'
     test_log = os.path.join(base_folder, 'MUST_CP_Week2_test_log_uw_process_9-12.csv')
     novatel_folder = os.path.join(base_folder, 'Novatel Data_Week2_v1.0')
     udp_folder = os.path.join(base_folder, 'MUST UDP Data_Week2_v1.0', 'uw_processed_9-13')
