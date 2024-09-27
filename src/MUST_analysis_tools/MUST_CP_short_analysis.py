@@ -472,12 +472,16 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
 
 def main(args):
     ## Folder/data paths
-    base_folder = os.path.join(Path.home(), 'fcp_ws', 'other')
-    intersection_image = 'must_sensor_intersection_1.png'
-    test_log = os.path.join(base_folder, 'MUST_CP_Week2_test_log_uw_process_9-12.csv')
-    novatel_folder = os.path.join(base_folder, 'Novatel Data_Week2_v1.0')
-    udp_folder = os.path.join(base_folder, 'MUST UDP Data_Week2_v1.0', 'uw_processed_9-13')
-    output_folder = os.path.join(base_folder, 'Analysis_Week2_uw_processed_9-13')
+    if len(args) != 6:
+        print('Please use the format: python3 MUST_CP_short_analysis.py '
+              'intersection_image_path test_log_path novatel_folder_path udp_folder_path output_folder_path')
+        exit()
+
+    intersection_image = args[1]
+    test_log = args[2]
+    novatel_folder = args[3]
+    udp_folder = args[4]
+    output_folder = args[5]
 
     # Writing header for metrics file
     with open(os.path.join(output_folder, f'short_metrics.csv'), 'w') as outfile:
@@ -496,4 +500,5 @@ def main(args):
 
 
 if __name__ == "__main__":
+    print(len(sys.argv))
     main(sys.argv)

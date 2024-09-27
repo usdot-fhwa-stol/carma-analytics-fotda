@@ -3,8 +3,6 @@ from matplotlib import pyplot as plt
 import matplotlib.gridspec as gridspec
 import pandas as pd
 import sys
-import copy
-from datetime import datetime, timedelta
 import math
 from mpl_toolkits.basemap import Basemap
 from matplotlib.image import imread
@@ -14,7 +12,6 @@ from pathlib import Path
 from enum import Enum
 import cv2
 import csv
-from pyproj import Transformer
 
 
 class Object_class(Enum):
@@ -628,13 +625,19 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
 
 
 def main(args):
-    base_folder = os.path.join(Path.home(), 'fcp_ws', 'other')
-    intersection_image = 'must_sensor_intersection_1.png'
-    test_log = os.path.join(base_folder, 'MUST_CP_Week2_test_log_annika_process.csv')
-    novatel_folder = os.path.join(base_folder, 'Novatel Data_Week2_v1.0')
-    udp_folder = os.path.join(base_folder, 'MUST UDP Data_Week2_v1.0', 'annika_calib_v1_plus_coords')
-    udp_uw_folder = os.path.join(base_folder, 'MUST UDP Data_Week2_v1.0', 'annika_processed_uw_code_9-12')
-    output_folder = os.path.join(base_folder, 'Analysis_calibration')
+    ## Folder/data paths
+    if len(args) != 7:
+        print('Please use the format: python3 MUST_CP_calibration_analysis.py '
+              'intersection_image_path test_log_path novatel_folder_path udp_folder_path udp_original_folder_path output_folder_path')
+        exit()
+
+    intersection_image = args[1]
+    test_log = args[2]
+    novatel_folder = args[3]
+    udp_folder = args[4]
+    udp_uw_folder = args[5]
+    output_folder = args[6]
+
     test_names = ['MUST-NR_1', 'MUST-ER_1', 'MUST-SR_1', 'MUST-WR_1',
                   'MUST-NS_1', 'MUST-ES_1', 'MUST-SS_1', 'MUST-WS_1',
                   'MUST-NL_1', 'MUST-EL_1', 'MUST-SL_1', 'MUST-WL_1']

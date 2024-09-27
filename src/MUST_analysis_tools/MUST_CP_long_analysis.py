@@ -203,11 +203,15 @@ def generate_plots(test_name, test_log, intersection_image_path, must_folder, ou
 
 def main(args):
     ## Folder/data paths
-    base_folder = os.path.join(Path.home(), 'fcp_ws', 'other')
-    intersection_image = 'must_sensor_intersection_1.png'
-    test_log = os.path.join(base_folder, 'MUST_CP_Week2_test_log.csv')
-    udp_folder = os.path.join(base_folder, 'MUST UDP Data_Week2_v1.0', 'uw_processed_9-18')
-    output_folder = os.path.join(base_folder, 'Analysis_Week2_uw_processed_9-18')
+    if len(args) != 5:
+        print('Please use the format: python3 MUST_CP_long_analysis.py '
+              'intersection_image_path test_log_path udp_folder_path output_folder_path')
+        exit()
+
+    intersection_image = args[1]
+    test_log = args[2]
+    udp_folder = args[3]
+    output_folder = args[4]
 
     # Writing header for metrics file
     with open(os.path.join(output_folder, f'long_metrics.csv'), 'w') as outfile:
