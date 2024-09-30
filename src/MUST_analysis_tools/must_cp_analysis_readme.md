@@ -10,7 +10,13 @@ The other files, `MUST_CP_calibration_analysis.py` and `compute_homography_image
 
 ### Installation folder
 
-All of these folder/filenames are defined at the end of each file. The default is in a folder under home named `fcp_ws`, with the code under `src` and the other files in folders under `other`. 
+All of these folder/filenames are defined at the end of each file. The recommended folder structure is:
+
+- Main folder: `/home/$USER/FCP_Data_Analysis`
+- Test log: `/home/$USER/FCP_Data_Analysis/test_log.csv`
+- GPS data folder: `/home/$USER/FCP_Data_Analysis/GPS_data`
+- UDP data folder: `/home/$USER/FCP_Data_Analysis/UDP_data`
+- Output folder: `/home/$USER/FCP_Data_Analysis/Analysis`
 
 ### Test log
 
@@ -37,19 +43,19 @@ From google drive, default is the most recent testing: https://drive.google.com/
 
 ### Short Analysis
 ```commandline
-python3 MUST_CP_short_analysis.py intersection_image_path test_log_path novatel_folder_path udp_folder_path output_folder_path
+python3 MUST_CP_short_analysis.py must_sensor_intersection_1.png /home/$USER/fcp_ws/other/FCP_Data_Analysis/test_log.csv /home/$USER/fcp_ws/other/FCP_Data_Analysis/GPS_data /home/$USER/fcp_ws/other/FCP_Data_Analysis/UDP_data /home/$USER/fcp_ws/other/FCP_Data_Analysis/Analysis
 ```
 In the specified output folder, you will get one lat/lon image per test case, and one line in the short_metrics.csv file
 
 ### Long Analysis
 ```commandline
-python3 MUST_CP_long_analysis.py intersection_image_path test_log_path udp_folder_path output_folder_path
+python3 MUST_CP_long_analysis.py must_sensor_intersection_1.png /home/$USER/fcp_ws/other/FCP_Data_Analysis/test_log.csv /home/$USER/fcp_ws/other/FCP_Data_Analysis/UDP_data /home/$USER/fcp_ws/other/FCP_Data_Analysis/Analysis
 ```
 In the specified output folder, you will get one lat/lon image per test case, and one line in the long_metrics.csv file
 
 ### Calibration Analysis
 ```commandline
-python3 MUST_CP_calibration_analysis.py intersection_image_path test_log_path udp_folder_path output_folder_path
+python3 MUST_CP_calibration_analysis.py must_sensor_intersection_1.png /home/$USER/fcp_ws/other/FCP_Data_Analysis/test_log.csv /home/$USER/fcp_ws/other/FCP_Data_Analysis/GPS_data /home/$USER/fcp_ws/other/FCP_Data_Analysis/UDP_data /home/$USER/fcp_ws/other/FCP_Data_Analysis/Analysis
 ```
 This code is very finicky to run. It requires as input processed results/video with an original x/y position in the UDP, but additionally image coordinates for the bounding boxes and centers to compute a new set of lat/lons for comparison. This requires editing the output line in the calibration_analysis branch of https://github.com/usdot-fhwa-stol/infrastructure-camera-detection-and-tracking. 
 
