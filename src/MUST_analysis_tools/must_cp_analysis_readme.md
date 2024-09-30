@@ -8,25 +8,55 @@ The other files, `MUST_CP_calibration_analysis.py` and `compute_homography_image
 
 ## Setup
 
-1. Installation folder
-    All of these folder/filenames are defined at the end of each file. The default is in a foder under home named `fcp_ws`, with the code under `src` and the other files in folders under `other`. 
-1. Test log
-    Already filled columns
-    a. test case
-    b. run number
-    c. UDP file name
-    Need to look at/update
-    a. Vehicle ID
-    b. Track ID (almost always zero)
-2. UDP data
-    From google drive, default is the most recent testing: https://drive.google.com/drive/u/1/folders/1uwloOWMgiepaIZEeKijmrVNFjPoDDlAf
-3. Novatel GPS data
-    From google drive, default is the most recent testing: https://drive.google.com/drive/u/1/folders/12tHzJNX_k-XS9Fd_U7kSsihLqjZ4QFMa
+### Installation folder
+
+All of these folder/filenames are defined at the end of each file. The default is in a folder under home named `fcp_ws`, with the code under `src` and the other files in folders under `other`. 
+
+### Test log
+
+Already filled columns
+
+1. test case
+2. run number
+3. UDP file name
+
+Need to look at/update
+
+1. Vehicle ID
+2. Track ID (almost always zero)
+
+### UDP data
+
+From google drive, default is the most recent testing: https://drive.google.com/drive/u/1/folders/1uwloOWMgiepaIZEeKijmrVNFjPoDDlAf
+
+### Novatel GPS data
+
+From google drive, default is the most recent testing: https://drive.google.com/drive/u/1/folders/12tHzJNX_k-XS9Fd_U7kSsihLqjZ4QFMa
 
 ## Running the code
 
+### Short Analysis
+```commandline
 python3 MUST_CP_short_analysis.py intersection_image_path test_log_path novatel_folder_path udp_folder_path output_folder_path
+```
 In the specified output folder, you will get one lat/lon image per test case, and one line in the short_metrics.csv file
 
+### Long Analysis
+```commandline
 python3 MUST_CP_long_analysis.py intersection_image_path test_log_path udp_folder_path output_folder_path
+```
 In the specified output folder, you will get one lat/lon image per test case, and one line in the long_metrics.csv file
+
+### Calibration Analysis
+```commandline
+python3 MUST_CP_calibration_analysis.py intersection_image_path test_log_path udp_folder_path output_folder_path
+```
+This code is very finicky to run. It requires as input processed results/video with an original x/y position in the UDP, but additionally image coordinates for the bounding boxes and centers to compute a new set of lat/lons for comparison. This requires editing the output line in the calibration_analysis branch of https://github.com/usdot-fhwa-stol/infrastructure-camera-detection-and-tracking. 
+
+In the specified output folder, you will get one lat/lon image per test case, and a csv file with results. 
+
+### Homography computation
+```commandline
+python3 compute_homography_image_warp.py
+```
+It will print out the current intrinsics and homography transformation, with a reprojection error in meters. It will also display how the calibration looks as an image. 

@@ -361,7 +361,7 @@ def lat_lon_from_x_y_must(x, y):
     return latitude, longitude
 
 
-def compute_show_metrics(test_name, must_data, gps_data, must_data_matched, gps_data_matched, output_folder, name_str):
+def compute_show_metrics(test_name, must_data, must_data_matched, gps_data_matched, output_folder, name_str):
 
     print(f'Test {test_name}')
     # Metric 1: position accuracy (90% <30cm error)
@@ -463,15 +463,14 @@ def moving_average(n, data):
 
 
 # Do the analysis and plot the results
-def generate_plots(test_name, test_log, intersection_image_path, gps_folder, must_folder, udp_uw_folder, output_folder):
+def generate_plots(test_name, test_log, intersection_image_path, gps_folder, must_folder, output_folder):
 
     ## Load data from test log
     GPS_VEHICLE_ID, track_index, must_filename, gps_filename = load_metadata(test_name, test_log, gps_folder)
-    must_uw_filename = must_filename[:20] + 'uw_code_base_9-18' + must_filename[-12:]
     plot_results = True
 
     ## Load MUST sensor data
-    must_header = ['class str', 'x', 'y', 'heading', 'speed', 'image_x', 'image_y', 'bbox_width', 'bbox_height', 'lat_uw', 'lon_uw', 'size', 'confidence', 'vehicle id', 'epoch_time']
+    must_header = ['class str', 'x', 'y', 'heading', 'speed', 'image_x', 'image_y', 'bbox_width', 'bbox_height', 'unused_1', 'unused_2', 'size', 'confidence', 'vehicle id', 'epoch_time']
     must_data = pd.read_csv(str(os.path.join(must_folder, must_filename)), names=must_header)
     must_data['class id'] = must_data['class str'].apply(lambda x: Object_class(x).value)
     must_data['vehicle id'] = must_data['vehicle id'].astype(np.int32)
@@ -481,19 +480,19 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     must_latlons = np.array([vehicle_center_to_latlon(must_data['image_x'].iloc[i], must_data['image_y'].iloc[i],
                                              must_data['bbox_width'].iloc[i], must_data['bbox_height'].iloc[i])
                  for i in range(len(must_data))])
-    must_data['latitude'], must_data['longitude'] = must_latlons[:, 0], must_latlons[:, 1]
-    must_data['lat_from_local'], must_data['lon_from_local'] = lat_lon_from_x_y_must(must_data['x'].to_numpy(), must_data['y'].to_numpy())
+    must_data['latitude_cal'], must_data['longitude_cal'] = must_latlons[:, 0], must_latlons[:, 1]
+    must_data['latitude'], must_data['longitude'] = lat_lon_from_x_y_must(must_data['x'].to_numpy(), must_data['y'].to_numpy())
     must_data.sort_values('epoch_time')
 
     ## Compute smoothed values
-    must_data['longitude_smoothed'] = moving_average(5, must_data['longitude'].to_numpy())
-    must_data['latitude_smoothed'] = moving_average(5, must_data['latitude'].to_numpy())
+    must_data['longitude_cal_smoothed'] = moving_average(5, must_data['longitude_cal'].to_numpy())
+    must_data['latitude_cal_smoothed'] = moving_average(5, must_data['latitude_cal'].to_numpy())
     # This block computes an interpolated velocity column
     # Calculate distance between consecutive pedestrian points
-    distances = [haversine_distance(must_data['latitude_smoothed'].iloc[i],
-                                          must_data['longitude_smoothed'].iloc[i],
-                                          must_data['latitude_smoothed'].iloc[i + 1],
-                                          must_data['longitude_smoothed'].iloc[i + 1])
+    distances = [haversine_distance(must_data['latitude_cal_smoothed'].iloc[i],
+                                          must_data['longitude_cal_smoothed'].iloc[i],
+                                          must_data['latitude_cal_smoothed'].iloc[i + 1],
+                                          must_data['longitude_cal_smoothed'].iloc[i + 1])
                        for i in range(len(must_data) - 1)]
     # Calculate time differences between consecutive points
     time_diffs = [(must_data['epoch_time'].iloc[i+1] - must_data['epoch_time'].iloc[i])
@@ -503,30 +502,18 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     must_data['speed_interpolated'] = must_data['speed_interpolated'].round(2)
     must_data.loc[must_data['speed_interpolated'] < MUST_STATIONARY_NOISE, 'speed_interpolated'] = 0
 
-    heading_interpolated = [latlon_angle(must_data['latitude_smoothed'].iloc[i],
-                                                    must_data['longitude_smoothed'].iloc[i],
-                                                    must_data['latitude_smoothed'].iloc[i + 1],
-                                                    must_data['longitude_smoothed'].iloc[i + 1])
+    heading_interpolated = [latlon_angle(must_data['latitude_cal_smoothed'].iloc[i],
+                                                    must_data['longitude_cal_smoothed'].iloc[i],
+                                                    must_data['latitude_cal_smoothed'].iloc[i + 1],
+                                                    must_data['longitude_cal_smoothed'].iloc[i + 1])
                                 for i in range(len(must_data) - 1)]
     must_data['heading_interpolated'] = [heading_interpolated[0]] + heading_interpolated
     must_data['heading_interpolated'] = must_data['heading_interpolated'] % 360
-    must_data['longitude'] = must_data['longitude_smoothed']
-    must_data['latitude'] = must_data['latitude_smoothed']
-    must_data['speed'] = must_data['speed_interpolated']
-    must_data['heading'] = must_data['heading_interpolated']
+    must_data['longitude_cal'] = must_data['longitude_cal_smoothed']
+    must_data['latitude_cal'] = must_data['latitude_cal_smoothed']
+    must_data['speed_cal'] = must_data['speed_interpolated']
+    must_data['heading_cal'] = must_data['heading_interpolated']
     # must_data['heading'] = (must_data['heading_interpolated'] + 180) % 360
-
-    ## Load original UW data
-    must_uw_header = ['class str', 'x', 'y', 'heading', 'speed', 'size', 'confidence', 'vehicle id', 'epoch_time']
-    must_uw_data = pd.read_csv(str(os.path.join(udp_uw_folder, must_uw_filename)), names=must_uw_header)
-    must_uw_data['class id'] = must_uw_data['class str'].apply(lambda x: Object_class(x).value)
-    must_uw_data['vehicle id'] = must_uw_data['vehicle id'].astype(np.int32)
-    # Convert to unix timestamp (epoch time) in UTC
-    must_uw_data = must_uw_data[must_uw_data['vehicle id'] == 62].reset_index(drop=True)
-    must_uw_data = must_uw_data.tail(-1)
-    must_uw_data['latitude'], must_uw_data['longitude'] = lat_lon_from_x_y_must(must_uw_data['x'].to_numpy(),
-                                                                                     must_uw_data['y'].to_numpy())
-    must_uw_data.sort_values('epoch_time')
 
     # Load novatel GPS data
     gps_header = ['timestamp', 'latitude', 'longitude', 'altitude', 'heading', 'speed', 'latitude stdev', 'longitude stdev', 'altitude stdev', 'heading error', 'speed error']
@@ -536,19 +523,23 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
 
     ## If track index is undefined in the test log, show the user so they can enter the track ID
     if 'track_index' not in locals() or track_index is None:
-        select_sub_track_user_input(must_uw_data, gps_data, test_name, intersection_image_path, output_folder)
+        select_sub_track_user_input(must_data, gps_data, test_name, intersection_image_path, output_folder)
         return
     ## If there is a track ID defined, grab all data in that track
     break_indices = find_sub_tracks(must_data['epoch_time'].to_numpy(),
                                                     must_data['latitude'].to_numpy(), must_data['longitude'].to_numpy())
     valid_data_indices = range(break_indices[track_index], break_indices[track_index + 1])
     must_data = must_data.iloc[valid_data_indices[1:]].reset_index(drop=True)
-    must_uw_data = must_uw_data.iloc[valid_data_indices[1:]].reset_index(drop=True)
 
     ## Resample data to 50hz, for time synchronization and metric comparisons
     gps_data_resampled = resample_df(gps_data, 0.02)
     must_data_resampled = resample_df(must_data, 0.02)
-    must_uw_data_resampled = resample_df(must_uw_data, 0.02)
+    cal_data = must_data.copy()
+    cal_data['longitude'] = cal_data['longitude_cal']
+    cal_data['latitude'] = cal_data['latitude_cal']
+    cal_data['speed'] = cal_data['speed_cal']
+    cal_data['heading'] = cal_data['heading_cal']
+    cal_data_resampled = resample_df(cal_data, 0.02)
 
     ## Compute and apply the optimal time shift
     time_offset_index = find_optimal_time_shift(gps_data_resampled['latitude'].to_numpy(), gps_data_resampled['longitude'].to_numpy(),
@@ -556,15 +547,13 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
     time_offset = gps_data_resampled['epoch_time'][time_offset_index] - gps_data_resampled['epoch_time'][0]
     gps_data_matched = gps_data_resampled.copy()
     must_data_matched = must_data_resampled.copy()
-    must_uw_data_matched = must_uw_data_resampled.copy()
-    gps_data_matched_uw = gps_data_resampled.copy()
+    cal_data_matched = cal_data.copy()
     must_data_matched['epoch_time'] = must_data_matched['epoch_time'] + time_offset
-    must_uw_data_matched['epoch_time'] = must_uw_data_matched['epoch_time'] + time_offset
+    cal_data_matched['epoch_time'] = cal_data_matched['epoch_time'] + time_offset
     gps_data_matched = gps_data_matched[time_offset_index-1:time_offset_index-1 + len(must_data_matched)].reset_index(drop=True)
-    gps_data_matched_uw = gps_data_matched_uw[time_offset_index-1:time_offset_index-1 + len(must_uw_data_matched)].reset_index(drop=True)
     gps_data['sim time'] = gps_data['epoch_time'] - gps_data['epoch_time'][0]#  + (gps_data['epoch_time'][0] - must_data['epoch_time'][0] - 117.5)
     must_data['sim time'] = must_data['epoch_time'] - must_data['epoch_time'][0] + time_offset
-    must_uw_data['sim time'] = must_uw_data['epoch_time'] - must_uw_data['epoch_time'][0] + time_offset
+    cal_data['sim time'] = cal_data['epoch_time'] - cal_data['epoch_time'][0] + time_offset
 
     ## Create and save the lat/lon, heading, and speed plots
     if plot_results:
@@ -583,25 +572,24 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
 
         # Convert lat/lon to map projection coordinates
         must_x, must_y = map(must_data['longitude'], must_data['latitude'])
-        must_x_smoothed, must_y_smoothed = map(must_data['longitude_smoothed'], must_data['latitude_smoothed'])
         gps_x, gps_y = map(gps_data['longitude'], gps_data['latitude'])
-        must_uw_x, must_uw_y = map(must_uw_data['longitude'], must_uw_data['latitude'])
+        cal_x, cal_y = map(cal_data['longitude'], cal_data['latitude'])
 
         # Plot the data points
-        map.plot(must_x_smoothed, must_y_smoothed, markersize=5, label=f'MUST calibrated smoothed')
-        map.plot(gps_x, gps_y, markersize=5, label=f'GPS track')
-        map.plot(must_uw_x, must_uw_y, markersize=5, label=f'MUST UW track')
+        map.plot(must_x, must_y, markersize=5, label=f'MUST original')
+        map.plot(gps_x, gps_y, markersize=5, label=f'GPS')
+        map.plot(cal_x, cal_y, markersize=5, label=f'MUST calibrated smoothed')
         ax_map.legend()
 
         ax2 = fig.add_subplot(gs[0, 2])
         ax3 = fig.add_subplot(gs[1, 2])
-        ax2.plot(must_data['sim time'], must_data['speed_interpolated'], label='MUST cal speed smoothed')
-        ax2.plot(gps_data['sim time'], gps_data['speed'], label='GPS speed')
-        ax2.plot(must_uw_data['sim time'], must_uw_data['speed'], label='MUST uw speed')
+        ax2.plot(must_data['sim time'], must_data['speed'], label='MUST original')
+        ax2.plot(gps_data['sim time'], gps_data['speed'], label='GPS')
+        ax2.plot(cal_data['sim time'], cal_data['speed'], label='MUST calibrated smoothed')
         ax2.legend()
-        ax3.plot(must_data['sim time'], must_data['heading_interpolated'], label='MUST cal heading smoothed')
-        ax3.plot(gps_data['sim time'], gps_data['heading'], label='GPS heading')
-        ax3.plot(must_uw_data['sim time'], must_uw_data['heading'], label='MUST uw heading')
+        ax3.plot(must_data['sim time'], must_data['heading'], label='MUST original')
+        ax3.plot(gps_data['sim time'], gps_data['heading'], label='GPS')
+        ax3.plot(cal_data['sim time'], cal_data['heading'], label='MUST calibrated smoothed')
 
         ax2.set_title('speed vs. time')
         ax2.set_xlabel('time (seconds)')
@@ -620,30 +608,29 @@ def generate_plots(test_name, test_log, intersection_image_path, gps_folder, mus
         # plt.show()
         plt.clf()
 
-    compute_show_metrics(test_name, must_uw_data, gps_data, must_uw_data_matched, gps_data_matched_uw, output_folder, 'uw')
-    compute_show_metrics(test_name, must_data, gps_data, must_data_matched, gps_data_matched, output_folder, 'calibrated')
+    compute_show_metrics(test_name, must_data, must_data_matched, gps_data_matched, output_folder, 'original')
+    compute_show_metrics(test_name, cal_data, cal_data_matched, gps_data_matched, output_folder, 'calibrated')
 
 
 def main(args):
     ## Folder/data paths
-    if len(args) != 7:
+    if len(args) != 6:
         print('Please use the format: python3 MUST_CP_calibration_analysis.py '
-              'intersection_image_path test_log_path novatel_folder_path udp_folder_path udp_original_folder_path output_folder_path')
+              'intersection_image_path test_log_path novatel_folder_path udp_folder_path output_folder_path')
         exit()
 
     intersection_image = args[1]
     test_log = args[2]
     novatel_folder = args[3]
     udp_folder = args[4]
-    udp_uw_folder = args[5]
-    output_folder = args[6]
+    output_folder = args[5]
 
     test_names = ['MUST-NR_1', 'MUST-ER_1', 'MUST-SR_1', 'MUST-WR_1',
                   'MUST-NS_1', 'MUST-ES_1', 'MUST-SS_1', 'MUST-WS_1',
                   'MUST-NL_1', 'MUST-EL_1', 'MUST-SL_1', 'MUST-WL_1']
     # test_names = ['MUST-NS_1']
     for test_name in test_names:
-        generate_plots(test_name, test_log, intersection_image, novatel_folder, udp_folder, udp_uw_folder, output_folder)
+        generate_plots(test_name, test_log, intersection_image, novatel_folder, udp_folder, output_folder)
 
 
 if __name__ == "__main__":
