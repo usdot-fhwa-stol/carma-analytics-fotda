@@ -12,11 +12,11 @@ The other files, `MUST_CP_calibration_analysis.py` and `compute_homography_image
 
 All of these folder/filenames are defined at the end of each file. The recommended folder structure is:
 
-- Main folder: `/home/$USER/FCP_Data_Analysis`
-- Test log: `/home/$USER/FCP_Data_Analysis/test_log.csv`
-- GPS data folder: `/home/$USER/FCP_Data_Analysis/GPS_data`
-- UDP data folder: `/home/$USER/FCP_Data_Analysis/UDP_data`
-- Output folder: `/home/$USER/FCP_Data_Analysis/Analysis`
+- Main folder: `/home/$USER/fcp_ws/other/FCP_Data_Analysis`
+- Test log: `/home/$USER/fcp_ws/other/FCP_Data_Analysis/test_log.csv`
+- GPS data folder: `/home/$USER/fcp_ws/other/FCP_Data_Analysis/GPS_data`
+- UDP data folder: `/home/$USER/fcp_ws/other/FCP_Data_Analysis/UDP_data`
+- Output folder: `/home/$USER/fcp_ws/other/FCP_Data_Analysis/Analysis`
 
 ### Test log
 
