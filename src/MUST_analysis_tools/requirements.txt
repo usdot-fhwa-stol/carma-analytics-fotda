@@ -1,0 +1,8 @@
+numpy
+matplotlib
+pandas
+datetime
+pyproj
+pathlib
+opencv-python
+basemap
