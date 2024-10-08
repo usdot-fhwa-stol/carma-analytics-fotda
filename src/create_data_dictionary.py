@@ -55,8 +55,8 @@ class DataDictionaryCreator:
                     self.dictionary["Data Element Name"].append(fields[0][0])
                     self.dictionary["Data Element Type"].append(fields[0][1])
                     for i in range(1, len(fields)):
-                        self.dictionary["Topic Name"].append("")
-                        self.dictionary["Message Spec"].append("")
+                        self.dictionary["Topic Name"].append(topic)
+                        self.dictionary["Message Spec"].append(msg_spec)
                         self.dictionary["Data Element Name"].append(fields[i][0])
                         self.dictionary["Data Element Type"].append(fields[i][1])
                 else:
