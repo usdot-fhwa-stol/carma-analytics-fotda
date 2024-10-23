@@ -4,52 +4,112 @@ import argparse, argcomplete
 import os
 import yaml
 import json
+import tqdm
+from rosidl_runtime_py.utilities import get_message
+from rclpy.serialization import deserialize_message
+from matplotlib import pyplot as plt
+
+def analyze_route_state(mcap_path):
+    """Analyze route state data from MCAP file"""
+    if not os.path.exists(mcap_path):
+        raise ValueError(f"MCAP file {mcap_path} does not exist")
+    
+    # Route state topic
+    route_topic = '/guidance/route_state'
+    
+    # Open bag
+    reader, type_map = open_bagfile(mcap_path, topics=[route_topic])
+    
+    if route_topic not in type_map:
+        raise ValueError(f"Topic {route_topic} not found in MCAP file")
+    
+    # Store cross track data and timestamps
+    cross_tracks = []
+    timestamps = []
+    
+    # Read messages
+    print("Reading messages...")
+    while reader.has_next():
+        topic, data, timestamp = reader.read_next()
+        if topic == route_topic:
+            msg_type = type_map[topic]
+            msg = deserialize_message(data, get_message(msg_type))
+            cross_tracks.append(msg.cross_track)
+            timestamps.append(timestamp)
+    
+    if not cross_tracks:
+        raise ValueError("No valid messages found in MCAP file")
+    
+    # Convert to numpy arrays
+    cross_tracks = np.array(cross_tracks)
+    timestamps = np.array(timestamps)
+    
+    # Convert timestamps to seconds from start
+    timestamps = (timestamps - timestamps[0]) / 1e9
+    
+    # Calculate statistics
+    stats = {
+        'minimum': np.min(cross_tracks),
+        'maximum': np.max(cross_tracks),
+        'median': np.median(cross_tracks),
+        'std_dev': np.std(cross_tracks),
+        'mean': np.mean(cross_tracks),
+        'sample_count': len(cross_tracks),
+        'rms': np.sqrt(np.mean(np.square(cross_tracks)))
+    }
+    
+    # Create plot
+    plt.figure(figsize=(12, 6))
+    plt.plot(timestamps, cross_tracks, 'b-', label='Cross Track Error', linewidth=1)
+    plt.axhline(y=stats['median'], color='r', linestyle='--', label='Median')
+    plt.fill_between(timestamps, 
+                    stats['median'] - stats['std_dev'],
+                    stats['median'] + stats['std_dev'],
+                    alpha=0.2, color='r', label='±1 Std Dev')
+    
+    plt.xlabel('Time (seconds)')
+    plt.ylabel('Cross Track Error (m)')
+    plt.title('Route State Cross Track Error Over Time')
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    
+    return stats, plt.gcf(), cross_tracks, timestamps
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Compute the differences between each goal destination and vehicle position on reported arrival"
+        description="Analyze cross track error from route state messages"
     )
-    parser.add_argument("bag_in", type=str, help="Directory of bag to load")
+    parser.add_argument("mcap_file", type=str, help="Path to MCAP file")
+    parser.add_argument("--output", type=str, help="Path to save plot (optional)")
+    parser.add_argument("--save-data", type=str, help="Path to save data as .npz (optional)")
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
-    argdict: dict = vars(args)
-
-    bag_dir = argdict["bag_in"]
-
-    # Open metadata.yaml
-    metadatafile: str = os.path.join(bag_dir, "metadata.yaml")
-    if not os.path.isfile(metadatafile):
-        raise ValueError(
-            "Metadata file %s does not exist. Are you sure %s is a rosbag directory?"
-            % (metadatafile, bag_dir)
-        )
-    with open(metadatafile, "r") as f:
-        metadata_dict: dict = yaml.load(f, Loader=yaml.SafeLoader)[
-            "rosbag2_bagfile_information"
-        ]
-    storage_id = metadata_dict["storage_identifier"]
-    # Goal and Ack topics
-    rviz_topic = "/goal_pose"
-    goal_topic = "/incoming_mobility_operation"
-    ack_topic = "/outgoing_mobility_operation"
-    # Open bag
-    reader, type_map = open_bagfile(
-        bag_dir, topics=[goal_topic, ack_topic, rviz_topic], storage_id=storage_id
-    )
-    # Gather number of messages on each topic
-    topic_count_dict = {
-        entry["topic_metadata"]["name"]: entry["message_count"]
-        for entry in metadata_dict["topics_with_message_count"]
-    }
-    topic_count_dict = {
-        entry["topic_metadata"]["name"]: entry["message_count"]
-        for entry in metadata_dict["topics_with_message_count"]
-    }
-    if rviz_topic not in topic_count_dict:
-        topic_count_dict[rviz_topic] = 0
-    elif goal_topic not in topic_count_dict:
-        topic_count_dict[goal_topic] = 0
-    # Count number of goal/ack messages processed
-    goal_position_count, ack_position_count = 0, 0
-
-    print(json.dumps(topic_count_dict, sort_keys=True, indent=4))
+    
+    try:
+        stats, fig, cross_tracks, timestamps = analyze_route_state(args.mcap_file)
+        
+        print("\nCross Track Error Statistics:")
+        print(f"Minimum: {stats['minimum']:.4f} m")
+        print(f"Maximum: {stats['maximum']:.4f} m")
+        print(f"Median:  {stats['median']:.4f} m")
+        print(f"Mean:    {stats['mean']:.4f} m")
+        print(f"RMS:     {stats['rms']:.4f} m")
+        print(f"Std Dev: {stats['std_dev']:.4f} m")
+        print(f"Sample Count: {stats['sample_count']}")
+        
+        if args.save_data:
+            np.savez(args.save_data, 
+                    cross_tracks=cross_tracks, 
+                    timestamps=timestamps,
+                    stats=stats)
+            print(f"\nData saved to: {args.save_data}")
+            
+        if args.output:
+            plt.savefig(args.output)
+            print(f"\nPlot saved to: {args.output}")
+        else:
+            plt.show()
+            
+    except Exception as e:
+        print(f"Error: {e}")
+        exit(1)
