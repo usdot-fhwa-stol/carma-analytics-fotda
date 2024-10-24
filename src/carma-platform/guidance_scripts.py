@@ -83,3 +83,6 @@ def run_crosstrack_analysis(mcap_path, save_data_dir=None, save_plot_dir=None):
         plt.show()
 
     return (stats, plt.gcf(), cross_tracks, timestamps)
+
+
+# More guidance specific analysis scripts to come ....
