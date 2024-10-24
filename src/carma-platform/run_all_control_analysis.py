@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Dict
-from guidance_scripts import run_crosstrack_analysis
+from guidance_scripts import run_crosstrack_analysis, run_turn_accuracy_analysis
 from run_all_analysis import run_all_analysis
 import argparse
 import argcomplete
@@ -13,6 +13,10 @@ def analyze_mcap_file_for_control_analysis(
     try:
         # 1. Cross_track analysis
         stats, _, _, _ = run_crosstrack_analysis(mcap_path, data_dir, plots_dir)
+
+        # 2. Turn accuracy analysis by spline fitting
+        stats, _, _, _ = run_turn_accuracy_analysis(mcap_path, data_dir, plots_dir)
+
         return stats
     except Exception as e:
         print(f"Error analyzing {mcap_path}: {e}")
