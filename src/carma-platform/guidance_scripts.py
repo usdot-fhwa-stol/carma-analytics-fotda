@@ -9,6 +9,18 @@ from scipy.spatial import KDTree
 
 
 def run_crosstrack_analysis(mcap_path, save_data_dir=None, save_plot_dir=None):
+    """
+    Analyzes cross trask error from CARMA Platform's internal route logic.
+
+    Args:
+        mcap_path: Path to MCAP file
+        save_data_dir: Directory to save extracted data
+        save_plot_dir: Directory to save generated plots
+    Deps:
+        Topics: [/localization/current_pose]
+        Msgs: carma_planning_msgs
+    """
+
     topics = ["/guidance/route_state"]
     extracted_data = extract_mcap_data(
         mcap_path, topics, {"/guidance/route_state": lambda msg: msg.cross_track}
@@ -81,6 +93,9 @@ def run_turn_accuracy_analysis(mcap_path, save_data_dir=None, save_plot_dir=None
         mcap_path: Path to MCAP file
         save_data_dir: Directory to save extracted data
         save_plot_dir: Directory to save generated plots
+    Deps:
+        Topics: [/localization/current_pose, /localization/current_pose]
+        Msgs: carma_planning_msgs
     """
     # Extract actual and planned paths
     actual_path = []
@@ -241,3 +256,239 @@ def run_turn_accuracy_analysis(mcap_path, save_data_dir=None, save_plot_dir=None
         plt.show()
 
     return (stats, plt.gcf(), distances, path_distance)
+
+
+def calculate_instant_acceleration(timestamps, speeds):
+    """
+    Calculate instantaneous acceleration from speed data.
+
+    Args:
+        timestamps: Array of timestamps
+        speeds: Array of corresponding speeds
+
+    Returns:
+        tuple: (accelerations, time_points)
+    """
+    dt = np.diff(timestamps)
+    dv = np.diff(speeds)
+    accelerations = dv / dt
+    time_points = timestamps[:-1] - timestamps[0]  # Normalize time to start at 0
+
+    return accelerations, time_points
+
+
+def calculate_window_acceleration(timestamps, speeds, window_size=1.0):
+    """
+    Calculate average acceleration over 1-second windows, moving forward by 1 point each time.
+
+    Args:
+        timestamps: Array of timestamps in seconds
+        speeds: Array of corresponding speeds
+        window_size: Size of window in seconds (default: 1.0)
+
+    Returns:
+        tuple: (avg_accelerations, avg_timestamps)
+    """
+    avg_accelerations = []
+    avg_timestamps = []
+
+    for i in range(len(timestamps)-1):
+        # Find all points within window_size seconds from current point
+        mask = (timestamps > timestamps[i]) & (timestamps <= timestamps[i] + window_size)
+
+        if np.sum(mask) > 1:  # Need at least 2 points for acceleration
+            window_speeds = speeds[mask]
+            window_times = timestamps[mask]
+
+            # Calculate average acceleration in window
+            avg_acc = (window_speeds[-1] - window_speeds[0]) / (window_times[-1] - window_times[0])
+
+            avg_accelerations.append(avg_acc)
+            avg_timestamps.append(timestamps[i])
+
+    return np.array(avg_accelerations), np.array(avg_timestamps)
+
+
+def calculate_acceleration_stats(accelerations):
+    """
+    Calculate statistics for acceleration data.
+
+    Args:
+        accelerations: Array of acceleration values
+
+    Returns:
+        dict: Statistics dictionary
+    """
+    return {
+        "minimum": np.min(accelerations),
+        "maximum": np.max(accelerations),
+        "median": np.median(accelerations),
+        "mean": np.mean(accelerations),
+        "std_dev": np.std(accelerations),
+        "rms": np.sqrt(np.mean(np.square(accelerations))),
+        "sample_count": len(accelerations),
+    }
+
+
+def plot_acceleration_analysis(
+    time_points, accelerations, stats, title, ylabel, comfort_threshold=2.0, ax=None
+):
+    """
+    Plot acceleration analysis on given axes.
+
+    Args:
+        time_points: Array of time points
+        accelerations: Array of acceleration values
+        stats: Dictionary of statistics
+        title: Plot title
+        ylabel: Y-axis label
+        comfort_threshold: Comfort threshold value
+        ax: Matplotlib axes object (creates new if None)
+    """
+    if ax is None:
+        _, ax = plt.subplots()
+
+    ax.plot(time_points, accelerations, "b-", label="Acceleration", linewidth=1)
+    ax.axhline(y=stats["median"], color="r", linestyle="--", label="Median")
+    ax.fill_between(
+        time_points,
+        stats["median"] - stats["std_dev"],
+        stats["median"] + stats["std_dev"],
+        alpha=0.2,
+        color="r",
+        label="±1 Std Dev",
+    )
+
+    ax.axhline(
+        y=comfort_threshold, color="g", linestyle="--", label="Comfort Threshold"
+    )
+    ax.axhline(y=-comfort_threshold, color="g", linestyle="--")
+
+    ax.set_title(title)
+    ax.set_xlabel("Time (seconds)")
+    ax.set_ylabel(ylabel)
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+
+
+def run_acceleration_comfort_analysis(
+    mcap_path, save_data_dir=None, save_plot_dir=None
+):
+    """
+    Main function to analyze acceleration comfort.
+
+    Args:
+        mcap_path: Path to MCAP file
+        save_data_dir: Directory to save extracted data
+        save_plot_dir: Directory to save generated plots
+    Deps:
+        topics = ["/hardware_interface/vehicle_status"]
+        autoware_msgs need to be built and sourced
+    """
+    # Extract vehicle state data
+    topics = ["/hardware_interface/vehicle_status"]
+    extracted_data = extract_mcap_data(
+        mcap_path, topics, {"/hardware_interface/vehicle_status": lambda msg: msg.speed}
+    )
+
+    timestamps, speeds = extracted_data[topics[0]]
+    timestamps = np.array(timestamps)
+    speeds = np.array(speeds)
+
+    # Calculate instant accelerations
+    accelerations, time_points = calculate_instant_acceleration(timestamps, speeds)
+    instant_stats = calculate_acceleration_stats(accelerations)
+
+    # Calculate 1-second average accelerations
+    avg_accelerations, avg_timestamps = calculate_window_acceleration(
+        timestamps, speeds
+    )
+
+    avg_time_points = avg_timestamps - timestamps[0]
+    avg_stats = calculate_acceleration_stats(avg_accelerations)
+
+    # Create visualization
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
+
+    # Plot both analyses
+    plot_acceleration_analysis(
+        time_points,
+        accelerations,
+        instant_stats,
+        "Instantaneous Acceleration Over Time",
+        "Instant Acceleration (m/s²)",
+        ax=ax1,
+    )
+
+    plot_acceleration_analysis(
+        avg_time_points,
+        avg_accelerations,
+        avg_stats,
+        "1-Second Average Acceleration Over Time",
+        "Average Acceleration (m/s²)",
+        ax=ax2,
+    )
+
+    plt.tight_layout()
+
+    # Print statistics
+    print("\nInstantaneous Acceleration Statistics:")
+    for key, value in instant_stats.items():
+        if key != "sample_count":
+            print(f"{key.replace('_', ' ').title()}: {value:.4f} m/s²")
+        else:
+            print(f"{key.replace('_', ' ').title()}: {value}")
+
+    print("\n1-Second Average Acceleration Statistics:")
+    for key, value in avg_stats.items():
+        if key != "sample_count":
+            print(f"{key.replace('_', ' ').title()}: {value:.4f} m/s²")
+        else:
+            print(f"{key.replace('_', ' ').title()}: {value}")
+
+    # Calculate comfort metrics
+    comfort_threshold = 2.0
+    instant_discomfort = np.sum(np.abs(accelerations) > comfort_threshold)
+    avg_discomfort = np.sum(np.abs(avg_accelerations) > comfort_threshold)
+
+    print(f"\nComfort Analysis:")
+    print(f"Instantaneous Discomfort Events: {instant_discomfort}")
+    print(
+        f"Instantaneous Percentage Uncomfortable: {(instant_discomfort/len(accelerations))*100:.2f}%"
+    )
+    print(f"1-Second Average Discomfort Events: {avg_discomfort}")
+    print(
+        f"1-Second Average Percentage Uncomfortable: {(avg_discomfort/len(avg_accelerations))*100:.2f}%"
+    )
+
+    # Save data if requested
+    if save_data_dir:
+        save_path = Path(save_data_dir)
+        np.savez(
+            save_path / "acceleration_comfort_data.npz",
+            timestamps=timestamps,
+            speeds=speeds,
+            instantaneous_accelerations=accelerations,
+            avg_accelerations=avg_accelerations,
+            instant_stats=instant_stats,
+            avg_stats=avg_stats,
+        )
+        print(f"\nData saved to: {save_data_dir}")
+
+    # Save plot if requested
+    if save_plot_dir:
+        save_path = Path(save_plot_dir)
+        plt.savefig(save_path / "acceleration_comfort_analysis.png")
+        print(f"\nPlot saved to: {save_plot_dir}")
+    else:
+        plt.show()
+
+    return (
+        instant_stats,
+        avg_stats,
+        plt.gcf(),
+        accelerations,
+        avg_accelerations,
+        time_points,
+        avg_time_points,
+    )

@@ -1,6 +1,10 @@
 from pathlib import Path
 from typing import Dict
-from guidance_scripts import run_crosstrack_analysis, run_turn_accuracy_analysis
+from guidance_scripts import (
+    run_crosstrack_analysis,
+    run_turn_accuracy_analysis,
+    run_acceleration_comfort_analysis,
+)
 from run_all_analysis import run_all_analysis
 import argparse
 import argcomplete
@@ -11,13 +15,40 @@ def analyze_mcap_file_for_control_analysis(
 ) -> Dict:
     """Extract single MCAP file and run all control analysis on it"""
     try:
+        analysis_stats = {}
         # 1. Cross_track analysis
-        stats, _, _, _ = run_crosstrack_analysis(mcap_path, data_dir, plots_dir)
+        try:
+            stats, _, _, _ = run_crosstrack_analysis(mcap_path, data_dir, plots_dir)
+            analysis_stats["run_crosstrack_analysis"] = stats
+        except:
+            analysis_stats["run_crosstrack_analysis"] = None
 
         # 2. Turn accuracy analysis by spline fitting
-        stats, _, _, _ = run_turn_accuracy_analysis(mcap_path, data_dir, plots_dir)
+        try:
+            stats, _, _, _ = run_turn_accuracy_analysis(mcap_path, data_dir, plots_dir)
+            analysis_stats["run_turn_accuracy_analysis"] = stats
+        except:
+            analysis_stats["run_turn_accuracy_analysis"] = None
 
-        return stats
+        # 3. Turn accuracy analysis by spline fitting
+        try:
+            stats, _, _, _ = run_acceleration_comfort_analysis(
+                mcap_path, data_dir, plots_dir
+            )
+            analysis_stats["run_acceleration_comfort_analysis"] = stats
+        except:
+            analysis_stats["run_acceleration_comfort_analysis"] = None
+
+        # 4. Turn accuracy analysis by spline fitting
+        try:
+            stats, _, _, _, _, _, _ = run_acceleration_comfort_analysis(
+                mcap_path, data_dir, plots_dir
+            )
+            analysis_stats["run_acceleration_comfort_analysis"] = stats
+        except:
+            analysis_stats["run_acceleration_comfort_analysis"] = None
+
+        return analysis_stats
     except Exception as e:
         print(f"Error analyzing {mcap_path}: {e}")
         return None

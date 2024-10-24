@@ -117,4 +117,5 @@ def extract_mcap_data(mcap_path, topics, field_extractors=None):
 
         result[topic] = (timestamps, values)
 
+    print("Finished extracting the required data for this analysis")
     return result
