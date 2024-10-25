@@ -60,7 +60,26 @@ The script generates:
   - Extracted data (NPZ files)
   - Statistics (JSON files)
 
-For example (summary JSON):
+### Example output folder structure
+```
+analysis_20241025_065250
+├── rosbag2_2024_10_08_20_00_45_0
+│ ├── data
+│ ├── plots
+│ └── stats
+├── rosbag2_2024-10-22_213643_0
+│ ├── data
+│ │ └── extracted_numpy_data.npz
+│ │        ... 
+│ ├── plots
+│ │ └── cross_track_error_over_time.png
+│ │        ...
+│ └── stats
+│   └── cross_track_stats_result.json
+│          ...
+└── analysis_summary.json
+```
+### Example Analysis Summary (JSON)
 ```
 {
   "analysis_time": "2024-10-25T06:52:52.306773",
