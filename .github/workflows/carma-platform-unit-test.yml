@@ -63,6 +63,7 @@ jobs:
           -Dsonar.projectKey=usdot-fhwa-stol_carma-analytics-fotda
           -Dsonar.sources=src/carma-platform
           -Dsonar.tests=src/carma-platform/test
+          -Dsonar.exclusions=src/carma-platform/test/**
           -Dsonar.python.coverage.reportPaths=src/carma-platform/coverage.xml
           -Dsonar.python.xunit.reportPath=src/carma-platform/test-results.xml
           -Dsonar.python.version=3.10
