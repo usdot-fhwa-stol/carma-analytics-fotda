@@ -6,9 +6,16 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import CubicSpline
 from pathlib import Path
 from scipy.spatial import KDTree
+import json
 
 
-def run_crosstrack_analysis(mcap_path, save_data_dir=None, save_plot_dir=None):
+def run_crosstrack_analysis(
+    mcap_path,
+    error_threshold_to_pass_meter=2.0,
+    save_stats_dir=None,
+    save_data_dir=None,
+    save_plot_dir=None,
+):
     """
     Analyzes cross trask error from CARMA Platform's internal route logic.
 
@@ -37,6 +44,9 @@ def run_crosstrack_analysis(mcap_path, save_data_dir=None, save_plot_dir=None):
         "sample_count": len(cross_tracks),
         "rms": np.sqrt(np.mean(np.square(cross_tracks))),
     }
+
+    # Pass or no pass
+    is_passed = float(stats["median"]) < error_threshold_to_pass_meter
 
     # Create plot
     plt.figure(figsize=(12, 6))
@@ -67,6 +77,12 @@ def run_crosstrack_analysis(mcap_path, save_data_dir=None, save_plot_dir=None):
     print(f"Std Dev: {stats['std_dev']:.4f} m")
     print(f"Sample Count: {stats['sample_count']}")
 
+    if save_stats_dir:
+        stats_full_path = save_stats_dir / "cross_track_stats_result.json"
+        with open(stats_full_path, "w") as f:
+            json.dump(stats, f, indent=2)
+        print(f"Stats saved to: {save_stats_dir}")
+
     if save_data_dir:
         np.savez(
             save_data_dir / "extracted_numpy_data.npz",
@@ -82,7 +98,7 @@ def run_crosstrack_analysis(mcap_path, save_data_dir=None, save_plot_dir=None):
     else:
         plt.show()
 
-    return (stats, plt.gcf(), cross_tracks, timestamps)
+    return (is_passed, plt.gcf(), cross_tracks, timestamps)
 
 
 # More guidance specific analysis scripts to come ....
