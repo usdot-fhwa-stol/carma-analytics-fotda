@@ -36,7 +36,7 @@ jobs:
 
     - name: Run tests
       run: |
-        cd src/carma-analytics-fotda/src/carma-platform
+        cd carma-analytics-fotda/src/carma-platform
         python -m pytest test --cov=. --cov-report=xml --junitxml=test-results.xml
 
     - name: SonarCloud Scan
