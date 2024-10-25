@@ -19,7 +19,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.8'
+        python-version: '3.10'
 
     - name: Install dependencies
       run: |
@@ -33,6 +33,7 @@ jobs:
  
         sudo apt-get update
         sudo apt-get install -y ros-humble-rosbag2* ros-humble-rclpy*
+        export PYTHONPATH=$PYTHONPATH:/opt/ros/humble/local/lib/python3.10/dist-packages
 
     - name: Run tests
       run: |
