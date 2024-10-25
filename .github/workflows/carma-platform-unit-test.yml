@@ -1,4 +1,4 @@
-name: Python Unit Tests and Sonar Analysis
+name: CARMA Platform ROS2 Script Python Unit Test
 
 on:
   pull_request:
@@ -36,8 +36,8 @@ jobs:
 
     - name: Run tests
       run: |
-        ls
         cd src/carma-platform
+        source /opt/ros/humble/setup.bash
         python -m pytest test --cov=. --cov-report=xml --junitxml=test-results.xml
 
     - name: SonarCloud Scan
