@@ -37,9 +37,8 @@ jobs:
 
     - name: Run tests
       run: |
-        cd src/carma-platform
         source /opt/ros/humble/setup.bash
-        python -m pytest test --cov=. --cov-report=xml:coverage.xml --junitxml=test-results.xml --cov-context=test
+        python -m pytest src/carma-platform/test --cov=src/carma-platform --cov-report=xml:src/carma-platform/coverage.xml --junitxml=src/carma-platform/test-results.xml
 
     - name: SonarCloud Scan
       uses: SonarSource/sonarcloud-github-action@master
@@ -50,7 +49,7 @@ jobs:
         args: >
           -Dsonar.organization=usdot-fhwa-stol
           -Dsonar.projectKey=usdot-fhwa-stol_carma-analytics-fotda
-          -Dsonar.sources=src/carma-platform
+          -Dsonar.sources=.
           -Dsonar.python.coverage.reportPaths=src/carma-platform/coverage.xml
           -Dsonar.python.xunit.reportPath=src/carma-platform/test-results.xml
 
