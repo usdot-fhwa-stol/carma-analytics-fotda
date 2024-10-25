@@ -48,8 +48,8 @@ jobs:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       with:
         args: >
-          -Dsonar.organization=your-sonar-organization
-          -Dsonar.projectKey=your-project-key
+          -Dsonar.organization=usdot-fhwa-stol
+          -Dsonar.projectKey=usdot-fhwa-stol_carma-analytics-fotda
           -Dsonar.python.coverage.reportPaths=src/carma-platform/coverage.xml
           -Dsonar.python.xunit.reportPath=src/carma-platform/test-results.xml
 
