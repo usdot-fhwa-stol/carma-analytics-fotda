@@ -10,8 +10,9 @@ cd carma-analytics-fotda/src/carma-platform/
 python3 -m pytest test
 """
 
+
 @pytest.fixture
-def mock_mcap_path():U
+def mock_mcap_path():
     return Path("/path/to/mock.mcap")
 
 
