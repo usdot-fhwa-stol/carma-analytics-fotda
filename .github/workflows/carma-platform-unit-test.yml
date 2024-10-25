@@ -40,17 +40,6 @@ jobs:
         cd src/carma-platform
         source /opt/ros/humble/setup.bash
         python -m pytest test --cov=. --cov-report=xml:./coverage.xml --junitxml=./test-results.xml --cov-context=test
-        ls
-
-    - name: Debug information
-      run: |
-        echo "Current directory: $(pwd)"
-        echo "Contents of src/carma-platform:"
-        ls -R src/carma-platform
-        echo "Contents of coverage.xml:"
-        cat src/carma-platform/coverage.xml
-        echo "Contents of test-results.xml:"
-        cat src/carma-platform/test-results.xml
         
     - name: SonarCloud Scan
       uses: SonarSource/sonarcloud-github-action@master
@@ -68,11 +57,6 @@ jobs:
           -Dsonar.python.xunit.reportPath=src/carma-platform/test-results.xml
           -Dsonar.python.version=3.10
           -Dsonar.verbose=true
-    - name: Print SonarCloud scan logs
-      run: |
-        echo "SonarCloud scan logs:"
-        cat .scannerwork/sonar-project.properties
-        cat .scannerwork/report-task.txt
 
     - name: Check Quality Gate
       uses: sonarsource/sonarqube-quality-gate-action@master
