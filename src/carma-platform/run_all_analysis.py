@@ -29,8 +29,8 @@ def run_all_analysis(
     Args:
         input_dir (Path): Directory containing MCAP files to analyze
         analysis_func (Callable): Function that performs analysis on a single MCAP file
-                                Should accept (mcap_file, output_dir, data_dir, plots_dir)
-                                Should return Dict[str, Optional[bool]] where True means pass
+                                Should accept (mcap_file, output_dir, stats_dir, data_dir, plots_dir)
+                                Should return Dict[str, Optional[bool]] where True means pass, None is error
         output_base_dir (Optional[Path]): Base directory for saving results
         analysis_name (str): Name of the analysis for directory naming
     """
@@ -70,6 +70,7 @@ def run_all_analysis(
         ]:
             dir_path.mkdir(parents=True, exist_ok=True)
 
+        # Run the use case analysis function
         try:
             result = analysis_func(
                 mcap_file,
