@@ -39,7 +39,7 @@ jobs:
       run: |
         cd src/carma-platform
         source /opt/ros/humble/setup.bash
-        python -m pytest test --cov=. --cov-report=xml:${{ github.workspace }}/src/carma-platform/coverage.xml --junitxml=${{ github.workspace }}/src/carma-platform/test-results.xml --cov-context=test
+        python -m pytest test --cov=. --cov-report=xml:./coverage.xml --junitxml=./test-results.xml --cov-context=test
         ls
 
     - name: Debug information
@@ -61,9 +61,9 @@ jobs:
         args: >
           -Dsonar.organization=usdot-fhwa-stol
           -Dsonar.projectKey=usdot-fhwa-stol_carma-analytics-fotda
-          -Dsonar.sources=${{ github.workspace }}/src/carma-platform
-          -Dsonar.python.coverage.reportPaths=${{ github.workspace }}/src/carma-platform/coverage.xml
-          -Dsonar.python.xunit.reportPath=${{ github.workspace }}/src/carma-platform/test-results.xml
+          -Dsonar.sources=src/carma-platform
+          -Dsonar.python.coverage.reportPaths=src/carma-platform/coverage.xml
+          -Dsonar.python.xunit.reportPath=src/carma-platform/test-results.xml
 
     - name: Check Quality Gate
       uses: sonarsource/sonarqube-quality-gate-action@master
