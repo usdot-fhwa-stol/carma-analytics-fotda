@@ -24,8 +24,15 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest pytest-cov
-        pip install numpy matplotlib rosbag2_py rclpy
+        pip install pytest pytest-cov numpy matplotlib
+        # Add the ROS2 GPG key
+        sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+
+        # Add the repository to sources list
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+ 
+        sudo apt-get update
+        sudo apt-get install -y ros-humble-rosbag2-py ros-hubmle-rclpy
 
     - name: Run tests
       run: |
