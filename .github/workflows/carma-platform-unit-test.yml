@@ -41,6 +41,16 @@ jobs:
         source /opt/ros/humble/setup.bash
         python -m pytest test --cov=. --cov-report=xml:${{ github.workspace }}/src/carma-platform/coverage.xml --junitxml=${{ github.workspace }}/src/carma-platform/test-results.xml --cov-context=test
         ls
+
+    - name: Debug information
+      run: |
+        echo "Current directory: $(pwd)"
+        echo "Contents of src/carma-platform:"
+        ls -R src/carma-platform
+        echo "Contents of coverage.xml:"
+        cat src/carma-platform/coverage.xml
+        echo "Contents of test-results.xml:"
+        cat src/carma-platform/test-results.xml
         
     - name: SonarCloud Scan
       uses: SonarSource/sonarcloud-github-action@master
