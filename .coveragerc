@@ -1,4 +1,0 @@
-[run]
-omit = 
-    */**/src/carma-platform/test/*
-    */**/src/carma-platform/run_all_control_analysis.py
