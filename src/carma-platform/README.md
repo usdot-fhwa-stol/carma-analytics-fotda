@@ -8,7 +8,7 @@ This package contains scripts for analyzing MCAP (ROS2 bag) files from CARMA Pla
 2. `run_all_analysis.py`: Provides a framework for running multiple analyses on a set of MCAP files.
 3. `run_all_control_analysis.py`: Implements specific control-related analyses using the framework from `run_all_analysis.py`.
 4. `guidance_scripts.py`: Contains individual analysis functions, such as cross-track error analysis.
-5. `parse_ros_bags.py`: Contains previous ROS1 functionality for 
+5. `parse_ros_bags.py`: Contains previous ROS1 functionality for data analysis. It maybe deprecated in the future.
 ## How to Use
 
 ### Prerequisites
