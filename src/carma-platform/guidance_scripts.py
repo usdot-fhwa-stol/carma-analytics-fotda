@@ -162,7 +162,7 @@ def run_crosstrack_analysis(
     else:
         plt.show()
 
-    return (is_passed, plt.gcf(), cross_tracks, timestamps)
+    return (is_passed, stats, plt.gcf(), cross_tracks, timestamps)
 
 
 # More guidance specific analysis scripts to come ....

@@ -28,7 +28,7 @@ Analyzes cross-track error from CARMA Platform's internal route logic using topi
 - `save_plot_dir`: Directory to save generated plots (optional)
 
 #### Output:
-- Returns a tuple: (is_passed, plot_figure, cross_tracks, timestamps)
+- Returns a tuple: (is_passed, stats, plot_figure, cross_tracks, timestamps)
 - Saves statistics as JSON, data as NPZ, and plot as PNG (if directories are provided)
 
 #### Example Plot:
@@ -45,3 +45,4 @@ To add a new analysis function:
 2. Ensure it follows a similar structure to existing functions (e.g., `run_crosstrack_analysis`).
 3. Update this README to include documentation for the new function.
 4. Integrate the new function into the main analysis pipeline for specific use case(`run_all_control_analysis.py` or others).
+5. If the function is going to be reused a lot, please add unit test to the test folder. One can run it by `python3 -m pytest test` in carma-platform folder.

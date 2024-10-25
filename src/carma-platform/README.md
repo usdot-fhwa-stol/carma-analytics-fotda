@@ -14,14 +14,14 @@ This package contains scripts for analyzing MCAP (ROS2 bag) files from CARMA Pla
 ### Prerequisites
 
 - Python 3.6+
-- Required Python packages: rosbag2_py, numpy, matplotlib, scipy, argcomplete
+- Required Python packages: rosbag2_py, numpy, matplotlib, scipy, argcomplete, pytest (for unit test)
 - Required ROS2 messages to be built and sourced
 
 Install the required packages:
 
 ```
 bash
-pip install rosbag2_py numpy matplotlib scipy argcomplete
+pip install rosbag2_py numpy matplotlib scipy argcomplete, pytest
 ```
 
 ### Running Analyses

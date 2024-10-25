@@ -32,7 +32,7 @@ def analyze_mcap_file_for_control_analysis(
     # 1. Cross_track analysis
     try:
 
-        is_passed, _, _, _ = run_crosstrack_analysis(
+        is_passed, _, _, _, _ = run_crosstrack_analysis(
             mcap_path,
             CROSS_TRACK_ERROR_THRESHOLD_METER,
             engage_time,
