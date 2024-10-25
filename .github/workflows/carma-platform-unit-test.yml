@@ -50,8 +50,8 @@ jobs:
         args: >
           -Dsonar.organization=your-sonar-organization
           -Dsonar.projectKey=your-project-key
-          -Dsonar.python.coverage.reportPaths=src/carma-analytics-fotda/src/carma-platform/coverage.xml
-          -Dsonar.python.xunit.reportPath=src/carma-analytics-fotda/src/carma-platform/test-results.xml
+          -Dsonar.python.coverage.reportPaths=src/carma-platform/coverage.xml
+          -Dsonar.python.xunit.reportPath=src/carma-platform/test-results.xml
 
     - name: Check Quality Gate
       uses: sonarsource/sonarqube-quality-gate-action@master
