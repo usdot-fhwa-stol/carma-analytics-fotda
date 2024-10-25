@@ -4,7 +4,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
   push:
-    branches: [develop, master, arc-54-control-analysis-scripts-run-all-crosstrack] #TODO
+    branches: [develop, master, release/*]
 
 jobs:
   test_and_sonar:
@@ -30,9 +30,11 @@ jobs:
 
         # Add the repository to sources list
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
- 
+
+        # Install ROS2 Bag analysis dependencies
         sudo apt-get update
         sudo apt-get install -y ros-humble-rosbag2* ros-humble-rclpy*
+        # Configure PYTHONPATH to have modules be found 
         export PYTHONPATH=$PYTHONPATH:/opt/ros/humble/local/lib/python3.10/dist-packages
         export PYTHONPATH=$PYTHONPATH:$(pwd):$(pwd)/src/carma-platform
 
@@ -40,7 +42,6 @@ jobs:
       run: |
         source /opt/ros/humble/setup.bash
         python -m pytest src/carma-platform/test --cov=. --cov-report=xml:./coverage.xml --junitxml=./test-results.xml --cov-context=test
-        ls -la
         
     - name: SonarCloud Scan
       uses: SonarSource/sonarcloud-github-action@master
@@ -58,12 +59,6 @@ jobs:
           -Dsonar.python.xunit.reportPath=./test-results.xml
           -Dsonar.python.version=3.10
           -Dsonar.verbose=true
-
-    - name: Debug
-      run: |
-        ls -la src/carma-platform
-        cat /home/runner/work/carma-analytics-fotda/carma-analytics-fotda/test-results.xml
-        cat /home/runner/work/carma-analytics-fotda/carma-analytics-fotda/coverage.xml
 
     - name: Check Quality Gate
       uses: sonarsource/sonarqube-quality-gate-action@master
