@@ -62,8 +62,16 @@ jobs:
           -Dsonar.organization=usdot-fhwa-stol
           -Dsonar.projectKey=usdot-fhwa-stol_carma-analytics-fotda
           -Dsonar.sources=src/carma-platform
+          -Dsonar.tests=src/carma-platform/test
           -Dsonar.python.coverage.reportPaths=src/carma-platform/coverage.xml
           -Dsonar.python.xunit.reportPath=src/carma-platform/test-results.xml
+          -Dsonar.python.version=3.10
+          -Dsonar.verbose=true
+    - name: Print SonarCloud scan logs
+      run: |
+        echo "SonarCloud scan logs:"
+        cat .scannerwork/sonar-project.properties
+        cat .scannerwork/report-task.txt
 
     - name: Check Quality Gate
       uses: sonarsource/sonarqube-quality-gate-action@master
