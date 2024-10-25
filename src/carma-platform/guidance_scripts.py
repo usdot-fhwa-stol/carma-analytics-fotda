@@ -9,6 +9,23 @@ from scipy.spatial import KDTree
 import json
 
 
+def print_stats(stats: dict, title: str, decimal_places: int = 4) -> None:
+    """
+    Print statistics.
+
+    Args:
+        stats: Dictionary of statistics
+        title: Title for the statistics block
+        decimal_places: Number of decimal places (default: 4)
+    """
+    print(f"\n{title}:")
+    for key, value in stats.items():
+        if isinstance(value, (int, bool)):
+            print(f"{key}: {value}")
+        else:
+            print(f"{key}: {value:.{decimal_places}f}")
+
+
 def run_crosstrack_analysis(
     mcap_path,
     error_threshold_to_pass_meter=2.0,
@@ -67,15 +84,8 @@ def run_crosstrack_analysis(
     plt.grid(True, alpha=0.3)
     plt.legend()
 
-    # Print
-    print("\nCross Track Error Statistics:")
-    print(f"Minimum: {stats['minimum']:.4f} m")
-    print(f"Maximum: {stats['maximum']:.4f} m")
-    print(f"Median:  {stats['median']:.4f} m")
-    print(f"Mean:    {stats['mean']:.4f} m")
-    print(f"RMS:     {stats['rms']:.4f} m")
-    print(f"Std Dev: {stats['std_dev']:.4f} m")
-    print(f"Sample Count: {stats['sample_count']}")
+    # Print Stats
+    print_stats(stats, "Cross Track Error Statistics")
 
     if save_stats_dir:
         stats_full_path = save_stats_dir / "cross_track_stats_result.json"
@@ -85,7 +95,7 @@ def run_crosstrack_analysis(
 
     if save_data_dir:
         np.savez(
-            save_data_dir / "extracted_numpy_data.npz",
+            save_data_dir / "cross_track_extracted_numpy_data.npz",
             timestamps=timestamps,
             cross_tracks=cross_tracks,
             stats=stats,
