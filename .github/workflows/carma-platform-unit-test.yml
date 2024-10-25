@@ -1,0 +1,51 @@
+name: Python Unit Tests and Sonar Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [develop, master, arc-54-control-analysis-scripts-run-all-crosstrack] #TODO
+
+jobs:
+  test_and_sonar:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.8'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov
+        pip install numpy matplotlib rosbag2_py rclpy
+
+    - name: Run tests
+      run: |
+        cd src/carma-analytics-fotda/src/carma-platform
+        python -m pytest test --cov=. --cov-report=xml --junitxml=test-results.xml
+
+    - name: SonarCloud Scan
+      uses: SonarSource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      with:
+        args: >
+          -Dsonar.organization=your-sonar-organization
+          -Dsonar.projectKey=your-project-key
+          -Dsonar.python.coverage.reportPaths=src/carma-analytics-fotda/src/carma-platform/coverage.xml
+          -Dsonar.python.xunit.reportPath=src/carma-analytics-fotda/src/carma-platform/test-results.xml
+
+    - name: Check Quality Gate
+      uses: sonarsource/sonarqube-quality-gate-action@master
+      timeout-minutes: 5
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
