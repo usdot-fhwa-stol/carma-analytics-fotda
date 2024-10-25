@@ -1,0 +1,61 @@
+name: CARMA Platform ROS2 Script Python Unit Test
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [develop, master, arc-54-control-analysis-scripts-run-all-crosstrack] #TODO
+
+jobs:
+  test_and_sonar:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov numpy matplotlib pyYAML scipy
+        # Add the ROS2 GPG key
+        sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+
+        # Add the repository to sources list
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+ 
+        sudo apt-get update
+        sudo apt-get install -y ros-humble-rosbag2* ros-humble-rclpy*
+        export PYTHONPATH=$PYTHONPATH:/opt/ros/humble/local/lib/python3.10/dist-packages
+
+    - name: Run tests
+      run: |
+        source /opt/ros/humble/setup.bash
+        python -m pytest src/carma-platform/test --cov=src/carma-platform --cov-report=xml:src/carma-platform/coverage.xml --junitxml=src/carma-platform/test-results.xml
+        ls
+        
+    - name: SonarCloud Scan
+      uses: SonarSource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      with:
+        args: >
+          -Dsonar.organization=usdot-fhwa-stol
+          -Dsonar.projectKey=usdot-fhwa-stol_carma-analytics-fotda
+          -Dsonar.sources=.
+          -Dsonar.python.coverage.reportPaths=src/carma-platform/coverage.xml
+          -Dsonar.python.xunit.reportPath=src/carma-platform/test-results.xml
+
+    - name: Check Quality Gate
+      uses: sonarsource/sonarqube-quality-gate-action@master
+      timeout-minutes: 5
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
