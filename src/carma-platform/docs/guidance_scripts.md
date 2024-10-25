@@ -4,6 +4,18 @@ This file contains various analysis functions for CARMA Platform data, focusing 
 
 ## Functions
 
+### get_engage_time
+
+Get the (engage, disengage_time) as a tuple from /guidance/state. Returns last recorded time if no disengaged.
+NOTE: If there are multiple engage operations, it will only take the first engage time as the start_time. 
+
+#### Parameters:
+- `mcap_path`: Path to MCAP file
+
+#### Output:
+- Returns a tuple: (start_time, end_time)
+
+
 ### run_crosstrack_analysis
 
 Analyzes cross-track error from CARMA Platform's internal route logic using topic /guidance/route_state

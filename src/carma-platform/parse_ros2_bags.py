@@ -16,12 +16,10 @@ def get_rosbag_options(path, serialization_format="cdr", storage_id="sqlite3"):
     return storage_options, converter_options
 
 
-def open_bagfile(path, topics=[]):
+def open_bagfile(path, topics=[], serialization_format="cdr", storage_id="mcap"):
     """Configure and open MCAP file reader"""
-    storage_options = rosbag2_py.StorageOptions(uri=path, storage_id="mcap")
-
-    converter_options = rosbag2_py.ConverterOptions(
-        input_serialization_format="cdr", output_serialization_format="cdr"
+    storage_options, converter_options = get_rosbag_options(
+        path, serialization_format=serialization_format, storage_id=storage_id
     )
 
     reader = rosbag2_py.SequentialReader()
@@ -39,13 +37,15 @@ def open_bagfile(path, topics=[]):
     return reader, type_map
 
 
-def extract_mcap_data(mcap_path, topics, field_extractors=None):
+def extract_mcap_data(mcap_path, topics, start_time=None, end_time=None, field_extractors=None):
     """
-    Extract data from specified topics in an MCAP file.
+    Extract data from specified topics in an MCAP file within a given time range.
 
     Args:
         mcap_path (str): Path to the MCAP file
         topics (list): List of topics to extract data from
+        start_time (float): Optional start time in seconds from beginning of recording
+        end_time (float): Optional end time in seconds from beginning of recording
         field_extractors (dict): Optional dictionary mapping topics to functions that extract
                                 desired fields from the message. If None, returns entire message.
                                 Example: {"/topic": lambda msg: msg.field_name}
@@ -107,13 +107,29 @@ def extract_mcap_data(mcap_path, topics, field_extractors=None):
 
     # Convert to numpy arrays and normalize timestamps
     result = {}
+    global_start_time = min(data[t]["timestamps"][0] for t in topics)
+    
     for topic, topic_data in data.items():
         timestamps = np.array(topic_data["timestamps"])
         values = np.array(topic_data["values"])
 
         # Convert timestamps to seconds from start
-        start_time = min(data[t]["timestamps"][0] for t in topics)
-        timestamps = (timestamps - start_time) / 1e9
+        timestamps = (timestamps - global_start_time) / 1e9
+
+        # Filter based on time range if specified
+        if start_time is not None or end_time is not None:
+            mask = np.ones_like(timestamps, dtype=bool)
+            if start_time is not None:
+                mask &= (timestamps >= start_time)
+            if end_time is not None:
+                mask &= (timestamps <= end_time)
+                
+            timestamps = timestamps[mask]
+            values = values[mask]
+
+            # Check if we have any data left after filtering
+            if len(timestamps) == 0:
+                raise ValueError(f"No data found for topic {topic} in specified time range")
 
         result[topic] = (timestamps, values)
 
