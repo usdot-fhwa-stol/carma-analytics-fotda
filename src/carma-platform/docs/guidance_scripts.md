@@ -28,7 +28,7 @@ Analyzes cross-track error from CARMA Platform's internal route logic using topi
 - `save_plot_dir`: Directory to save generated plots (optional)
 
 #### Output:
-- Returns a tuple: (is_passed, plot_figure, cross_tracks, timestamps)
+- Returns a tuple: (is_passed, stats, plot_figure, cross_tracks, timestamps)
 - Saves statistics as JSON, data as NPZ, and plot as PNG (if directories are provided)
 
 #### Example Plot:
