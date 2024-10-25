@@ -39,7 +39,8 @@ jobs:
       run: |
         source /opt/ros/humble/setup.bash
         python -m pytest src/carma-platform/test --cov=src/carma-platform --cov-report=xml:src/carma-platform/coverage.xml --junitxml=src/carma-platform/test-results.xml
-
+        ls
+        
     - name: SonarCloud Scan
       uses: SonarSource/sonarcloud-github-action@master
       env:
