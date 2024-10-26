@@ -17,6 +17,7 @@ def mock_mcap_path():
 
 
 def test_get_engage_time(mock_mcap_path):
+    STARTUP = 1
     ACTIVE = 3
     ENGAGED = 4
     INACTIVE = 5
