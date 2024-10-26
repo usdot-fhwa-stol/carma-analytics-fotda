@@ -16,6 +16,92 @@ def find_mcap_files(input_dir: Path) -> List[Path]:
     return mcap_files
 
 
+def create_output_directories(output_dir: Path, file_name: str) -> Tuple[Path, Path, Path, Path]:
+    """Create per-file directory structure for analysis results."""
+    file_output_dir = output_dir / file_name
+    file_stats_dir = file_output_dir / "stats"
+    file_data_dir = file_output_dir / "data"
+    file_plots_dir = file_output_dir / "plots"
+
+    for dir_path in [file_output_dir, file_stats_dir, file_data_dir, file_plots_dir]:
+        dir_path.mkdir(parents=True, exist_ok=True)
+
+    return file_output_dir, file_stats_dir, file_data_dir, file_plots_dir
+
+
+def analyze_mcap_file(
+    mcap_file: Path,
+    analysis_func: Callable[[Path, Path, Path, Path, Path], Dict[str, Optional[bool]]],
+    output_dir: Path
+) -> Dict[str, Optional[bool]]:
+    """Analyze a single MCAP file and return the results."""
+    file_name = mcap_file.stem
+    file_output_dir, file_stats_dir, file_data_dir, file_plots_dir = create_output_directories(output_dir, file_name)
+
+    try:
+        result = analysis_func(mcap_file, file_output_dir, file_stats_dir, file_data_dir, file_plots_dir)
+        if not isinstance(result, dict):
+            print(f"Warning: Analysis result for {mcap_file} is not a dictionary")
+            return None
+        return result
+    except Exception as e:
+        print(f"Error analyzing {mcap_file}: {e}")
+        return None
+
+
+def update_metrics_results(result: Dict[str, Optional[bool]], metrics_results: defaultdict) -> None:
+    """Update metrics results based on the analysis result."""
+    for metric, passed in result.items():
+        if passed is None:
+            metrics_results[metric]["errors"] += 1
+        elif passed:
+            metrics_results[metric]["passed"] += 1
+        else:
+            metrics_results[metric]["failed"] += 1
+
+
+def create_summary(mcap_files: List[Path], results: defaultdict, metrics_results: defaultdict, analysis_name: str, output_dir: Path) -> None:
+    """Create a summary report of the analysis."""
+    summary = {
+        "analysis_time": datetime.now().isoformat(),
+        "analysis_type": analysis_name,
+        "total_files_analyzed": len(mcap_files),
+        "metrics_summary": {
+            metric: {
+                "total_files": len(mcap_files),
+                "passed": results["passed"],
+                "failed": results["failed"],
+                "errors": results["errors"],
+                "pass_rate": f"{results['passed']/len(mcap_files):.2%}",
+                "error_rate": f"{results['errors']/len(mcap_files):.2%}",
+            }
+            for metric, results in metrics_results.items()
+        },
+        "analyzed_files": {
+            mcap_file.name: {
+                "output_dir": str(output_dir / mcap_file.stem),
+                "metrics_results": results[str(mcap_file)],
+            }
+            for mcap_file in mcap_files
+        },
+    }
+
+    summary_path = output_dir / "analysis_summary.json"
+    with open(summary_path, "w") as f:
+        json.dump(summary, f, indent=2)
+
+    # Print metrics summary for convenience
+    print("\nMetrics Summary:")
+    for metric, results in metrics_results.items():
+        print(f"\n{metric}:")
+        print(f"- Passed: {results['passed']} ({results['passed']/len(mcap_files):.2%})")
+        print(f"- Failed: {results['failed']} ({results['failed']/len(mcap_files):.2%})")
+        if results["errors"] > 0:
+            print(f"- Errors: {results['errors']} ({results['errors']/len(mcap_files):.2%})")
+
+    print(f"\nAnalysis complete. Summary saved to: {summary_path}")
+
+
 def run_all_analysis(
     input_dir: Path,
     analysis_func: Callable[[Path, Path, Path, Path], Dict[str, Optional[bool]]],
@@ -53,92 +139,11 @@ def run_all_analysis(
 
     for mcap_file in mcap_files:
         print(f"\nAnalyzing {mcap_file}...")
+        result = analyze_mcap_file(mcap_file, analysis_func, output_dir)
+        results[str(mcap_file)] = result
 
-        # Create per-file directory structure
-        file_name = mcap_file.stem
-        file_output_dir = output_dir / file_name
-        file_stats_dir = file_output_dir / "stats"
-        file_data_dir = file_output_dir / "data"
-        file_plots_dir = file_output_dir / "plots"
-
-        # Create per-file directories
-        for dir_path in [
-            file_output_dir,
-            file_stats_dir,
-            file_data_dir,
-            file_plots_dir,
-        ]:
-            dir_path.mkdir(parents=True, exist_ok=True)
-
-        # Run the use case analysis function
-        try:
-            result = analysis_func(
-                mcap_file,
-                file_output_dir,
-                file_stats_dir,
-                file_data_dir,
-                file_plots_dir,
-            )
-            if not isinstance(result, dict):
-                print(f"Warning: Analysis result for {mcap_file} is not a dictionary")
-                results[str(mcap_file)] = None
-            else:
-                results[str(mcap_file)] = result
-                # Count passes and fails for each metric
-                print(f"Printing results: {results[str(mcap_file)]}")
-                for metric, passed in result.items():
-                    if passed is None:
-                        metrics_results[metric]["errors"] += 1
-                    elif passed:
-                        metrics_results[metric]["passed"] += 1
-                    else:
-                        metrics_results[metric]["failed"] += 1
-        except Exception as e:
-            print(f"Error analyzing {mcap_file}: {e}")
-            results[str(mcap_file)] = None
+        if result is not None:
+            update_metrics_results(result, metrics_results)
 
     # Create summary report
-    summary = {
-        "analysis_time": datetime.now().isoformat(),
-        "analysis_type": analysis_name,
-        "total_files_analyzed": len(mcap_files),
-        "metrics_summary": {
-            metric: {
-                "total_files": len(mcap_files),
-                "passed": results["passed"],
-                "failed": results["failed"],
-                "errors": results["errors"],
-                "pass_rate": f"{results['passed']/len(mcap_files):.2%}",
-                "error_rate": f"{results['errors']/len(mcap_files):.2%}",
-            }
-            for metric, results in metrics_results.items()
-        },
-        "analyzed_files": {
-            mcap_file.name: {
-                "output_dir": str(output_dir / mcap_file.stem),
-                "metrics_results": results[str(mcap_file)],
-            }
-            for mcap_file in mcap_files
-        },
-    }
-
-    summary_path = output_dir / "analysis_summary.json"
-    with open(summary_path, "w") as f:
-        json.dump(summary, f, indent=2)
-
-    print(f"\nAnalysis complete. Summary saved to: {summary_path}")
-
-    # Print metrics summary
-    print("\nMetrics Summary:")
-    for metric, results in metrics_results.items():
-        print(f"\n{metric}:")
-        print(
-            f"- Passed: {results['passed']} ({results['passed']/len(mcap_files):.2%})"
-        )
-        print(
-            f"- Failed: {results['failed']} ({results['failed']/len(mcap_files):.2%})"
-        )
-        if results["errors"] > 0:
-            print(
-                f"- Errors: {results['errors']} ({results['errors']/len(mcap_files):.2%})"
-            )
+    create_summary(mcap_files, results, metrics_results, analysis_name, output_dir)

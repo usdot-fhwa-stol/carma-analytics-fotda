@@ -17,12 +17,9 @@ def mock_mcap_path():
 
 
 def test_get_engage_time(mock_mcap_path):
-    STARTUP = 1
-    DRIVERS_READY = 2
     ACTIVE = 3
     ENGAGED = 4
     INACTIVE = 5
-    ENTER_PARK = 6
     SHUTDOWN = 0
     with patch("guidance_scripts.extract_mcap_data") as mock_extract:
         mock_extract.return_value = {

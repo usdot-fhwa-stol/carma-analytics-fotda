@@ -36,7 +36,6 @@ def get_engage_time(mcap_path):
     Deps:
         Topics: [/guidance/state]
     """
-    STARTUP = 1
     DRIVERS_READY = 2
     ACTIVE = 3
     ENGAGED = 4
