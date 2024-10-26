@@ -42,11 +42,11 @@ def analyze_mcap_file(
         result = analysis_func(mcap_file, file_output_dir, file_stats_dir, file_data_dir, file_plots_dir)
         if not isinstance(result, dict):
             print(f"Warning: Analysis result for {mcap_file} is not a dictionary")
-            return None
+            return {}
         return result
     except Exception as e:
         print(f"Error analyzing {mcap_file}: {e}")
-        return None
+        return {}
 
 
 def update_metrics_results(result: Dict[str, Optional[bool]], metrics_results: defaultdict) -> None:
@@ -60,7 +60,7 @@ def update_metrics_results(result: Dict[str, Optional[bool]], metrics_results: d
             metrics_results[metric]["failed"] += 1
 
 
-def create_summary(mcap_files: List[Path], results: defaultdict, metrics_results: defaultdict, analysis_name: str, output_dir: Path) -> None:
+def create_summary(mcap_files: List[Path], results: dict, metrics_results: defaultdict, analysis_name: str, output_dir: Path) -> None:
     """Create a summary report of the analysis."""
     summary = {
         "analysis_time": datetime.now().isoformat(),
@@ -142,7 +142,7 @@ def run_all_analysis(
         result = analyze_mcap_file(mcap_file, analysis_func, output_dir)
         results[str(mcap_file)] = result
 
-        if result is not None:
+        if result:
             update_metrics_results(result, metrics_results)
 
     # Create summary report
