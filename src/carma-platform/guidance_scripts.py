@@ -228,7 +228,6 @@ def run_turn_accuracy_analysis(
     # Extract actual and planned paths
     actual_path = []
     planned_path = []
-    last_planned_point = None
 
     # Extract messages from MCAP
     topics = ["/localization/current_pose", "/guidance/plan_trajectory"]
