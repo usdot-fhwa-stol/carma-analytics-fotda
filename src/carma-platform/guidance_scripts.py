@@ -8,6 +8,8 @@ from pathlib import Path
 from scipy.spatial import KDTree
 import json
 
+STD_DEV_LABEL_STRING = "±1 Std Dev"
+TIME_SECONDS_LABEL_STRING = "Time (seconds)"
 
 def print_stats(stats: dict, title: str, decimal_places: int = 4) -> None:
     """
@@ -142,10 +144,10 @@ def run_crosstrack_analysis(
         stats["median"] + stats["std_dev"],
         alpha=0.2,
         color="r",
-        label="±1 Std Dev",
+        label=STD_DEV_LABEL_STRING,
     )
 
-    plt.xlabel("Time (seconds)")
+    plt.xlabel(TIME_SECONDS_LABEL_STRING)
     plt.ylabel("Cross Track Error (m)")
     plt.title("Route State Cross Track Error Over Time")
     plt.grid(True, alpha=0.3)
@@ -177,6 +179,28 @@ def run_crosstrack_analysis(
 
     return (is_passed, stats, plt.gcf(), cross_tracks, timestamps)
 
+def process_actual_path(odom_data):
+    """Helper function that processes actual path data."""
+    return np.array([[point[0], point[1]] for point in odom_data])
+
+def process_planned_path(traj_plans):
+    """Helper function that processes planned path data with duplicate removal."""
+    planned_path = []
+    last_planned_point = None
+
+    for plan in traj_plans:
+        for point in plan:
+            if last_planned_point is None:
+                planned_path.append(point)
+                last_planned_point = point
+            else:
+                dist = np.linalg.norm(np.array(point) - np.array(last_planned_point))
+                if dist > 0.25:  # 0.25m threshold
+                    planned_path.append(point)
+                    last_planned_point = point
+                    break
+
+    return np.array(planned_path)
 
 def run_turn_accuracy_analysis(
     mcap_path,
@@ -227,27 +251,13 @@ def run_turn_accuracy_analysis(
     # Process actual path
     timestamps, odom = extracted_data[topics[0]]
 
-    for point in odom:
-        actual_path.append([point[0], point[1]])
-    actual_path = np.array(actual_path)
+    actual_path = process_actual_path(odom)
 
     # Process planned path with duplicate removal
     # timestamp source here is not too important
     _, traj_plans = extracted_data[topics[1]]
 
-    for plan in traj_plans:
-        for point in plan:
-            if last_planned_point is None:
-                planned_path.append(point)
-                last_planned_point = point
-            else:
-                dist = np.linalg.norm(np.array(point) - np.array(last_planned_point))
-                if dist > 0.25:  # 0.25m threshold
-                    planned_path.append(point)
-                    last_planned_point = point
-                    break
-
-    planned_path = np.array(planned_path)
+    planned_path = process_planned_path(traj_plans)
 
     # Fit spline to planned path
     t = np.linspace(0, 1, len(planned_path))
@@ -325,11 +335,11 @@ def run_turn_accuracy_analysis(
         stats["median"] + stats["std_dev"],
         alpha=0.2,
         color="r",
-        label="±1 Std Dev",
+        label=STD_DEV_LABEL_STRING,
     )
 
     plt.title("Turn Accuracy Error Over Time")
-    plt.xlabel("Time (seconds)")
+    plt.xlabel(TIME_SECONDS_LABEL_STRING)
     plt.ylabel("Error (m)")
     plt.grid(True, alpha=0.3)
     plt.legend()
@@ -473,7 +483,7 @@ def plot_acceleration_analysis(
         stats["median"] + stats["std_dev"],
         alpha=0.2,
         color="r",
-        label="±1 Std Dev",
+        label=STD_DEV_LABEL_STRING,
     )
 
     ax.axhline(
@@ -482,7 +492,7 @@ def plot_acceleration_analysis(
     ax.axhline(y=-comfort_threshold, color="g", linestyle="--")
 
     ax.set_title(title)
-    ax.set_xlabel("Time (seconds)")
+    ax.set_xlabel(TIME_SECONDS_LABEL_STRING)
     ax.set_ylabel(ylabel)
     ax.grid(True, alpha=0.3)
     ax.legend()
@@ -536,7 +546,7 @@ def run_acceleration_comfort_analysis(
     avg_stats = calculate_acceleration_stats(avg_accelerations)
 
     # Create visualization
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
+    _, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
 
     # Plot both analyses
     plot_acceleration_analysis(
@@ -574,7 +584,7 @@ def run_acceleration_comfort_analysis(
     )
     is_passed = bool(instant_discomfort == 0 and avg_discomfort == 0)
 
-    print(f"\nComfort Analysis:")
+    print("\nComfort Analysis:")
     print(f"Instantaneous Discomfort Events: {instant_discomfort}")
     print(
         f"Instantaneous Percentage Uncomfortable: {(instant_discomfort/len(accelerations))*100:.2f}%"
