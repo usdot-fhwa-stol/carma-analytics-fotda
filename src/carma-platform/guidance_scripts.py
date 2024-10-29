@@ -120,8 +120,22 @@ def run_crosstrack_analysis(
 
     # Create plot
     plt.figure(figsize=(12, 6))
-    plt.plot(timestamps, cross_tracks, "b-", label="Cross Track Error", linewidth=1)
+    plt.plot(
+        timestamps,
+        cross_tracks,
+        ".",
+        markersize=2,
+        label="Cross Track Error",
+        linewidth=1,
+    )
     plt.axhline(y=stats["median"], color="r", linestyle="--", label="Median")
+    plt.axhline(
+        y=error_threshold_to_pass_meter,
+        color="g",
+        linestyle="--",
+        label="Crosstrack Error Threshold",
+    )
+    plt.axhline(y=-error_threshold_to_pass_meter, color="g", linestyle="--")
     plt.fill_between(
         timestamps,
         stats["median"] - stats["std_dev"],
@@ -210,7 +224,6 @@ def run_turn_accuracy_analysis(
         },
     )
 
-    # print(extracted_data[topics[1]])
     # Process actual path
     timestamps, odom = extracted_data[topics[0]]
 
@@ -219,7 +232,8 @@ def run_turn_accuracy_analysis(
     actual_path = np.array(actual_path)
 
     # Process planned path with duplicate removal
-    timestamps, traj_plans = extracted_data[topics[1]]
+    # timestamp source here is not too important
+    _, traj_plans = extracted_data[topics[1]]
 
     for plan in traj_plans:
         for point in plan:
@@ -264,6 +278,8 @@ def run_turn_accuracy_analysis(
         "std_dev": np.std(distances),
         "rms": np.sqrt(np.mean(np.square(distances))),
         "sample_count": len(distances),
+        "start_time_since_recording": start_time,
+        "end_time_since_recording": end_time,
     }
 
     # Pass or no pass
@@ -274,9 +290,7 @@ def run_turn_accuracy_analysis(
 
     # Plot paths
     plt.subplot(2, 1, 1)
-    plt.plot(
-        planned_path[:, 0], planned_path[:, 1], "b-", label="Planned Path", linewidth=1
-    )
+    plt.plot(planned_path[:, 0], planned_path[:, 1], label="Planned Path", linewidth=1)
     plt.plot(
         spline_points[:, 0],
         spline_points[:, 1],
@@ -293,17 +307,20 @@ def run_turn_accuracy_analysis(
     plt.grid(True, alpha=0.3)
     plt.legend()
 
-    # Plot error over distance
+    # Plot error over time
     plt.subplot(2, 1, 2)
-    path_distance = np.cumsum(
-        np.sqrt(np.sum(np.diff(actual_path, axis=0) ** 2, axis=1))
+    plt.plot(
+        timestamps, distances, ".", markersize=2, label="Distance Error", linewidth=1
     )
-    path_distance = np.insert(path_distance, 0, 0)
-
-    plt.plot(path_distance, distances, "b-", label="Distance Error", linewidth=1)
     plt.axhline(y=stats["median"], color="r", linestyle="--", label="Median")
+    plt.axhline(
+        y=error_threshold_to_pass_meter,
+        color="g",
+        linestyle="--",
+        label="Distance Error Threshold",
+    )
     plt.fill_between(
-        path_distance,
+        timestamps,
         stats["median"] - stats["std_dev"],
         stats["median"] + stats["std_dev"],
         alpha=0.2,
@@ -311,8 +328,8 @@ def run_turn_accuracy_analysis(
         label="±1 Std Dev",
     )
 
-    plt.title("Turn Accuracy Error Over Distance")
-    plt.xlabel("Distance Traveled (m)")
+    plt.title("Turn Accuracy Error Over Time")
+    plt.xlabel("Time (seconds)")
     plt.ylabel("Error (m)")
     plt.grid(True, alpha=0.3)
     plt.legend()
@@ -337,6 +354,7 @@ def run_turn_accuracy_analysis(
             planned_path=planned_path,
             spline_points=spline_points,
             distances=distances,
+            timestamps=timestamps,
             stats=stats,
         )
         print(f"\nData saved to: {save_data_dir}")
@@ -349,7 +367,7 @@ def run_turn_accuracy_analysis(
     else:
         plt.show()
 
-    return (is_passed, stats, plt.gcf(), distances, path_distance)
+    return (is_passed, stats, plt.gcf(), distances, timestamps)
 
 
 def calculate_instant_acceleration(timestamps, speeds):
@@ -366,9 +384,8 @@ def calculate_instant_acceleration(timestamps, speeds):
     dt = np.diff(timestamps)
     dv = np.diff(speeds)
     accelerations = dv / dt
-    time_points = timestamps[:-1] - timestamps[0]  # Normalize time to start at 0
-
-    return accelerations, time_points
+    # Use timestamps[1:] because the acceleration values correspond to the later point in each pair
+    return accelerations, timestamps[1:]
 
 
 def calculate_window_acceleration(timestamps, speeds, window_size=1.0):
@@ -446,7 +463,9 @@ def plot_acceleration_analysis(
     if ax is None:
         _, ax = plt.subplots()
 
-    ax.plot(time_points, accelerations, "b-", label="Acceleration", linewidth=1)
+    ax.plot(
+        time_points, accelerations, ".", markersize=2, label="Acceleration", linewidth=1
+    )
     ax.axhline(y=stats["median"], color="r", linestyle="--", label="Median")
     ax.fill_between(
         time_points,
@@ -499,7 +518,7 @@ def run_acceleration_comfort_analysis(
         topics,
         start_time,
         end_time,
-        {"/hardware_interface/vehicle_status": lambda msg: msg.speed}
+        {"/hardware_interface/vehicle_status": lambda msg: msg.speed},
     )
 
     timestamps, speeds = extracted_data[topics[0]]
@@ -511,10 +530,9 @@ def run_acceleration_comfort_analysis(
     instant_stats = calculate_acceleration_stats(accelerations)
 
     # Calculate 1-second average accelerations
-    avg_accelerations, avg_timestamps = calculate_window_acceleration(
+    avg_accelerations, avg_timepoints = calculate_window_acceleration(
         timestamps, speeds
     )
-    avg_time_points = avg_timestamps - timestamps[0]
     avg_stats = calculate_acceleration_stats(avg_accelerations)
 
     # Create visualization
@@ -527,15 +545,17 @@ def run_acceleration_comfort_analysis(
         instant_stats,
         "Instantaneous Acceleration Over Time",
         "Instant Acceleration (m/s²)",
+        comfort_threshold=comfort_deceleration_threshold_to_pass,
         ax=ax1,
     )
 
     plot_acceleration_analysis(
-        avg_time_points,
+        avg_timepoints,
         avg_accelerations,
         avg_stats,
         "1-Second Average Acceleration Over Time",
         "Average Acceleration (m/s²)",
+        comfort_threshold=comfort_deceleration_threshold_to_pass,
         ax=ax2,
     )
 
@@ -546,8 +566,12 @@ def run_acceleration_comfort_analysis(
     print_stats(avg_stats, "1-Second Average Acceleration Statistics")
 
     # Calculate comfort metrics
-    instant_discomfort = np.sum(np.abs(accelerations) > comfort_deceleration_threshold_to_pass)
-    avg_discomfort = np.sum(np.abs(avg_accelerations) > comfort_deceleration_threshold_to_pass)
+    instant_discomfort = np.sum(
+        np.abs(accelerations) > comfort_deceleration_threshold_to_pass
+    )
+    avg_discomfort = np.sum(
+        np.abs(avg_accelerations) > comfort_deceleration_threshold_to_pass
+    )
     is_passed = bool(instant_discomfort == 0 and avg_discomfort == 0)
 
     print(f"\nComfort Analysis:")
@@ -574,7 +598,7 @@ def run_acceleration_comfort_analysis(
         save_path = Path(save_data_dir)
         np.savez(
             save_path / "acceleration_comfort_data.npz",
-            timestamps=timestamps,
+            timestamps=time_points,
             speeds=speeds,
             instantaneous_accelerations=accelerations,
             avg_accelerations=avg_accelerations,
@@ -599,7 +623,7 @@ def run_acceleration_comfort_analysis(
         accelerations,
         avg_accelerations,
         time_points,
-        avg_time_points,
+        avg_timepoints,
     )
 
 
