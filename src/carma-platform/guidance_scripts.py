@@ -164,12 +164,23 @@ def run_crosstrack_analysis(
     return (is_passed, stats, plt.gcf(), cross_tracks, timestamps)
 
 
-def run_turn_accuracy_analysis(mcap_path, save_data_dir=None, save_plot_dir=None):
+def run_turn_accuracy_analysis(
+    mcap_path,
+    error_threshold_to_pass_meter=2.0,
+    start_time=None,
+    end_time=None,
+    save_stats_dir=None,
+    save_data_dir=None,
+    save_plot_dir=None,
+):
     """
     Analyzes turn accuracy by comparing actual path to planned trajectory using spline fitting.
 
     Args:
         mcap_path: Path to MCAP file
+        start_time: Time to start the analysis
+        end_time: Time to end the analysis
+        save_stats_dir: Directory to save analysis stats
         save_data_dir: Directory to save extracted data
         save_plot_dir: Directory to save generated plots
     Deps:
@@ -186,7 +197,9 @@ def run_turn_accuracy_analysis(mcap_path, save_data_dir=None, save_plot_dir=None
     extracted_data = extract_mcap_data(
         mcap_path,
         topics,
-        {
+        start_time=start_time,
+        end_time=end_time,
+        field_extractors={
             "/localization/current_pose": lambda msg: (
                 msg.pose.position.x,
                 msg.pose.position.y,
@@ -253,6 +266,9 @@ def run_turn_accuracy_analysis(mcap_path, save_data_dir=None, save_plot_dir=None
         "sample_count": len(distances),
     }
 
+    # Pass or no pass
+    is_passed = float(stats["median"]) < error_threshold_to_pass_meter
+
     # Create visualization
     plt.figure(figsize=(15, 10))
 
@@ -304,14 +320,13 @@ def run_turn_accuracy_analysis(mcap_path, save_data_dir=None, save_plot_dir=None
     plt.tight_layout()
 
     # Print statistics
-    print("\nTurn Accuracy Statistics:")
-    print(f"Minimum Error: {stats['minimum']:.4f} m")
-    print(f"Maximum Error: {stats['maximum']:.4f} m")
-    print(f"Median Error: {stats['median']:.4f} m")
-    print(f"Mean Error:   {stats['mean']:.4f} m")
-    print(f"RMS Error:    {stats['rms']:.4f} m")
-    print(f"Std Dev:      {stats['std_dev']:.4f} m")
-    print(f"Sample Count: {stats['sample_count']}")
+    print_stats(stats, "Turn Accuracy Statistics")
+
+    if save_stats_dir:
+        stats_full_path = save_stats_dir / "turn_accuracy_analysis.json"
+        with open(stats_full_path, "w") as f:
+            json.dump(stats, f, indent=2)
+        print(f"Stats saved to: {save_stats_dir}")
 
     # Save data if requested
     if save_data_dir:
@@ -334,7 +349,7 @@ def run_turn_accuracy_analysis(mcap_path, save_data_dir=None, save_plot_dir=None
     else:
         plt.show()
 
-    return (stats, plt.gcf(), distances, path_distance)
+    return (is_passed, stats, plt.gcf(), distances, path_distance)
 
 
 def calculate_instant_acceleration(timestamps, speeds):
@@ -371,16 +386,20 @@ def calculate_window_acceleration(timestamps, speeds, window_size=1.0):
     avg_accelerations = []
     avg_timestamps = []
 
-    for i in range(len(timestamps)-1):
+    for i in range(len(timestamps) - 1):
         # Find all points within window_size seconds from current point
-        mask = (timestamps > timestamps[i]) & (timestamps <= timestamps[i] + window_size)
+        mask = (timestamps > timestamps[i]) & (
+            timestamps <= timestamps[i] + window_size
+        )
 
         if np.sum(mask) > 1:  # Need at least 2 points for acceleration
             window_speeds = speeds[mask]
             window_times = timestamps[mask]
 
             # Calculate average acceleration in window
-            avg_acc = (window_speeds[-1] - window_speeds[0]) / (window_times[-1] - window_times[0])
+            avg_acc = (window_speeds[-1] - window_speeds[0]) / (
+                window_times[-1] - window_times[0]
+            )
 
             avg_accelerations.append(avg_acc)
             avg_timestamps.append(timestamps[i])
@@ -451,13 +470,22 @@ def plot_acceleration_analysis(
 
 
 def run_acceleration_comfort_analysis(
-    mcap_path, save_data_dir=None, save_plot_dir=None
+    mcap_path,
+    comfort_deceleration_threshold_to_pass=3.0,
+    start_time=None,
+    end_time=None,
+    save_stats_dir=None,
+    save_data_dir=None,
+    save_plot_dir=None,
 ):
     """
     Main function to analyze acceleration comfort.
 
     Args:
         mcap_path: Path to MCAP file
+        start_time: Time to start the analysis
+        end_time: Time to end the analysis
+        save_stats_dir: Directory to save analysis stats
         save_data_dir: Directory to save extracted data
         save_plot_dir: Directory to save generated plots
     Deps:
@@ -467,7 +495,11 @@ def run_acceleration_comfort_analysis(
     # Extract vehicle state data
     topics = ["/hardware_interface/vehicle_status"]
     extracted_data = extract_mcap_data(
-        mcap_path, topics, {"/hardware_interface/vehicle_status": lambda msg: msg.speed}
+        mcap_path,
+        topics,
+        start_time,
+        end_time,
+        {"/hardware_interface/vehicle_status": lambda msg: msg.speed}
     )
 
     timestamps, speeds = extracted_data[topics[0]]
@@ -482,7 +514,6 @@ def run_acceleration_comfort_analysis(
     avg_accelerations, avg_timestamps = calculate_window_acceleration(
         timestamps, speeds
     )
-
     avg_time_points = avg_timestamps - timestamps[0]
     avg_stats = calculate_acceleration_stats(avg_accelerations)
 
@@ -511,24 +542,13 @@ def run_acceleration_comfort_analysis(
     plt.tight_layout()
 
     # Print statistics
-    print("\nInstantaneous Acceleration Statistics:")
-    for key, value in instant_stats.items():
-        if key != "sample_count":
-            print(f"{key.replace('_', ' ').title()}: {value:.4f} m/s²")
-        else:
-            print(f"{key.replace('_', ' ').title()}: {value}")
-
-    print("\n1-Second Average Acceleration Statistics:")
-    for key, value in avg_stats.items():
-        if key != "sample_count":
-            print(f"{key.replace('_', ' ').title()}: {value:.4f} m/s²")
-        else:
-            print(f"{key.replace('_', ' ').title()}: {value}")
+    print_stats(instant_stats, "Instantaneous Acceleration Statistics")
+    print_stats(avg_stats, "1-Second Average Acceleration Statistics")
 
     # Calculate comfort metrics
-    comfort_threshold = 2.0
-    instant_discomfort = np.sum(np.abs(accelerations) > comfort_threshold)
-    avg_discomfort = np.sum(np.abs(avg_accelerations) > comfort_threshold)
+    instant_discomfort = np.sum(np.abs(accelerations) > comfort_deceleration_threshold_to_pass)
+    avg_discomfort = np.sum(np.abs(avg_accelerations) > comfort_deceleration_threshold_to_pass)
+    is_passed = bool(instant_discomfort == 0 and avg_discomfort == 0)
 
     print(f"\nComfort Analysis:")
     print(f"Instantaneous Discomfort Events: {instant_discomfort}")
@@ -539,6 +559,15 @@ def run_acceleration_comfort_analysis(
     print(
         f"1-Second Average Percentage Uncomfortable: {(avg_discomfort/len(avg_accelerations))*100:.2f}%"
     )
+
+    if save_stats_dir:
+        stats_full_path = save_stats_dir / "instantaneous_acceleration_stats.json"
+        with open(stats_full_path, "w") as f:
+            json.dump(instant_stats, f, indent=2)
+        stats_full_path = save_stats_dir / "1sec_average_acceleration_stats.json"
+        with open(stats_full_path, "w") as f:
+            json.dump(avg_stats, f, indent=2)
+        print(f"Stats saved to: {save_stats_dir}")
 
     # Save data if requested
     if save_data_dir:
@@ -563,6 +592,7 @@ def run_acceleration_comfort_analysis(
         plt.show()
 
     return (
+        is_passed,
         instant_stats,
         avg_stats,
         plt.gcf(),

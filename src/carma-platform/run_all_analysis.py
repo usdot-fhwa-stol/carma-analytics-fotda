@@ -161,7 +161,7 @@ def run_all_analysis(
         print(f"\nAnalyzing {mcap_file}...")
         result = analyze_mcap_file(mcap_file, analysis_func, output_dir)
         results[str(mcap_file)] = result
-
+        print(result)
         if result:
             update_metrics_results(result, metrics_results)
 
