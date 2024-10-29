@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Dict
 from guidance_scripts import (
+    get_engage_time,
     run_crosstrack_analysis,
     run_turn_accuracy_analysis,
     run_acceleration_comfort_analysis,
@@ -9,50 +10,65 @@ from run_all_analysis import run_all_analysis
 import argparse
 import argcomplete
 
+# VARIOUS THRESHOLDS FOR THE METRICS
+# 1. Cross_track analysis
+CROSS_TRACK_ERROR_THRESHOLD_METER = 2.0
+
 
 def analyze_mcap_file_for_control_analysis(
-    mcap_path: Path, output_dir: Path, data_dir: Path, plots_dir: Path
+    mcap_path: Path, output_dir: Path, stats_dir: Path, data_dir: Path, plots_dir: Path
 ) -> Dict:
     """Extract single MCAP file and run all control analysis on it"""
+    # 0. General steps needed for all
     try:
-        analysis_stats = {}
-        # 1. Cross_track analysis
-        try:
-            stats, _, _, _ = run_crosstrack_analysis(mcap_path, data_dir, plots_dir)
-            analysis_stats["run_crosstrack_analysis"] = stats
-        except:
-            analysis_stats["run_crosstrack_analysis"] = None
-
-        # 2. Turn accuracy analysis by spline fitting
-        try:
-            stats, _, _, _ = run_turn_accuracy_analysis(mcap_path, data_dir, plots_dir)
-            analysis_stats["run_turn_accuracy_analysis"] = stats
-        except:
-            analysis_stats["run_turn_accuracy_analysis"] = None
-
-        # 3. Turn accuracy analysis by spline fitting
-        try:
-            stats, _, _, _ = run_acceleration_comfort_analysis(
-                mcap_path, data_dir, plots_dir
-            )
-            analysis_stats["run_acceleration_comfort_analysis"] = stats
-        except:
-            analysis_stats["run_acceleration_comfort_analysis"] = None
-
-        # 4. Turn accuracy analysis by spline fitting
-        try:
-            stats, _, _, _, _, _, _ = run_acceleration_comfort_analysis(
-                mcap_path, data_dir, plots_dir
-            )
-            analysis_stats["run_acceleration_comfort_analysis"] = stats
-        except:
-            analysis_stats["run_acceleration_comfort_analysis"] = None
-
-        return analysis_stats
+        engage_time, disengage_time = get_engage_time(mcap_path)
     except Exception as e:
         print(f"Error analyzing {mcap_path}: {e}")
         return None
 
+    analysis_stats = {}
+    # 1. Cross_track analysis
+    try:
+        is_passed, _, _, _, _ = run_crosstrack_analysis(
+            mcap_path,
+            CROSS_TRACK_ERROR_THRESHOLD_METER,
+            engage_time,
+            disengage_time,
+            stats_dir,
+            data_dir,
+            plots_dir,
+        )
+        analysis_stats["run_crosstrack_analysis"] = is_passed
+    except Exception as e:
+        print(f"Error analyzing {mcap_path} for metric run_crosstrack_analysis: {e}")
+        analysis_stats["run_crosstrack_analysis"] = None
+
+    # 2. Turn accuracy analysis by spline fitting
+    try:
+        stats, _, _, _ = run_turn_accuracy_analysis(mcap_path, data_dir, plots_dir)
+        analysis_stats["run_turn_accuracy_analysis"] = stats
+    except:
+        analysis_stats["run_turn_accuracy_analysis"] = None
+
+    # 3. Turn accuracy analysis by spline fitting
+    try:
+        stats, _, _, _ = run_acceleration_comfort_analysis(
+            mcap_path, data_dir, plots_dir
+        )
+        analysis_stats["run_acceleration_comfort_analysis"] = stats
+    except:
+        analysis_stats["run_acceleration_comfort_analysis"] = None
+
+    # 4. Turn accuracy analysis by spline fitting
+    try:
+        stats, _, _, _, _, _, _ = run_acceleration_comfort_analysis(
+            mcap_path, data_dir, plots_dir
+        )
+        analysis_stats["run_acceleration_comfort_analysis"] = stats
+    except:
+        analysis_stats["run_acceleration_comfort_analysis"] = None
+
+    return analysis_stats
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
