@@ -93,7 +93,8 @@ def plot_2d_map_and_pose(lanelet2_data, pose_data, output_dir=None):
 
     Args:
         lanelet2_data (list): List of (x, y) tuples representing map points
-        pose_data (list): List of (x, y) tuples representing vehicle positions
+        pose_data (list): List of (x, y) tuples (or similar dimension of list or np.array)
+                                  representing vehicle positions
         output_dir (str, optional): Directory to save the generated plot.
                                   If None, saves in current directory.
 

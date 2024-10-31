@@ -88,7 +88,7 @@ def test_run_turn_accuracy_analysis(mock_mcap_path):
         }
         mock_plt.figure.return_value = MagicMock()
 
-        is_passed, stats, plot_figure, distances, timestamps = (
+        is_passed, stats, plot_figure, actual_path, planned_path, distances, timestamps = (
             run_turn_accuracy_analysis(
                 mock_mcap_path,
                 error_threshold_to_pass_meter=2.0,
@@ -97,11 +97,22 @@ def test_run_turn_accuracy_analysis(mock_mcap_path):
             )
         )
 
+        expected_actual_path = [[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]
+        expected_planned_path = [[0.0, 0.0], [1.0, 1.0]]
+
         assert is_passed == True
         assert stats["minimum"] == approx(0.0, abs=1e-2)
         assert plot_figure is not None
         assert len(distances) == 3
         assert timestamps == approx([0, 1, 2])
+
+        # Check that each point in actual_path matches expected_actual_path approximately
+        for actual, expected in zip(actual_path, expected_actual_path):
+            assert actual == approx(expected)
+
+        # Check that each point in planned_path matches expected_planned_path approximately
+        for planned, expected in zip(planned_path, expected_planned_path):
+            assert planned == approx(expected)
 
 
 def test_calculate_instant_acceleration():
