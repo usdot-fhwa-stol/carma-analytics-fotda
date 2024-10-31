@@ -21,7 +21,8 @@ Install the required packages:
 
 ```
 bash
-pip install rosbag2_py numpy matplotlib scipy argcomplete, pytest
+sudo apt install ros-humble-rosbag2*
+pip install numpy matplotlib scipy argcomplete pytest
 ```
 
 ### Running Analyses

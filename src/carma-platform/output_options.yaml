@@ -1,0 +1,24 @@
+output_bags:
+- uri: /workspaces/carma/src/analysis-data/bag1  # required
+  storage_id: "mcap"  # will use the default storage plugin, if unspecified
+  max_bagfile_size: 0
+  max_bagfile_duration: 0
+  storage_preset_profile: ""
+  storage_config_uri: ""
+  all_topics: false
+  topics: [/environment/lanelet2_map_viz]
+  topic_types: []
+  all_services: false
+  services: []
+  rmw_serialization_format: ""  # defaults to using the format of the input topic
+  regex: ""
+  exclude_regex: ""
+  exclude_topics: []
+  exclude_topic_types: []
+  exclude_services: []
+  compression_mode: ""
+  compression_format: ""
+  compression_queue_size: 1
+  compression_threads: 0
+  include_hidden_topics: false
+  include_unpublished_topics: false
