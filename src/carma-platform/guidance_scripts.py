@@ -376,7 +376,7 @@ def run_turn_accuracy_analysis(
     else:
         plt.show()
 
-    return (is_passed, stats, plt.gcf(), distances, timestamps)
+    return (is_passed, stats, plt.gcf(), actual_path, planned_path, distances, timestamps)
 
 
 def calculate_instant_acceleration(timestamps, speeds):
