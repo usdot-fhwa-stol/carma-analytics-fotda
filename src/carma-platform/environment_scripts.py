@@ -156,24 +156,23 @@ def plot_2d_map_and_pose(lanelet2_data, pose_data, output_dir=None):
 if __name__ == "__main__":
     """
     Main execution block for processing MCAP files and generating visualizations.
-
     Command-line usage:
     python environment_scripts.py <path_to_mcap_file>
     """
-    if len(sys.argv) != 3:
+    # Validate command line arguments
+    if len(sys.argv) != 2:
         print("Usage: python environment_scripts.py <path_to_mcap_file1>")
         sys.exit(1)
 
-    mcap_files = sys.argv[1:]
+    mcap_file = sys.argv[1]
     lanelet2_data = []
     pose_data = []
 
-    # Process all files
-    for mcap_file in mcap_files:
-        print(f"Processing file: {mcap_file}")
-        lanelet2_data.extend(extract_lanelet2_map_from_mcap(mcap_file))
-        _, pose_data_temp = extract_pose_points_from_mcap(mcap_file)
-        pose_data.extend(pose_data_temp)
+    # Process the file to extract lanelet2_map and pose data
+    print(f"Processing file: {mcap_file}")
+    lanelet2_data.extend(extract_lanelet2_map_from_mcap(mcap_file))
+    _, pose_data_temp = extract_pose_points_from_mcap(mcap_file)
+    pose_data.extend(pose_data_temp)
 
     # Create visualization with filtered map section
     plot_2d_map_and_pose(lanelet2_data, pose_data)
