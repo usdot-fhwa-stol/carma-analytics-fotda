@@ -92,12 +92,12 @@ def initialize_field_extractors(topics, field_extractors):
     """
     if field_extractors is None:
         return {topic: lambda msg: msg for topic in topics}
-    
+
     # Check for missing field extractors.
     missing_extractors = set(topics) - set(field_extractors.keys())
     if missing_extractors:
         raise ValueError(f"Missing field extractors for topics: {missing_extractors}")
-    
+
     return field_extractors
 
 

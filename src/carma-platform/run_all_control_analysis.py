@@ -3,16 +3,24 @@ from typing import Dict
 from guidance_scripts import (
     get_engage_time,
     run_crosstrack_analysis,
-    #    run_turn_accuracy_analysis,
-    #    run_acceleration_comfort_analysis,
+    run_turn_accuracy_analysis,
+    run_acceleration_comfort_analysis,
 )
 from run_all_analysis import run_all_analysis
 import argparse
 import argcomplete
-
+from environment_scripts import (
+    extract_lanelet2_map_from_mcap,
+    filter_map_points_for_trajectory,
+    plot_2d_map_and_pose
+)
 # VARIOUS THRESHOLDS FOR THE METRICS
 # 1. Cross_track analysis
 CROSS_TRACK_ERROR_THRESHOLD_METER = 2.0
+# 2. Turn accuracy analysis
+TURN_ACCURACY_ERROR_THRESHOLD_METER = 2.0
+# 3. Acceleration comfort analysis
+COMFORT_ACCELERATION_THRESHOLD_MS2 = 3.0
 
 
 def analyze_mcap_file_for_control_analysis(
@@ -22,16 +30,13 @@ def analyze_mcap_file_for_control_analysis(
     # 0. General steps needed for all
     try:
         engage_time, disengage_time = get_engage_time(mcap_path)
-
     except Exception as e:
         print(f"Error analyzing {mcap_path}: {e}")
         return None
 
     analysis_stats = {}
-
     # 1. Cross_track analysis
     try:
-
         is_passed, _, _, _, _ = run_crosstrack_analysis(
             mcap_path,
             CROSS_TRACK_ERROR_THRESHOLD_METER,
@@ -46,7 +51,50 @@ def analyze_mcap_file_for_control_analysis(
         print(f"Error analyzing {mcap_path} for metric run_crosstrack_analysis: {e}")
         analysis_stats["run_crosstrack_analysis"] = None
 
-    # TODO More.
+    # 2. Turn accuracy analysis by spline fitting
+    try:
+        is_passed, _, _, actual_path, planned_path, _, _ = run_turn_accuracy_analysis(
+            mcap_path,
+            TURN_ACCURACY_ERROR_THRESHOLD_METER,
+            engage_time,
+            disengage_time,
+            stats_dir,
+            data_dir,
+            plots_dir,
+        )
+        analysis_stats["run_turn_accuracy_analysis"] = is_passed
+    except Exception as e:
+        print(f"Error analyzing {mcap_path} for metric run_turn_accuracy_analysis: {e}")
+        analysis_stats["run_turn_accuracy_analysis"] = None
+
+    # 2.a Visualize traveled path and planned path on actual map
+    # This is for visual verification
+    try:
+        lanelet2_map_data = extract_lanelet2_map_from_mcap(str(mcap_path))
+        if (list(planned_path)):
+            plot_2d_map_and_pose(lanelet2_map_data, list(planned_path), plots_dir / "planned_path")
+        if (list(actual_path)):
+            plot_2d_map_and_pose(lanelet2_map_data, list(actual_path), plots_dir / "actual_path")
+    except Exception as e:
+        print(f"Error plotting {mcap_path} for plotting lanelet2 map data: {e}")
+
+    # 3.
+    try:
+        is_passed, _, _, _, _, _, _, _ = run_acceleration_comfort_analysis(
+            mcap_path,
+            COMFORT_ACCELERATION_THRESHOLD_MS2,
+            engage_time,
+            disengage_time,
+            stats_dir,
+            data_dir,
+            plots_dir,
+        )
+        analysis_stats["run_acceleration_comfort_analysis"] = is_passed
+    except Exception as e:
+        print(
+            f"Error analyzing {mcap_path} for metric run_acceleration_comfort_analysis: {e}"
+        )
+        analysis_stats["run_acceleration_comfort_analysis"] = None
 
     return analysis_stats
 

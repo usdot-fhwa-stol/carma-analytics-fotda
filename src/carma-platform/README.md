@@ -21,11 +21,12 @@ Install the required packages:
 
 ```
 bash
-pip install rosbag2_py numpy matplotlib scipy argcomplete, pytest
+sudo apt install ros-humble-rosbag2*
+pip install numpy matplotlib scipy argcomplete mcap-ros2-support pytest
 ```
 
 ### Running Analyses
-Individual use case specific analysis functions should be created in the same manner as `run_all_control_analysis.py` such as `run_all_<use-case>_analysis`. 
+Individual use case specific analysis functions should be created in the same manner as `run_all_control_analysis.py` such as `run_all_<use-case>_analysis`.
 This guide is written using the control related scripts as an example.
 1. To run all control analyses on a set of MCAP files:
 
@@ -48,8 +49,8 @@ This will:
 - Modify thresholds and parameters in `run_all_control_analysis.py`
 - Add new analysis functions to `guidance_scripts.py`
 
-Similar to how control related scripts were made, the user can also create their own use case specific analysis consisting of multiple performance metric analyses. 
-Then reuse the `run_all_analysis.py` to automatically detect MCAP files and generate results. 
+Similar to how control related scripts were made, the user can also create their own use case specific analysis consisting of multiple performance metric analyses.
+Then reuse the `run_all_analysis.py` to automatically detect MCAP files and generate results.
 
 ## Output
 
@@ -70,7 +71,7 @@ analysis_20241025_065250
 ├── rosbag2_2024-10-22_213643_0
 │ ├── data
 │ │ └── extracted_numpy_data.npz
-│ │        ... 
+│ │        ...
 │ ├── plots
 │ │ └── cross_track_error_over_time.png
 │ │        ...
@@ -111,4 +112,3 @@ analysis_20241025_065250
   }
 }
 ```
-
