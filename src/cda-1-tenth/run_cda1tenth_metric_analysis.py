@@ -126,7 +126,7 @@ class CDA1tenthMetricAnalysis(unittest.TestCase):
 
     def test_CDA1tenth_17_communicate_inspection(self):
         # Infrastructure can communicate with the CDA1tenth CMV that the container is inspected
-        self.assertTrue(check_port_drayage_ack(self.bag_dir, "HOLDING_AREA"), "Vehicle did not ack HOLDING_AREA corectly")
+        self.assertTrue(check_port_drayage_ack(self.bag_dir, "HOLDING_AREA"), "Vehicle did not ack HOLDING_AREA correctly")
     
 
 if __name__ == "__main__":
