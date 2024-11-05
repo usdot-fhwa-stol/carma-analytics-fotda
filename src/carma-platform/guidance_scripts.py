@@ -397,19 +397,19 @@ def calculate_instant_acceleration(timestamps, speeds):
     return accelerations, timestamps[1:]
 
 
-def calculate_window_acceleration(timestamps, speeds, window_size=1.0):
+def calculate_window_values(timestamps, values, window_size=1.0):
     """
-    Calculate average acceleration over 1-second windows, moving forward by 1 point each time.
+    Calculate average values over specified time windows, moving forward by 1 point each time.
 
     Args:
         timestamps: Array of timestamps in seconds
-        speeds: Array of corresponding speeds
+        values: Array of corresponding values to be averaged
         window_size: Size of window in seconds (default: 1.0)
 
     Returns:
-        tuple: (avg_accelerations, avg_timestamps)
+        tuple: (avg_values, avg_timestamps)
     """
-    avg_accelerations = []
+    avg_values = []
     avg_timestamps = []
 
     for i in range(len(timestamps) - 1):
@@ -418,19 +418,17 @@ def calculate_window_acceleration(timestamps, speeds, window_size=1.0):
             timestamps <= timestamps[i] + window_size
         )
 
-        if np.sum(mask) > 1:  # Need at least 2 points for acceleration
-            window_speeds = speeds[mask]
+        if np.sum(mask) > 1:  # Need at least 2 points for window
+            window_values = values[mask]
             window_times = timestamps[mask]
 
-            # Calculate average acceleration in window
-            avg_acc = (window_speeds[-1] - window_speeds[0]) / (
-                window_times[-1] - window_times[0]
-            )
+            # Calculate average value in window
+            avg_value = np.mean(window_values)
 
-            avg_accelerations.append(avg_acc)
+            avg_values.append(avg_value)
             avg_timestamps.append(timestamps[i])
 
-    return np.array(avg_accelerations), np.array(avg_timestamps)
+    return np.array(avg_values), np.array(avg_timestamps)
 
 
 def calculate_acceleration_stats(accelerations):
@@ -539,8 +537,8 @@ def run_acceleration_comfort_analysis(
     instant_stats = calculate_acceleration_stats(accelerations)
 
     # Calculate 1-second average accelerations
-    avg_accelerations, avg_timepoints = calculate_window_acceleration(
-        timestamps, speeds
+    avg_accelerations, avg_timepoints = calculate_window_values(
+        timestamps, accelerations
     )
     avg_stats = calculate_acceleration_stats(avg_accelerations)
 
@@ -636,4 +634,331 @@ def run_acceleration_comfort_analysis(
     )
 
 
+def calculate_instant_lateral_values(long_velocities, ang_velocities, timestamps):
+    """
+    Calculate instantaneous lateral acceleration and jerk.
+
+    Args:
+        long_velocities: Array of longitudinal velocities
+        ang_velocities: Array of angular velocities
+        timestamps: Array of timestamps
+
+    Returns:
+        tuple: (lateral_acc, lateral_jerk, acc_timestamps, jerk_timestamps)
+    """
+    # Calculate lateral acceleration
+    lateral_acc = long_velocities * ang_velocities
+
+    # Calculate lateral jerk
+    dt = np.diff(timestamps)
+    jerk = np.diff(lateral_acc) / dt
+
+    return lateral_acc, jerk, timestamps, timestamps[1:]
+
+
+def run_lateral_analysis(
+    mcap_path,
+    acc_threshold_to_pass=2.0,  # m/s^2
+    jerk_threshold_to_pass=2.0,  # m/s^3
+    start_time=None,
+    end_time=None,
+    save_stats_dir=None,
+    save_data_dir=None,
+    save_plot_dir=None,
+):
+    """
+    Analyzes lateral acceleration and jerk from vehicle state data using both
+    instantaneous and 1-second window averages.
+
+    Args:
+        mcap_path: Path to MCAP file
+        acc_threshold_to_pass: Maximum acceptable lateral acceleration in m/s^2
+        jerk_threshold_to_pass: Maximum acceptable lateral jerk in m/s^3
+        start_time: Time to start the analysis
+        end_time: Time to end the analysis
+        save_stats_dir: Directory to save analysis stats
+        save_data_dir: Directory to save extracted data
+        save_plot_dir: Directory to save generated plots
+
+    Deps:
+        Topics: [/hardware_interface/vehicle/twist]
+        Msgs: geometry_msgs/Twist
+    """
+
+    topics = ["/hardware_interface/vehicle/twist"]
+
+    # Extract linear and angular velocities
+    extracted_data = extract_mcap_data(
+        mcap_path,
+        topics,
+        start_time=start_time,
+        end_time=end_time,
+        field_extractors={
+            "/hardware_interface/vehicle/twist": lambda msg: (
+                msg.twist.linear.x,  # longitudinal velocity
+                msg.twist.angular.z,  # angular velocity
+            )
+        },
+    )
+
+    timestamps, velocity_data = extracted_data[topics[0]]
+    long_velocities = np.array([v[0] for v in velocity_data])
+    ang_velocities = np.array([v[1] for v in velocity_data])
+
+    # Calculate instantaneous values
+    lateral_acc_inst, lateral_jerk_inst, acc_timestamps, jerk_timestamps = calculate_instant_lateral_values(
+        long_velocities, ang_velocities, timestamps
+    )
+
+    # Calculate 1-second window averages
+    lateral_acc_avg, acc_timestamps_avg = calculate_window_values(
+        acc_timestamps, lateral_acc_inst, window_size=1.0
+    )
+    lateral_jerk_avg, jerk_timestamps_avg = calculate_window_values(
+        jerk_timestamps, lateral_jerk_inst, window_size=1.0
+    )
+
+    # Calculate statistics
+    acc_inst_stats = calculate_acceleration_stats(lateral_acc_inst)
+    acc_avg_stats = calculate_acceleration_stats(lateral_acc_avg)
+    jerk_inst_stats = calculate_acceleration_stats(lateral_jerk_inst)
+    jerk_avg_stats = calculate_acceleration_stats(lateral_jerk_avg)
+
+    # Calculate comfort metrics
+    acc_inst_discomfort = np.sum(np.abs(lateral_acc_inst) > acc_threshold_to_pass)
+    acc_avg_discomfort = np.sum(np.abs(lateral_acc_avg) > acc_threshold_to_pass)
+    jerk_inst_discomfort = np.sum(np.abs(lateral_jerk_inst) > jerk_threshold_to_pass)
+    jerk_avg_discomfort = np.sum(np.abs(lateral_jerk_avg) > jerk_threshold_to_pass)
+
+    is_passed = all([
+        acc_inst_discomfort == 0,
+        acc_avg_discomfort == 0,
+        jerk_inst_discomfort == 0,
+        jerk_avg_discomfort == 0
+    ])
+
+    # Create two separate figures
+    # Figure 1: Acceleration measurements
+    fig_acc, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
+
+    # Plot instantaneous acceleration
+    plot_acceleration_analysis(
+        acc_timestamps,
+        lateral_acc_inst,
+        acc_inst_stats,
+        "Instantaneous Lateral Acceleration",
+        "Lateral Acceleration (m/s²)",
+        comfort_threshold=acc_threshold_to_pass,
+        ax=ax1
+    )
+
+    # Plot 1-second average acceleration
+    plot_acceleration_analysis(
+        acc_timestamps_avg,
+        lateral_acc_avg,
+        acc_avg_stats,
+        "1-Second Average Lateral Acceleration",
+        "Lateral Acceleration (m/s²)",
+        comfort_threshold=acc_threshold_to_pass,
+        ax=ax2
+    )
+
+    fig_acc.suptitle("Lateral Acceleration Analysis", fontsize=16, y=1.02)
+    plt.tight_layout()
+
+    # Figure 2: Jerk measurements
+    fig_jerk, (ax3, ax4) = plt.subplots(2, 1, figsize=(12, 12))
+
+    # Plot instantaneous jerk
+    plot_acceleration_analysis(
+        jerk_timestamps,
+        lateral_jerk_inst,
+        jerk_inst_stats,
+        "Instantaneous Lateral Jerk",
+        "Lateral Jerk (m/s³)",
+        comfort_threshold=jerk_threshold_to_pass,
+        ax=ax3
+    )
+
+    # Plot 1-second average jerk
+    plot_acceleration_analysis(
+        jerk_timestamps_avg,
+        lateral_jerk_avg,
+        jerk_avg_stats,
+        "1-Second Average Lateral Jerk",
+        "Lateral Jerk (m/s³)",
+        comfort_threshold=jerk_threshold_to_pass,
+        ax=ax4
+    )
+
+    fig_jerk.suptitle("Lateral Jerk Analysis", fontsize=16, y=1.02)
+    plt.tight_layout()
+
+    # Print statistics
+    print_stats(acc_inst_stats, "Instantaneous Lateral Acceleration Statistics")
+    print_stats(acc_avg_stats, "1-Second Average Lateral Acceleration Statistics")
+    print_stats(jerk_inst_stats, "Instantaneous Lateral Jerk Statistics")
+    print_stats(jerk_avg_stats, "1-Second Average Lateral Jerk Statistics")
+
+    print("\nComfort Analysis:")
+    print(f"Instantaneous Acceleration Discomfort Events: {acc_inst_discomfort}")
+    print(f"1-Second Average Acceleration Discomfort Events: {acc_avg_discomfort}")
+    print(f"Instantaneous Jerk Discomfort Events: {jerk_inst_discomfort}")
+    print(f"1-Second Average Jerk Discomfort Events: {jerk_avg_discomfort}")
+
+    # Save statistics if requested
+    if save_stats_dir:
+        stats = {
+            "instantaneous_acceleration": acc_inst_stats,
+            "average_acceleration": acc_avg_stats,
+            "instantaneous_jerk": jerk_inst_stats,
+            "average_jerk": jerk_avg_stats,
+        }
+        stats_full_path = save_stats_dir / "lateral_analysis_stats.json"
+        with open(stats_full_path, "w") as f:
+            json.dump(stats, f, indent=2)
+        print(f"Stats saved to: {save_stats_dir}")
+
+    # Save data if requested
+    if save_data_dir:
+        np.savez(
+            save_data_dir / "lateral_analysis_data.npz",
+            timestamps=timestamps,
+            lateral_acc_inst=lateral_acc_inst,
+            lateral_acc_avg=lateral_acc_avg,
+            lateral_jerk_inst=lateral_jerk_inst,
+            lateral_jerk_avg=lateral_jerk_avg,
+            acc_inst_stats=acc_inst_stats,
+            acc_avg_stats=acc_avg_stats,
+            jerk_inst_stats=jerk_inst_stats,
+            jerk_avg_stats=jerk_avg_stats,
+        )
+        print(f"\nData saved to: {save_data_dir}")
+
+    # Save plots if requested
+    if save_plot_dir:
+        fig_acc.savefig(save_plot_dir / "lateral_acceleration_analysis.png")
+        fig_jerk.savefig(save_plot_dir / "lateral_jerk_analysis.png")
+        print(f"\nPlots saved to: {save_plot_dir}")
+    else:
+        plt.show()
+
+    return (
+        is_passed,
+        acc_inst_stats,
+        acc_avg_stats,
+        jerk_inst_stats,
+        jerk_avg_stats,
+        (fig_acc, fig_jerk),  # Return both figures
+        lateral_acc_inst,
+        lateral_acc_avg,
+        lateral_jerk_inst,
+        lateral_jerk_avg,
+        timestamps,
+    )
+
+    # Plot instantaneous jerk
+    plot_acceleration_analysis(
+        jerk_timestamps,
+        lateral_jerk_inst,
+        jerk_inst_stats,
+        "Instantaneous Lateral Jerk",
+        "Lateral Jerk (m/s³)",
+        comfort_threshold=jerk_threshold_to_pass,
+        ax=ax2
+    )
+
+    fig_inst.suptitle("Instantaneous Lateral Analysis", fontsize=16, y=1.02)
+    plt.tight_layout()
+
+    # Figure 2: 1-second window averages
+    fig_avg, (ax3, ax4) = plt.subplots(2, 1, figsize=(12, 12))
+
+    # Plot 1-second average acceleration
+    plot_acceleration_analysis(
+        acc_timestamps_avg,
+        lateral_acc_avg,
+        acc_avg_stats,
+        "1-Second Average Lateral Acceleration",
+        "Lateral Acceleration (m/s²)",
+        comfort_threshold=acc_threshold_to_pass,
+        ax=ax3
+    )
+
+    # Plot 1-second average jerk
+    plot_acceleration_analysis(
+        jerk_timestamps_avg,
+        lateral_jerk_avg,
+        jerk_avg_stats,
+        "1-Second Average Lateral Jerk",
+        "Lateral Jerk (m/s³)",
+        comfort_threshold=jerk_threshold_to_pass,
+        ax=ax4
+    )
+
+    fig_avg.suptitle("1-Second Average Lateral Analysis", fontsize=16, y=1.02)
+    plt.tight_layout()
+
+    # Print statistics
+    print_stats(acc_inst_stats, "Instantaneous Lateral Acceleration Statistics")
+    print_stats(acc_avg_stats, "1-Second Average Lateral Acceleration Statistics")
+    print_stats(jerk_inst_stats, "Instantaneous Lateral Jerk Statistics")
+    print_stats(jerk_avg_stats, "1-Second Average Lateral Jerk Statistics")
+
+    print("\nComfort Analysis:")
+    print(f"Instantaneous Acceleration Discomfort Events: {acc_inst_discomfort}")
+    print(f"1-Second Average Acceleration Discomfort Events: {acc_avg_discomfort}")
+    print(f"Instantaneous Jerk Discomfort Events: {jerk_inst_discomfort}")
+    print(f"1-Second Average Jerk Discomfort Events: {jerk_avg_discomfort}")
+
+    # Save statistics if requested
+    if save_stats_dir:
+        stats = {
+            "instantaneous_acceleration": acc_inst_stats,
+            "average_acceleration": acc_avg_stats,
+            "instantaneous_jerk": jerk_inst_stats,
+            "average_jerk": jerk_avg_stats,
+        }
+        stats_full_path = save_stats_dir / "lateral_analysis_stats.json"
+        with open(stats_full_path, "w") as f:
+            json.dump(stats, f, indent=2)
+        print(f"Stats saved to: {save_stats_dir}")
+
+    # Save data if requested
+    if save_data_dir:
+        np.savez(
+            save_data_dir / "lateral_analysis_data.npz",
+            timestamps=timestamps,
+            lateral_acc_inst=lateral_acc_inst,
+            lateral_acc_avg=lateral_acc_avg,
+            lateral_jerk_inst=lateral_jerk_inst,
+            lateral_jerk_avg=lateral_jerk_avg,
+            acc_inst_stats=acc_inst_stats,
+            acc_avg_stats=acc_avg_stats,
+            jerk_inst_stats=jerk_inst_stats,
+            jerk_avg_stats=jerk_avg_stats,
+        )
+        print(f"\nData saved to: {save_data_dir}")
+
+    # Save plots if requested
+    if save_plot_dir:
+        fig_inst.savefig(save_plot_dir / "lateral_analysis_instantaneous.png")
+        fig_avg.savefig(save_plot_dir / "lateral_analysis_averaged.png")
+        print(f"\nPlots saved to: {save_plot_dir}")
+    else:
+        plt.show()
+
+    return (
+        is_passed,
+        acc_inst_stats,
+        acc_avg_stats,
+        jerk_inst_stats,
+        jerk_avg_stats,
+        (fig_inst, fig_avg),  # Return both figures
+        lateral_acc_inst,
+        lateral_acc_avg,
+        lateral_jerk_inst,
+        lateral_jerk_avg,
+        timestamps,
+    )
 # More guidance specific analysis scripts to come ....
