@@ -23,7 +23,7 @@ Install the required packages:
 ```
 bash
 sudo apt install ros-humble-rosbag2*
-pip install numpy pandas matplotlib scipy argcomplete mcap-ros2-support pytest
+pip install numpy matplotlib scipy argcomplete mcap-ros2-support pytest
 ```
 
 ### Running Analyses

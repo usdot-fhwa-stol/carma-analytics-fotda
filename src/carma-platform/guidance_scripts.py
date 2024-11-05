@@ -7,7 +7,6 @@ from scipy.interpolate import CubicSpline
 from pathlib import Path
 from scipy.spatial import KDTree
 import json
-import pandas as pd
 
 STD_DEV_LABEL_STRING = "±1 Std Dev"
 TIME_SECONDS_LABEL_STRING = "Time (seconds)"
@@ -397,10 +396,10 @@ def calculate_instant_acceleration(timestamps, speeds):
     # Use timestamps[1:] because the acceleration values correspond to the later point in each pair
     return accelerations, timestamps[1:]
 
-
-def calculate_window_values(timestamps, values, window_size=1.0):
+def calculate_window_average(timestamps, values, window_size=1.0):
     """
-    Calculate average values over specified time windows using pandas rolling window.
+    Calculate time-weighted average values over specified time windows, moving forward by 1 point each time.
+    Uses the formula: Average = Σ(value_i * Δt_i) / Σ(Δt_i)
 
     Args:
         timestamps: Array of timestamps in seconds
@@ -408,44 +407,35 @@ def calculate_window_values(timestamps, values, window_size=1.0):
         window_size: Size of window in seconds (default: 1.0)
 
     Returns:
-        tuple: (avg_values, avg_timestamps)
+        tuple: (window_averages, avg_timestamps)
     """
-    # Create a pandas DataFrame with timestamps as index
-    df = pd.DataFrame({
-        'values': values,
-        'timestamps': timestamps
-    })
+    window_averages = []
+    avg_timestamps = []
 
-    # Sort by timestamps to ensure proper window calculation
-    df = df.sort_values('timestamps')
+    for i in range(len(timestamps) - 1):
+        # Find all points within window_size seconds from current point
+        mask = (timestamps > timestamps[i]) & (
+            timestamps <= timestamps[i] + window_size
+        )
 
-    # Calculate rolling window based on the number of points that fit within the time window
-    def get_window_data(series):
-        # Get the index for current window
-        current_idx = series.index[-1]
-        # Get current timestamp from the main DataFrame
-        current_time = df.loc[current_idx, 'timestamps']
-        window_start = current_time - window_size
-        # Get window data using timestamps
-        window_mask = (df['timestamps'] >= window_start) & (df['timestamps'] <= current_time)
-        window_values = df.loc[window_mask, 'values']
+        if np.sum(mask) > 1:  # Need at least 2 points for average
+            window_values = values[mask]
+            window_times = timestamps[mask]
 
-        if len(window_values) < 2:  # Need at least 2 points
-            return np.nan
-        return window_values.mean()
+            # Calculate time intervals between consecutive measurements
+            delta_t = np.diff(window_times)
 
-    # Apply rolling
-    rolling_values = df['values'].rolling(
-        window=len(df),  # Use full window size
-        min_periods=2    # Minimum number of observations required
-    ).apply(get_window_data)
+            # Calculate value * dt for each interval
+            # Use values[:-1] because we have one less interval than values
+            value_time_products = window_values[:-1] * delta_t
 
-    # Remove NaN values and get corresponding timestamps
-    mask = rolling_values.notna()
-    avg_values = rolling_values[mask].values
-    avg_timestamps = df.loc[mask, 'timestamps'].values
+            # Calculate time-weighted average using the formula
+            avg_value = np.sum(value_time_products) / np.sum(delta_t)
 
-    return np.array(avg_values), np.array(avg_timestamps)
+            window_averages.append(avg_value)
+            avg_timestamps.append(timestamps[i])
+
+    return np.array(window_averages), np.array(avg_timestamps)
 
 def calculate_acceleration_stats(accelerations):
     """
@@ -553,8 +543,8 @@ def run_acceleration_comfort_analysis(
     instant_stats = calculate_acceleration_stats(accelerations)
 
     # Calculate 1-second average accelerations
-    avg_accelerations, avg_timepoints = calculate_window_values(
-        timestamps, accelerations
+    avg_accelerations, avg_timepoints = calculate_window_average(
+        time_points, accelerations
     )
     avg_stats = calculate_acceleration_stats(avg_accelerations)
 
@@ -727,10 +717,10 @@ def run_lateral_analysis(
     )
 
     # Calculate 1-second window averages
-    lateral_acc_avg, acc_timestamps_avg = calculate_window_values(
+    lateral_acc_avg, acc_timestamps_avg = calculate_window_average(
         acc_timestamps, lateral_acc_inst, window_size=1.0
     )
-    lateral_jerk_avg, jerk_timestamps_avg = calculate_window_values(
+    lateral_jerk_avg, jerk_timestamps_avg = calculate_window_average(
         jerk_timestamps, lateral_jerk_inst, window_size=1.0
     )
 
