@@ -418,7 +418,7 @@ def calculate_window_average(timestamps, values, window_size=1.0):
             timestamps <= timestamps[i] + window_size
         )
 
-        if np.sum(mask) > 1:  # Need at least 2 points for average
+        if len(timestamps[mask]) > 1:  # Need at least 2 points for average
             window_values = values[mask]
             window_times = timestamps[mask]
 
