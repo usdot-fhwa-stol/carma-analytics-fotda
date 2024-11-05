@@ -7,6 +7,7 @@ from scipy.interpolate import CubicSpline
 from pathlib import Path
 from scipy.spatial import KDTree
 import json
+import pandas as pd
 
 STD_DEV_LABEL_STRING = "±1 Std Dev"
 TIME_SECONDS_LABEL_STRING = "Time (seconds)"
@@ -399,7 +400,7 @@ def calculate_instant_acceleration(timestamps, speeds):
 
 def calculate_window_values(timestamps, values, window_size=1.0):
     """
-    Calculate average values over specified time windows, moving forward by 1 point each time.
+    Calculate average values over specified time windows using pandas rolling window.
 
     Args:
         timestamps: Array of timestamps in seconds
@@ -409,27 +410,42 @@ def calculate_window_values(timestamps, values, window_size=1.0):
     Returns:
         tuple: (avg_values, avg_timestamps)
     """
-    avg_values = []
-    avg_timestamps = []
+    # Create a pandas DataFrame with timestamps as index
+    df = pd.DataFrame({
+        'values': values,
+        'timestamps': timestamps
+    })
 
-    for i in range(len(timestamps) - 1):
-        # Find all points within window_size seconds from current point
-        mask = (timestamps > timestamps[i]) & (
-            timestamps <= timestamps[i] + window_size
-        )
+    # Sort by timestamps to ensure proper window calculation
+    df = df.sort_values('timestamps')
 
-        if np.sum(mask) > 1:  # Need at least 2 points for window
-            window_values = values[mask]
-            window_times = timestamps[mask]
+    # Calculate rolling window based on the number of points that fit within the time window
+    def get_window_data(series):
+        # Get the index for current window
+        current_idx = series.index[-1]
+        # Get current timestamp from the main DataFrame
+        current_time = df.loc[current_idx, 'timestamps']
+        window_start = current_time - window_size
+        # Get window data using timestamps
+        window_mask = (df['timestamps'] >= window_start) & (df['timestamps'] <= current_time)
+        window_values = df.loc[window_mask, 'values']
 
-            # Calculate average value in window
-            avg_value = np.mean(window_values)
+        if len(window_values) < 2:  # Need at least 2 points
+            return np.nan
+        return window_values.mean()
 
-            avg_values.append(avg_value)
-            avg_timestamps.append(timestamps[i])
+    # Apply rolling
+    rolling_values = df['values'].rolling(
+        window=len(df),  # Use full window size
+        min_periods=2    # Minimum number of observations required
+    ).apply(get_window_data)
+
+    # Remove NaN values and get corresponding timestamps
+    mask = rolling_values.notna()
+    avg_values = rolling_values[mask].values
+    avg_timestamps = df.loc[mask, 'timestamps'].values
 
     return np.array(avg_values), np.array(avg_timestamps)
-
 
 def calculate_acceleration_stats(accelerations):
     """
@@ -850,111 +866,6 @@ def run_lateral_analysis(
         jerk_inst_stats,
         jerk_avg_stats,
         (fig_acc, fig_jerk),  # Return both figures
-        lateral_acc_inst,
-        lateral_acc_avg,
-        lateral_jerk_inst,
-        lateral_jerk_avg,
-        timestamps,
-    )
-
-    # Plot instantaneous jerk
-    plot_acceleration_analysis(
-        jerk_timestamps,
-        lateral_jerk_inst,
-        jerk_inst_stats,
-        "Instantaneous Lateral Jerk",
-        "Lateral Jerk (m/s³)",
-        comfort_threshold=jerk_threshold_to_pass,
-        ax=ax2
-    )
-
-    fig_inst.suptitle("Instantaneous Lateral Analysis", fontsize=16, y=1.02)
-    plt.tight_layout()
-
-    # Figure 2: 1-second window averages
-    fig_avg, (ax3, ax4) = plt.subplots(2, 1, figsize=(12, 12))
-
-    # Plot 1-second average acceleration
-    plot_acceleration_analysis(
-        acc_timestamps_avg,
-        lateral_acc_avg,
-        acc_avg_stats,
-        "1-Second Average Lateral Acceleration",
-        "Lateral Acceleration (m/s²)",
-        comfort_threshold=acc_threshold_to_pass,
-        ax=ax3
-    )
-
-    # Plot 1-second average jerk
-    plot_acceleration_analysis(
-        jerk_timestamps_avg,
-        lateral_jerk_avg,
-        jerk_avg_stats,
-        "1-Second Average Lateral Jerk",
-        "Lateral Jerk (m/s³)",
-        comfort_threshold=jerk_threshold_to_pass,
-        ax=ax4
-    )
-
-    fig_avg.suptitle("1-Second Average Lateral Analysis", fontsize=16, y=1.02)
-    plt.tight_layout()
-
-    # Print statistics
-    print_stats(acc_inst_stats, "Instantaneous Lateral Acceleration Statistics")
-    print_stats(acc_avg_stats, "1-Second Average Lateral Acceleration Statistics")
-    print_stats(jerk_inst_stats, "Instantaneous Lateral Jerk Statistics")
-    print_stats(jerk_avg_stats, "1-Second Average Lateral Jerk Statistics")
-
-    print("\nComfort Analysis:")
-    print(f"Instantaneous Acceleration Discomfort Events: {acc_inst_discomfort}")
-    print(f"1-Second Average Acceleration Discomfort Events: {acc_avg_discomfort}")
-    print(f"Instantaneous Jerk Discomfort Events: {jerk_inst_discomfort}")
-    print(f"1-Second Average Jerk Discomfort Events: {jerk_avg_discomfort}")
-
-    # Save statistics if requested
-    if save_stats_dir:
-        stats = {
-            "instantaneous_acceleration": acc_inst_stats,
-            "average_acceleration": acc_avg_stats,
-            "instantaneous_jerk": jerk_inst_stats,
-            "average_jerk": jerk_avg_stats,
-        }
-        stats_full_path = save_stats_dir / "lateral_analysis_stats.json"
-        with open(stats_full_path, "w") as f:
-            json.dump(stats, f, indent=2)
-        print(f"Stats saved to: {save_stats_dir}")
-
-    # Save data if requested
-    if save_data_dir:
-        np.savez(
-            save_data_dir / "lateral_analysis_data.npz",
-            timestamps=timestamps,
-            lateral_acc_inst=lateral_acc_inst,
-            lateral_acc_avg=lateral_acc_avg,
-            lateral_jerk_inst=lateral_jerk_inst,
-            lateral_jerk_avg=lateral_jerk_avg,
-            acc_inst_stats=acc_inst_stats,
-            acc_avg_stats=acc_avg_stats,
-            jerk_inst_stats=jerk_inst_stats,
-            jerk_avg_stats=jerk_avg_stats,
-        )
-        print(f"\nData saved to: {save_data_dir}")
-
-    # Save plots if requested
-    if save_plot_dir:
-        fig_inst.savefig(save_plot_dir / "lateral_analysis_instantaneous.png")
-        fig_avg.savefig(save_plot_dir / "lateral_analysis_averaged.png")
-        print(f"\nPlots saved to: {save_plot_dir}")
-    else:
-        plt.show()
-
-    return (
-        is_passed,
-        acc_inst_stats,
-        acc_avg_stats,
-        jerk_inst_stats,
-        jerk_avg_stats,
-        (fig_inst, fig_avg),  # Return both figures
         lateral_acc_inst,
         lateral_acc_avg,
         lateral_jerk_inst,

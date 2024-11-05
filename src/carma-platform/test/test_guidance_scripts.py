@@ -7,7 +7,7 @@ from guidance_scripts import (
     run_turn_accuracy_analysis,
     run_acceleration_comfort_analysis,
     calculate_instant_acceleration,
-    calculate_window_acceleration,
+    calculate_window_values,
 )
 from pytest import approx
 import numpy as np
@@ -126,17 +126,21 @@ def test_calculate_instant_acceleration():
     assert accelerations == approx([1, 3, 5])
     assert time_points == approx([1, 2, 3])
 
-
-def test_calculate_window_acceleration():
+def test_calculate_window_values():
+    """Test the calculate_window_values function for averaging values"""
     timestamps = np.array([0, 0.5, 1.0, 1.5, 2.0])
-    speeds = np.array([0, 1, 2, 3, 4])
+    values = np.array([0, 1, 2, 3, 4])
 
-    avg_accelerations, avg_timestamps = calculate_window_acceleration(
-        timestamps, speeds, window_size=1.0
+    # Test average calculation
+    avg_values, avg_timestamps = calculate_window_values(
+        timestamps, values, window_size=1.0
     )
 
-    assert len(avg_accelerations) == len(avg_timestamps)
-    assert avg_accelerations[0] == approx(2.0)  # Change in speed over 1 second window
+    assert len(avg_values) == len(avg_timestamps)
+    # First window should include values [0, 1, 2] as they're within 1 second of t=0
+    assert avg_values[0] == approx(2.0)  # Average of [0, 1, 2] in windows_size 1.0
+    # Timestamps should start from original timestamps
+    assert avg_timestamps[0] == approx(0.0)
 
 
 def test_run_acceleration_comfort_analysis(mock_mcap_path):

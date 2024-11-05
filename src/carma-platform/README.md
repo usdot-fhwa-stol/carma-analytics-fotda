@@ -9,6 +9,7 @@ This package contains scripts for analyzing MCAP (ROS2 bag) files from CARMA Pla
 3. `run_all_control_analysis.py`: Implements specific control-related analyses using the framework from `run_all_analysis.py`.
 4. `guidance_scripts.py`: Contains individual analysis functions, such as cross-track error analysis.
 5. `parse_ros_bags.py`: Contains previous ROS1 functionality for data analysis. It maybe deprecated in the future.
+
 ## How to Use
 
 ### Prerequisites
@@ -22,12 +23,14 @@ Install the required packages:
 ```
 bash
 sudo apt install ros-humble-rosbag2*
-pip install numpy matplotlib scipy argcomplete mcap-ros2-support pytest
+pip install numpy pandas matplotlib scipy argcomplete mcap-ros2-support pytest
 ```
 
 ### Running Analyses
+
 Individual use case specific analysis functions should be created in the same manner as `run_all_control_analysis.py` such as `run_all_<use-case>_analysis`.
 This guide is written using the control related scripts as an example.
+
 1. To run all control analyses on a set of MCAP files:
 
 ```
@@ -36,6 +39,7 @@ python run_all_control_analysis.py --input-dir /path/to/mcap/files --output-dir 
 ```
 
 This will:
+
 - Find all MCAP files in the input directory
 - Run the specified use case analyses
 - Save results, plots, and statistics in the output directory
@@ -55,6 +59,7 @@ Then reuse the `run_all_analysis.py` to automatically detect MCAP files and gene
 ## Output
 
 The script generates:
+
 - A summary JSON file with results for all analyzed files
 - Individual directories for each MCAP file containing:
   - Plots (PNG files)
@@ -62,6 +67,7 @@ The script generates:
   - Statistics (JSON files)
 
 ### Example output folder structure
+
 ```
 analysis_20241025_065250
 ├── rosbag2_2024_10_08_20_00_45_0
@@ -80,7 +86,9 @@ analysis_20241025_065250
 │          ...
 └── analysis_summary.json
 ```
+
 ### Example Analysis Summary (JSON)
+
 ```
 {
   "analysis_time": "2024-10-25T06:52:52.306773",
