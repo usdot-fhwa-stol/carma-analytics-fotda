@@ -13,7 +13,7 @@ import datetime as dt
 import os
 
 
-# from ackermann_to_vesc_node parameters in cda1tenth_bringup/params/params.yaml
+# from ackermann_to_vesc_node parameters in cda1tenth-bringup/params/params.yaml
 STEERING_TO_SERVO_OFFSET = 0.425
 STEERING_TO_SERVO_GAIN = -0.55
 
