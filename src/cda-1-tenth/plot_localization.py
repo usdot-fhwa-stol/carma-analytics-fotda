@@ -71,7 +71,7 @@ def plot_localization(bag_dir, show_plots=True):
                 velocities_count += 1
 
     route_coordinates = []
-    # Rotate the route_graph coordinates 90 degrees to match C1T coordinates (x-forward, y-left)
+    # Rotate the route_graph coordinates 90 degrees to match CDA1tenth coordinates (x-forward, y-left)
     for i in range(len(route_graph.markers)):
         if route_graph.markers[i].type == 2:
             route_coordinates.append([-route_graph.markers[i].pose.position.y, route_graph.markers[i].pose.position.x])

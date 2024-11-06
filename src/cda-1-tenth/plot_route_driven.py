@@ -1,4 +1,4 @@
-# Plot the path driven by the C1T truck and the route that it intended to follow
+# Plot the path driven by the CDA1tenth truck and the route that it intended to follow
 
 
 import argparse, argcomplete
@@ -151,7 +151,7 @@ def plot_route_driven(bag_dir, show_localization=False, show_speed=False):
 
 
 if __name__=="__main__":
-    parser = argparse.ArgumentParser(description="Plot the intended route and path driven of C1T trucks")
+    parser = argparse.ArgumentParser(description="Plot the intended route and path driven of CDA1tenth trucks")
     parser.add_argument("bag_in", type=str, help="Directory of bag to load")
     parser.add_argument("--show_localization", action="store_true", help="Show ellipses representing localization uncertainty")
     parser.add_argument("--show_speed", action="store_true", help="Color the route using the vehicle's speed")

@@ -13,7 +13,7 @@ import datetime as dt
 import os
 
 
-# from ackermann_to_vesc_node parameters in c1t_bringup/params/params.yaml
+# from ackermann_to_vesc_node parameters in cda1tenth-bringup/params/params.yaml
 STEERING_TO_SERVO_OFFSET = 0.425
 STEERING_TO_SERVO_GAIN = -0.55
 
@@ -47,7 +47,7 @@ def plot_steering_rate(bag_dir, label, start_offset=0.0):
 
 
 if __name__=="__main__":
-    parser = argparse.ArgumentParser(description="Plot steering rate of C1T trucks")
+    parser = argparse.ArgumentParser(description="Plot steering rate of CDA1tenth trucks")
     parser.add_argument("filtered_bag", type=str, help="Directory of bag with filtered steering")
     parser.add_argument("--filtered_bag_offset", type=float, default=0.0, help="Time offset for start of bag with filtered steering")
     parser.add_argument("--unfiltered_bag", type=str, help="Directory of bag with unfiltered steering")

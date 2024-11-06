@@ -1,4 +1,4 @@
-# Generate a box plot that benchmarks the route tracking performance of the red and blue C1T trucks at varying speeds
+# Generate a box plot that benchmarks the route tracking performance of the red and blue CDA1tenth trucks at varying speeds
 
 
 import numpy as np
@@ -79,7 +79,7 @@ def plot_multiple_crosstrack_errors(bags):
     plt.show()
 
 if __name__=="__main__":
-    parser = argparse.ArgumentParser(description="Generate box plots for multiple runs of C1T vehicles")
+    parser = argparse.ArgumentParser(description="Generate box plots for multiple runs of CDA1tenth vehicles")
     parser.add_argument("bags", type=str, help="Directories of bags to load", nargs='*')
     argcomplete.autocomplete(parser)
     args = parser.parse_args()

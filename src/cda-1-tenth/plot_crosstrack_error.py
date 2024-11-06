@@ -25,7 +25,7 @@ def is_left(route_a, route_b, odometry):
     
 def get_route_coordinates(route_messages, odometry):
     route_coordinates = []
-    # Rotate the route_graph coordinates 90 degrees to match C1T coordinates (x-forward, y-left)
+    # Rotate the route_graph coordinates 90 degrees to match CDA1tenth coordinates (x-forward, y-left)
     if type(route_messages[0]) == MarkerArray:
         route_message = route_messages[0]
         nx_graph = nx.DiGraph()
@@ -129,7 +129,7 @@ def plot_crosstrack_error(bag_dir, route_topic, show_plots=True):
 
 
 if __name__=="__main__":
-    parser = argparse.ArgumentParser(description="Plot deviation between C1T path driven and desired route")
+    parser = argparse.ArgumentParser(description="Plot deviation between CDA1tenth path driven and desired route")
     parser.add_argument("bag_in", type=str, help="Directory of bag to load")
     parser.add_argument("route_topic", type=str, help="Topic containing desired route to follow")
     argcomplete.autocomplete(parser)

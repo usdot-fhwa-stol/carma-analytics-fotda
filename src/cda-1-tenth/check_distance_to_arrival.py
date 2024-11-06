@@ -1,5 +1,5 @@
 # Report the distance between the goal position (sent on /incoming_mobility_operation) and the position
-# the C1T vehicle reports when acknowledging it has reached the goal (sent on /outgoing_mobility_operation)
+# the CDA1tenth vehicle reports when acknowledging it has reached the goal (sent on /outgoing_mobility_operation)
 # Assumes that there are an equal number of goal messages and acks in the ROS2 bag
 
 from rosbag_utils import open_bagfile
