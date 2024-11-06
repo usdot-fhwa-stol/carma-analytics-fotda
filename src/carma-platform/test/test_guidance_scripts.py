@@ -7,7 +7,9 @@ from guidance_scripts import (
     run_turn_accuracy_analysis,
     run_acceleration_comfort_analysis,
     calculate_instant_acceleration,
-    calculate_window_acceleration,
+    calculate_window_average,
+    calculate_instant_lateral_values,
+    run_lateral_analysis
 )
 from pytest import approx
 import numpy as np
@@ -126,17 +128,21 @@ def test_calculate_instant_acceleration():
     assert accelerations == approx([1, 3, 5])
     assert time_points == approx([1, 2, 3])
 
-
-def test_calculate_window_acceleration():
+def test_calculate_window_average():
+    """Test the calculate_window_average function for averaging values"""
     timestamps = np.array([0, 0.5, 1.0, 1.5, 2.0])
-    speeds = np.array([0, 1, 2, 3, 4])
+    values = np.array([0, 1, 2, 3, 4])
 
-    avg_accelerations, avg_timestamps = calculate_window_acceleration(
-        timestamps, speeds, window_size=1.0
+    # Test average calculation
+    avg_values, avg_timestamps = calculate_window_average(
+        timestamps, values, window_size=1.0
     )
 
-    assert len(avg_accelerations) == len(avg_timestamps)
-    assert avg_accelerations[0] == approx(2.0)  # Change in speed over 1 second window
+    assert len(avg_values) == len(avg_timestamps)
+    # First window should include values [0, 1, 2] as they're within 1 second of t=0
+    assert avg_values[0] == approx(1.0)  # Average of [0, 1, 2] in windows_size 1.0
+    # Timestamps should start from original timestamps
+    assert avg_timestamps[0] == approx(0.0)
 
 
 def test_run_acceleration_comfort_analysis(mock_mcap_path):
@@ -192,3 +198,135 @@ def test_run_acceleration_comfort_analysis(mock_mcap_path):
         assert len(time_points) == len(timestamps) - 1
         assert len(avg_accelerations) > 0
         assert len(avg_timepoints) > 0
+
+def test_calculate_instant_lateral_values():
+    """Test the calculate_instant_lateral_values function with known values"""
+    # Test data
+    long_velocities = np.array([1.0, 2.0, 3.0, 4.0])
+    ang_velocities = np.array([0.1, 0.2, 0.3, 0.4])
+    timestamps = np.array([0.0, 1.0, 2.0, 3.0])
+
+    # Calculate values
+    lateral_acc, lateral_jerk, acc_timestamps, jerk_timestamps = calculate_instant_lateral_values(
+        long_velocities, ang_velocities, timestamps
+    )
+
+    # Test output lengths
+    assert len(lateral_acc) == len(timestamps)
+    assert len(lateral_jerk) == len(timestamps) - 1
+    assert len(acc_timestamps) == len(timestamps)
+    assert len(jerk_timestamps) == len(timestamps) - 1
+
+    # Test acceleration calculations (v * ω)
+    expected_acc = np.array([0.1, 0.4, 0.9, 1.6])
+    np.testing.assert_array_almost_equal(lateral_acc, expected_acc)
+
+    # Test jerk calculations (Δacc/Δt)
+    expected_jerk = np.array([0.3, 0.5, 0.7])
+    np.testing.assert_array_almost_equal(lateral_jerk, expected_jerk)
+
+def test_calculate_instant_lateral_values_zero_input():
+    """Test with zero inputs"""
+    long_velocities = np.zeros(3)
+    ang_velocities = np.zeros(3)
+    timestamps = np.array([0.0, 1.0, 2.0])
+
+    lateral_acc, lateral_jerk, acc_timestamps, jerk_timestamps = calculate_instant_lateral_values(
+        long_velocities, ang_velocities, timestamps
+    )
+
+    assert np.all(lateral_acc == 0)
+    assert np.all(lateral_jerk == 0)
+
+def test_run_lateral_analysis(mock_mcap_path):
+    """Test the run_lateral_analysis function with mocked data"""
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract, \
+         patch("guidance_scripts.plt") as mock_plt:
+
+        # Mock timestamps and twist messages
+        timestamps = np.array([0.0, 0.5, 1.0, 1.5, 2.0])
+        velocity_data = [
+            (0.5, 0.1),  # (linear.x, angular.z)
+            (1.0, 0.2),
+            (1.5, 0.3),
+            (2.0, 0.4),
+            (2.5, 0.5)
+        ]
+
+        # Setup mock return value
+        mock_extract.return_value = {
+            "/hardware_interface/vehicle/twist": (timestamps, velocity_data)
+        }
+
+        # Mock plt.subplots to return figures and axes
+        mock_fig_acc = MagicMock()
+        mock_fig_jerk = MagicMock()
+        mock_ax1 = MagicMock()
+        mock_ax2 = MagicMock()
+        mock_ax3 = MagicMock()
+        mock_ax4 = MagicMock()
+        mock_plt.subplots.side_effect = [
+            (mock_fig_acc, (mock_ax1, mock_ax2)),
+            (mock_fig_jerk, (mock_ax3, mock_ax4))
+        ]
+
+        # Run analysis
+        (is_passed, acc_inst_stats, acc_avg_stats, jerk_inst_stats, jerk_avg_stats,
+         figures, lateral_acc_inst, lateral_acc_avg, lateral_jerk_inst, lateral_jerk_avg,
+         timestamps_out) = run_lateral_analysis(
+            mock_mcap_path,
+            acc_threshold_to_pass=2.0,
+            jerk_threshold_to_pass=2.0
+        )
+
+        # Test that values were calculated correctly
+        assert len(lateral_acc_inst) == len(timestamps)
+        assert len(lateral_jerk_inst) == len(timestamps) - 1
+
+        # Test statistics were calculated
+        assert acc_inst_stats["minimum"] == approx(0.05, rel=1e-2)
+        assert acc_inst_stats["maximum"] == approx(1.25, rel=1e-2)
+
+        # Test figure generation
+        assert len(figures) == 2
+        assert isinstance(figures[0], MagicMock)  # acc figure
+        assert isinstance(figures[1], MagicMock)  # jerk figure
+
+        # Test pass/fail criteria
+        assert isinstance(is_passed, bool)
+
+        # Test output timestamps
+        np.testing.assert_array_equal(timestamps_out, timestamps)
+
+def test_run_lateral_analysis_exceeds_threshold(mock_mcap_path):
+    """Test run_lateral_analysis when values exceed comfort thresholds"""
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract, \
+         patch("guidance_scripts.plt") as mock_plt:
+
+        # Setup mock data with high acceleration/jerk values
+        timestamps = np.array([0.0, 0.5, 1.0, 1.5])
+        velocity_data = [
+            (2.5, 1.0),  # Will create high lateral acceleration
+            (5.0, 1.0),
+            (10.0, 1.0),
+            (15.0, 1.0)
+        ]
+        mock_extract.return_value = {
+            "/hardware_interface/vehicle/twist": (timestamps, velocity_data)
+        }
+
+        # Mock figure creation
+        mock_plt.subplots.side_effect = [
+            (MagicMock(), (MagicMock(), MagicMock())),
+            (MagicMock(), (MagicMock(), MagicMock()))
+        ]
+
+        # Run analysis with low thresholds
+        result = run_lateral_analysis(
+            mock_mcap_path,
+            acc_threshold_to_pass=1.0,  # Low threshold
+            jerk_threshold_to_pass=1.0   # Low threshold
+        )
+
+        # Test that analysis failed due to exceeded thresholds
+        assert result[0] == False  # is_passed should be False

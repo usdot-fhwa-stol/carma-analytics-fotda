@@ -89,6 +89,62 @@ Analyzes acceleration comfort based on vehicle status data.
 
 ![Acceleration Comfort Analysis](acceleration_comfort_analysis.png)
 
+### run_lateral_analysis
+
+Analyzes lateral acceleration and jerk from vehicle state data using both instantaneous and 1-second window averages. Uses twist data from vehicle interface (topic `/hardware_interface/vehicle/twist`) to calculate lateral dynamics.
+
+#### Parameters
+
+- `mcap_path`: Path to MCAP file
+- `acc_threshold_to_pass`: Maximum acceptable lateral acceleration (default: 2.0 m/s²)
+- `jerk_threshold_to_pass`: Maximum acceptable lateral jerk (default: 2.0 m/s³)
+- `start_time`: Time to start the analysis (optional)
+- `end_time`: Time to end the analysis (optional)
+- `save_stats_dir`: Directory to save extracted statistics (optional)
+- `save_data_dir`: Directory to save extracted data (optional)
+- `save_plot_dir`: Directory to save generated plots (optional)
+
+#### Output
+
+Returns a tuple containing:
+
+- `is_passed`: Boolean indicating if all comfort thresholds were met
+- `acc_inst_stats`: Statistics for instantaneous acceleration
+- `acc_avg_stats`: Statistics for 1-second average acceleration
+- `jerk_inst_stats`: Statistics for instantaneous jerk
+- `jerk_avg_stats`: Statistics for 1-second average jerk
+- `figures`: Tuple of (acceleration_figure, jerk_figure)
+- `lateral_acc_inst`: Array of instantaneous lateral acceleration values
+- `lateral_acc_avg`: Array of averaged lateral acceleration values
+- `lateral_jerk_inst`: Array of instantaneous lateral jerk values
+- `lateral_jerk_avg`: Array of averaged lateral jerk values
+- `timestamps`: Array of corresponding timestamps
+
+#### Saved Outputs
+
+If directories are provided:
+
+- Statistics saved as JSON in "lateral_analysis_stats.json"
+- Data saved as NPZ in "lateral_analysis_data.npz"
+- Plots saved as:
+  - "lateral_acceleration_analysis.png"
+  - "lateral_jerk_analysis.png"
+
+#### Example Plots
+
+![Lateral Acceleration Analysis](lateral_acceleration_analysis.png)
+Shows instantaneous and 1-second average lateral acceleration over time.
+
+![Lateral Jerk Analysis](lateral_jerk_analysis.png)
+Shows instantaneous and 1-second average lateral jerk over time.
+
+#### Notes
+
+- Uses vehicle's longitudinal velocity and angular velocity to calculate lateral dynamics
+- Comfort thresholds are applied to both instantaneous and averaged values
+- Analysis passes only if no comfort threshold violations occur in any metric
+- Time-weighted averaging is used for the 1-second window calculations
+
 ## Adding New Analysis Functions
 
 To add a new analysis function:
