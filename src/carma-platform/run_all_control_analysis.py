@@ -5,7 +5,9 @@ from guidance_scripts import (
     run_crosstrack_analysis,
     run_turn_accuracy_analysis,
     run_acceleration_comfort_analysis,
-    run_lateral_analysis
+    run_lateral_analysis,
+    run_guidance_steering_analysis,
+    run_steering_wheel_analysis
 )
 from run_all_analysis import run_all_analysis
 import argparse
@@ -25,6 +27,9 @@ COMFORT_ACCELERATION_THRESHOLD_MS2 = 3.0
 # 4. Lateral acceleration jerk analysis
 ACC_THRESHOLD_TO_PASS_MS2 = 2.0
 JERK_THRESHOLD_TO_PASS_MS3 = 3.0
+# 5. Steering angle and steering wheel analysis
+STEERING_ANGLE_ERROR_THREHOLD_RADIAN = 0.1
+STEERING_WHEEL_ANGLE_ERROR_THRESHOLD_RADIAN = 0.1
 
 def analyze_mcap_file_for_control_analysis(
     mcap_path: Path, output_dir: Path, stats_dir: Path, data_dir: Path, plots_dir: Path
@@ -39,84 +44,120 @@ def analyze_mcap_file_for_control_analysis(
 
     analysis_stats = {}
     # 1. Cross_track analysis
+    # try:
+    #     is_passed, _, _, _, _ = run_crosstrack_analysis(
+    #         mcap_path,
+    #         CROSS_TRACK_ERROR_THRESHOLD_METER,
+    #         engage_time,
+    #         disengage_time,
+    #         stats_dir,
+    #         data_dir,
+    #         plots_dir,
+    #     )
+    #     analysis_stats["run_crosstrack_analysis"] = is_passed
+    # except Exception as e:
+    #     print(f"Error analyzing {mcap_path} for metric run_crosstrack_analysis: {e}")
+    #     analysis_stats["run_crosstrack_analysis"] = None
+
+    # # 2. Turn accuracy analysis by spline fitting
+    # try:
+    #     is_passed, _, _, actual_path, planned_path, _, _ = run_turn_accuracy_analysis(
+    #         mcap_path,
+    #         TURN_ACCURACY_ERROR_THRESHOLD_METER,
+    #         engage_time,
+    #         disengage_time,
+    #         stats_dir,
+    #         data_dir,
+    #         plots_dir,
+    #     )
+    #     analysis_stats["run_turn_accuracy_analysis"] = is_passed
+    # except Exception as e:
+    #     print(f"Error analyzing {mcap_path} for metric run_turn_accuracy_analysis: {e}")
+    #     analysis_stats["run_turn_accuracy_analysis"] = None
+
+    # # 2.a Visualize traveled path and planned path on actual map
+    # # This is for visual verification
+    # try:
+    #     lanelet2_map_data = extract_lanelet2_map_from_mcap(str(mcap_path))
+    #     if (list(planned_path)):
+    #         plot_2d_map_and_pose(lanelet2_map_data, list(planned_path), plots_dir / "planned_path")
+    #     if (list(actual_path)):
+    #         plot_2d_map_and_pose(lanelet2_map_data, list(actual_path), plots_dir / "actual_path")
+    # except Exception as e:
+    #     print(f"Error plotting {mcap_path} for plotting lanelet2 map data: {e}")
+
+    # # 3. Longitudinal acceleration analysis
+    # try:
+    #     is_passed, _, _, _, _, _, _, _ = run_acceleration_comfort_analysis(
+    #         mcap_path,
+    #         COMFORT_ACCELERATION_THRESHOLD_MS2,
+    #         engage_time,
+    #         disengage_time,
+    #         stats_dir,
+    #         data_dir,
+    #         plots_dir,
+    #     )
+    #     analysis_stats["run_acceleration_comfort_analysis"] = is_passed
+    # except Exception as e:
+    #     print(
+    #         f"Error analyzing {mcap_path} for metric run_acceleration_comfort_analysis: {e}"
+    #     )
+    #     analysis_stats["run_acceleration_comfort_analysis"] = None
+
+    # # 4. Lateral acceleration and jerk analysis for instant and any 1sec window period
+    # try:
+    #     is_passed, _, _, _, _, _, _, _, _, _, _ = run_lateral_analysis(
+    #         mcap_path,
+    #         ACC_THRESHOLD_TO_PASS_MS2,
+    #         JERK_THRESHOLD_TO_PASS_MS3,
+    #         engage_time,
+    #         disengage_time,
+    #         stats_dir,
+    #         data_dir,
+    #         plots_dir,
+    #     )
+    #     analysis_stats["run_lateral_analysis"] = is_passed
+    # except Exception as e:
+    #     print(
+    #         f"Error analyzing {mcap_path} for metric run_lateral_analysis: {e}"
+    #     )
+    #     analysis_stats["run_lateral_analysis"] = None
+
+    # 5.A Steering angle analysis
     try:
-        is_passed, _, _, _, _ = run_crosstrack_analysis(
+        steering_analysis_results = run_guidance_steering_analysis(
             mcap_path,
-            CROSS_TRACK_ERROR_THRESHOLD_METER,
+            STEERING_ANGLE_ERROR_THREHOLD_RADIAN,
             engage_time,
             disengage_time,
             stats_dir,
             data_dir,
             plots_dir,
         )
-        analysis_stats["run_crosstrack_analysis"] = is_passed
-    except Exception as e:
-        print(f"Error analyzing {mcap_path} for metric run_crosstrack_analysis: {e}")
-        analysis_stats["run_crosstrack_analysis"] = None
-
-    # 2. Turn accuracy analysis by spline fitting
-    try:
-        is_passed, _, _, actual_path, planned_path, _, _ = run_turn_accuracy_analysis(
-            mcap_path,
-            TURN_ACCURACY_ERROR_THRESHOLD_METER,
-            engage_time,
-            disengage_time,
-            stats_dir,
-            data_dir,
-            plots_dir,
-        )
-        analysis_stats["run_turn_accuracy_analysis"] = is_passed
-    except Exception as e:
-        print(f"Error analyzing {mcap_path} for metric run_turn_accuracy_analysis: {e}")
-        analysis_stats["run_turn_accuracy_analysis"] = None
-
-    # 2.a Visualize traveled path and planned path on actual map
-    # This is for visual verification
-    try:
-        lanelet2_map_data = extract_lanelet2_map_from_mcap(str(mcap_path))
-        if (list(planned_path)):
-            plot_2d_map_and_pose(lanelet2_map_data, list(planned_path), plots_dir / "planned_path")
-        if (list(actual_path)):
-            plot_2d_map_and_pose(lanelet2_map_data, list(actual_path), plots_dir / "actual_path")
-    except Exception as e:
-        print(f"Error plotting {mcap_path} for plotting lanelet2 map data: {e}")
-
-    # 3.
-    try:
-        is_passed, _, _, _, _, _, _, _ = run_acceleration_comfort_analysis(
-            mcap_path,
-            COMFORT_ACCELERATION_THRESHOLD_MS2,
-            engage_time,
-            disengage_time,
-            stats_dir,
-            data_dir,
-            plots_dir,
-        )
-        analysis_stats["run_acceleration_comfort_analysis"] = is_passed
+        analysis_stats["run_guidance_steering_analysis"] = steering_analysis_results[0]
     except Exception as e:
         print(
-            f"Error analyzing {mcap_path} for metric run_acceleration_comfort_analysis: {e}"
+            f"Error analyzing {mcap_path} for metric run_guidance_steering_analysis: {e}"
         )
-        analysis_stats["run_acceleration_comfort_analysis"] = None
-
-    # 4.
+        analysis_stats["run_guidance_steering_analysis"] = None
+    
+    # 5.B Steering wheel angle analysis
     try:
-        is_passed, _, _, _, _, _, _, _, _, _, _ = run_lateral_analysis(
+        steering_wheel_analysis_results = run_steering_wheel_analysis(
             mcap_path,
-            ACC_THRESHOLD_TO_PASS_MS2,
-            JERK_THRESHOLD_TO_PASS_MS3,
+            STEERING_ANGLE_ERROR_THREHOLD_RADIAN,
             engage_time,
             disengage_time,
             stats_dir,
             data_dir,
             plots_dir,
         )
-        analysis_stats["run_lateral_analysis"] = is_passed
+        analysis_stats["run_steering_wheel_analysis"] = steering_wheel_analysis_results[0]
     except Exception as e:
         print(
-            f"Error analyzing {mcap_path} for metric run_lateral_analysis: {e}"
+            f"Error analyzing {mcap_path} for metric run_steering_wheel_analysis: {e}"
         )
-        analysis_stats["run_lateral_analysis"] = None
+        analysis_stats["run_steering_wheel_analysis"] = None
 
     return analysis_stats
 
