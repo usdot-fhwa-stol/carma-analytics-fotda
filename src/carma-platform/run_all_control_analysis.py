@@ -34,7 +34,7 @@ STEERING_WHEEL_ANGLE_ERROR_THRESHOLD_RADIAN = 0.1
 
 def analyze_mcap_file_for_control_analysis(
     mcap_path: Path, output_dir: Path, stats_dir: Path, data_dir: Path, plots_dir: Path
-) -> List:
+) -> list:
     """Extract single MCAP file and run all control analysis on it"""
     # 0. General steps needed for all
     try:
@@ -48,14 +48,13 @@ def analyze_mcap_file_for_control_analysis(
     intervals = [(engage_time, disengage_time)]
     planner_plugin_name="/guidance/plugins/cooperative_lanechange"
     try:
-        new_list = get_planner_trajectory_intervals(
+        new_intervals = get_planner_trajectory_intervals(
             mcap_path=mcap_path,
             planner_plugin_name=planner_plugin_name,
             start_time=engage_time,
             end_time=disengage_time
         )
-        print(f"new_list: {new_list}")
-        intervals.extend(new_list)
+        intervals.extend(new_intervals)
     except Exception as e:
         print(f"Error getting start and end time {planner_plugin_name}: for mcap {mcap_path}: {e}")
         return None

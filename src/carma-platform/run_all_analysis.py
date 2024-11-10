@@ -59,7 +59,7 @@ def update_metrics_results(
     result: List[Dict[str, Optional[bool]]], metrics_results: defaultdict
 ) -> None:
     """Update metrics results based on the analysis result."""
-    if result == {}:
+    if result == []:
         metrics_results["general"]["errors"] += 1  # error that applies to all metrics
         return
 
