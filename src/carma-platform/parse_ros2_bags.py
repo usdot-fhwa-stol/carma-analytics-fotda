@@ -26,6 +26,44 @@ def get_rosbag_options(path, serialization_format="cdr", storage_id="sqlite3"):
 
     return storage_options, converter_options
 
+def get_earliest_timestamp(reader, topic_types):
+    """
+    Get the earliest timestamp from the first message of each topic in the bag.
+    
+    Args:
+        reader (rosbag2_py.SequentialReader): An initialized bag reader
+        topic_types (list): List of topic metadata from the reader
+        
+    Returns:
+        int: The earliest timestamp (in nanoseconds) found across all topics
+        
+    Raises:
+        ValueError: If no valid timestamps are found in any topic
+    """
+    earliest_time = float('inf')
+    
+    for topic_metadata in topic_types:
+        topic_name = topic_metadata.name
+        
+        # Setup storage filter for this topic
+        storage_filter = rosbag2_py.StorageFilter(topics=[topic_name])
+        reader.set_filter(storage_filter)
+        
+        try:
+            # Try to get the first message from this topic
+            (topic, msg, t) = reader.read_next()
+            
+            # Update earliest time if this message is earlier
+            earliest_time = min(earliest_time, t)
+            
+        except:
+            # Skip if we can't read from this topic
+            continue
+    
+    if earliest_time == float('inf'):
+        raise ValueError("No valid timestamps found in the ROS2 bag")
+        
+    return earliest_time
 
 def open_bagfile(path, topics=[], serialization_format="cdr", storage_id="mcap"):
     """
@@ -57,29 +95,8 @@ def open_bagfile(path, topics=[], serialization_format="cdr", storage_id="mcap")
         topic_types[i].name: topic_types[i].type for i in range(len(topic_types))
     }
     
-    earliest_time = float('inf')
-    # Get the time the rosbag started recording 
-    # Read first message from each topic
-    for topic_metadata in topic_types:
-        topic_name = topic_metadata.name
-        
-        # Setup storage filter for this topic
-        storage_filter = rosbag2_py.StorageFilter(topics=[topic_name])
-        reader.set_filter(storage_filter)
-        
-        try:
-            # Try to get the first message from this topic
-            (topic, msg, t) = reader.read_next()
-            
-            # Update earliest time if this message is earlier
-            earliest_time = min(earliest_time, t)
-            
-        except:
-            # Skip if we can't read from this topic
-            continue
-    
-    if earliest_time == float('inf'):
-        raise ValueError("No valid timestamps found in the ROS2 bag")
+    # Get the earliest timestamp from all topics
+    earliest_time = get_earliest_timestamp(reader, topic_types)
         
     if topics:
         filt = rosbag2_py.StorageFilter(topics)

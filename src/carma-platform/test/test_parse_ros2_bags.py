@@ -1,7 +1,30 @@
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from parse_ros2_bags import extract_mcap_data
+from parse_ros2_bags import extract_mcap_data, get_earliest_timestamp
+
+@pytest.fixture
+def mock_reader():
+    return MagicMock()
+
+@pytest.fixture
+def mock_topic_types():
+    topic1 = MagicMock()
+    topic1.name = "/topic1"
+    topic2 = MagicMock()
+    topic2.name = "/topic2"
+    return [topic1, topic2]
+
+def test_get_earliest_timestamp(mock_reader, mock_topic_types):
+    mock_reader.read_next.side_effect = [
+        ("/topic1", "msg1", 2000000000),
+        ("/topic2", "msg2", 1000000000)
+    ]
+    
+    result = get_earliest_timestamp(mock_reader, mock_topic_types)
+    
+    assert result == 1000000000
+    assert mock_reader.set_filter.call_count == 2
 
 @pytest.fixture
 def mock_mcap_path():
