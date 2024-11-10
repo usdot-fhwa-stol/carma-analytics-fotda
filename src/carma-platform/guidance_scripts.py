@@ -92,13 +92,13 @@ def run_crosstrack_analysis(
         Msgs: carma_planning_msgs
     """
 
-    topics = ["/guidance/route_state"]
+    topics = [GUIDANCE_ROUTE_STATE_TOPIC]
     extracted_data = extract_mcap_data(
         mcap_path,
         topics,
         start_time=start_time,
         end_time=end_time,
-        field_extractors={"/guidance/route_state": lambda msg: msg.cross_track},
+        field_extractors={GUIDANCE_ROUTE_STATE_TOPIC: lambda msg: msg.cross_track},
     )
     timestamps, cross_tracks = extracted_data[topics[0]]
 

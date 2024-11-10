@@ -56,7 +56,7 @@ def get_earliest_timestamp(reader, topic_types):
             # Update earliest time if this message is earlier
             earliest_time = min(earliest_time, t)
             
-        except:
+        except Exception:
             # Skip if we can't read from this topic
             continue
     
