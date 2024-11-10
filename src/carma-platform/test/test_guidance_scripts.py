@@ -1,18 +1,7 @@
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from guidance_scripts import (
-    get_engage_time,
-    run_crosstrack_analysis,
-    run_turn_accuracy_analysis,
-    run_acceleration_comfort_analysis,
-    calculate_instant_acceleration,
-    calculate_window_average,
-    calculate_instant_lateral_values,
-    run_lateral_analysis,
-    run_steering_wheel_analysis,
-    run_guidance_steering_analysis
-)
+from guidance_scripts import *
 from pytest import approx
 import numpy as np
 
@@ -457,3 +446,32 @@ def test_run_steering_wheel_analysis_fails_threshold(mock_mcap_path):
         
         assert is_passed == False  # Should fail due to large errors
         assert stats["median"] > 0.1  # Median error should exceed threshold
+
+def test_get_planner_trajectory_intervals(mock_mcap_path):
+    # Mock the extract_mcap_data function
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
+        mock_extract.return_value = {
+            "/guidance/plan_trajectory": (
+                [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+                [
+                    ("guidance/plugins/inlanecruising_plugin"),
+                    ("guidance/plugins/inlanecruising_plugin"),
+                    ("guidance/plugins/inlanecruising_plugin"),
+                    ("guidance/plugins/cooperative_lanechange"),
+                    ("guidance/plugins/cooperative_lanechange"),
+                    ("guidance/plugins/inlanecruising_plugin"),
+                    ("guidance/plugins/inlanecruising_plugin"),
+                    ("guidance/plugins/cooperative_lanechange"),
+                    ("guidance/plugins/cooperative_lanechange"),
+                    ("guidance/plugins/inlanecruising_plugin"),
+                ]
+            )
+        }
+
+        # Call the function and assert the expected output
+        intervals = get_planner_trajectory_intervals(mock_mcap_path, "guidance/plugins/inlanecruising_plugin")
+        assert intervals == [
+            (0.0, 3.0),
+            (5.0, 7.0),
+            (9.0, 9.1)
+        ]

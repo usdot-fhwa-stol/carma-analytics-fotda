@@ -33,9 +33,9 @@ def create_output_directories(
 
 def analyze_mcap_file(
     mcap_file: Path,
-    analysis_func: Callable[[Path, Path, Path, Path, Path], Dict[str, Optional[bool]]],
+    analysis_func: Callable[[Path, Path, Path, Path, Path], List[Dict[str, Optional[bool]]]],
     output_dir: Path,
-) -> Dict[str, Optional[bool]]:
+) -> List[Dict[str, Optional[bool]]]:
     """Analyze a single MCAP file and return the results."""
     file_name = mcap_file.stem
     file_output_dir, file_stats_dir, file_data_dir, file_plots_dir = (
@@ -46,30 +46,31 @@ def analyze_mcap_file(
         result = analysis_func(
             mcap_file, file_output_dir, file_stats_dir, file_data_dir, file_plots_dir
         )
-        if not isinstance(result, dict):
-            print(f"Warning: Analysis result for {mcap_file} is not a dictionary")
-            return {}
+        if not isinstance(result, list):
+            print(f"Warning: Analysis result for {mcap_file} is not a list")
+            return []
         return result
     except Exception as e:
         print(f"Error analyzing {mcap_file}: {e}")
-        return {}
+        return []
 
 
 def update_metrics_results(
-    result: Dict[str, Optional[bool]], metrics_results: defaultdict
+    result: List[Dict[str, Optional[bool]]], metrics_results: defaultdict
 ) -> None:
     """Update metrics results based on the analysis result."""
     if result == {}:
         metrics_results["general"]["errors"] += 1  # error that applies to all metrics
         return
 
-    for metric, passed in result.items():
-        if passed is None:
-            metrics_results[metric]["errors"] += 1
-        elif passed:
-            metrics_results[metric]["passed"] += 1
-        else:
-            metrics_results[metric]["failed"] += 1
+    for analysis_section in result:
+        for metric, passed in analysis_section.items():
+            if passed is None:
+                metrics_results[metric]["errors"] += 1
+            elif passed:
+                metrics_results[metric]["passed"] += 1
+            else:
+                metrics_results[metric]["failed"] += 1
 
 
 def create_summary(
@@ -92,7 +93,7 @@ def create_summary(
             "errors": metric_indiv_result["errors"]
             + general_error,  # error that apply to all metrics
             "pass_rate": f"{metric_indiv_result['passed']/len(mcap_files):.2%}",
-            "error_rate": f"{metric_indiv_result['errors'] + general_error/len(mcap_files):.2%}",
+            "error_rate": f"{(metric_indiv_result['errors'] + general_error)/len(mcap_files):.2%}",
         }
         for metric, metric_indiv_result in metrics_results.items()
     }
@@ -147,7 +148,7 @@ def run_all_analysis(
         input_dir (Path): Directory containing MCAP files to analyze
         analysis_func (Callable): Function that performs analysis on a single MCAP file
                                 Should accept (mcap_file, output_dir, stats_dir, data_dir, plots_dir)
-                                Should return Dict[str, Optional[bool]] where True means pass, None is error
+                                Should return List[Dict[str, Optional[bool]]] where True means pass, None is error
         output_base_dir (Optional[Path]): Base directory for saving results
         analysis_name (str): Name of the analysis for directory naming
     """

@@ -229,6 +229,22 @@ If directories are provided:
   - "guidance_steering_analysis.png"
   - "steering_wheel_analysis.png"
 
+### get_planner_trajectory_intervals
+Extract time intervals when a specific planner was active based on trajectory plans.
+Uses topic /guidance/plan_trajectory
+
+#### Parameters
+
+- mcap_path: Path to MCAP file
+- planner_plugin_name: Name of the planner plugin to track (e.g. "guidance/plugins/inlanecruising_plugin")
+- start_time: Optional start time to begin analysis
+- end_time: Optional end time to end analysis
+
+#### Output
+
+Returns a list of tuples [(start_time1, end_time1), (start_time2, end_time2), ...] representing time intervals when the specified planner was active
+
+
 ## Adding New Analysis Functions
 
 To add a new analysis function:

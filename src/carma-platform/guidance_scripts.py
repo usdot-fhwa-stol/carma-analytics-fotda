@@ -45,6 +45,9 @@ def get_engage_time(mcap_path):
             start_time = timestamp
             break
 
+    if start_time is None:
+        raise Exception("Cannot find CARMA engage time in this recording...")
+    
     for timestamp, state in zip(timestamps, states):
         if timestamp > start_time and state in not_engaged_anymore:
             end_time = timestamp
@@ -1070,4 +1073,77 @@ def run_steering_wheel_analysis(
         plt.show()
         
     return (is_passed, stats, plt.gcf(), error_values, common_timestamps)
+
+def get_planner_trajectory_intervals(
+    mcap_path,
+    planner_plugin_name,
+    start_time=None,
+    end_time=None,
+):
+    """
+    Extract time intervals when a specific planner was active based on trajectory plans.
+    Uses header stamp time and first point of each plan for decision making.
+
+    Args:
+        mcap_path: Path to MCAP file
+        planner_plugin_name: Name of the planner plugin to track (e.g. "guidance/plugins/inlanecruising_plugin")
+        start_time: Optional start time to begin analysis
+        end_time: Optional end time to end analysis
+
+    Returns:
+        List of tuples [(start_time1, end_time1), (start_time2, end_time2), ...] representing
+        time intervals when the specified planner was active
+
+    Deps:
+        Topics: [/guidance/plan_trajectory]
+        Msgs: carma_planning_msgs/msg/TrajectoryPlan
+    """
+    topics = ["/guidance/plan_trajectory"]
+    
+    # Extract timestamp and planner name from each trajectory plan
+    extracted_data = extract_mcap_data(
+        mcap_path,
+        topics,
+        start_time=0,
+        end_time=500,
+        field_extractors={
+            topics[0]: lambda msg: (
+                # trajecteory_plan on this topic is guaranteed to have minimum 2 points
+                msg.trajectory_points[0].planner_plugin_name
+            )
+        }
+    )
+    
+    timestamps, plan_data = extracted_data[topics[0]]
+
+    # Initialize variables
+    intervals = []
+    current_start = None
+    
+    # Process each trajectory plan
+    for i in range(len(timestamps)):
+        # Check if this is the planner we're looking for
+        is_target_planner = plan_data[i] == planner_plugin_name
+        
+        if is_target_planner and current_start is None:
+            # Start of a new interval
+            current_start = timestamps[i]
+        elif not is_target_planner and current_start is not None:
+            # End of current interval
+            intervals.append((current_start, timestamps[i]))
+            current_start = None
+    
+    # Handle case where planner was active at end of data
+    if current_start is not None:
+        # Add 0.1s just to account for the fact that trajectories last for 0.1s
+        new_end_time = timestamps[-1] + 0.1
+        intervals.append((current_start, new_end_time))
+    
+    # Print summary
+    print(f"\nFound {len(intervals)} intervals for planner: {planner_plugin_name}")
+    for i, (start, end) in enumerate(intervals):
+        duration = end - start
+        print(f"Interval {i+1}: {duration:.2f} seconds (from {start:.2f} to {end:.2f})")
+    
+    return intervals
 # More guidance specific analysis scripts to come ....

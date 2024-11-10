@@ -28,7 +28,7 @@ def test_extract_mcap_data_success(mock_exists, mock_get_message, mock_deseriali
         ("/topic1", b"data1", 1000000000),
         ("/topic1", b"data2", 2000000000)
     ]
-    mock_open_bagfile.return_value = (mock_reader, {"/topic1": "std_msgs/String"})
+    mock_open_bagfile.return_value = (mock_reader, {"/topic1": "std_msgs/String"}, 0)
     mock_deserialize.side_effect = [MagicMock(data="message1"), MagicMock(data="message2")]
 
     result = extract_mcap_data(mock_mcap_path, ["/topic1"], field_extractors={"/topic1": lambda msg: msg.data})

@@ -38,7 +38,8 @@ def open_bagfile(path, topics=[], serialization_format="cdr", storage_id="mcap")
         storage_id (str): Storage ID for the bag (default: "mcap").
 
     Returns:
-        tuple: A tuple containing the reader and a mapping of topic names to types.
+        tuple: A tuple containing the reader, a mapping of topic names to types, 
+        and timestamp (nanoseconds) when it started recording.
 
     Raises:
         ValueError: If the bag file cannot be opened or if there are issues with the topics.
@@ -51,15 +52,40 @@ def open_bagfile(path, topics=[], serialization_format="cdr", storage_id="mcap")
     reader.open(storage_options, converter_options)
 
     topic_types = reader.get_all_topics_and_types()
+
     type_map = {
         topic_types[i].name: topic_types[i].type for i in range(len(topic_types))
     }
-
+    
+    earliest_time = float('inf')
+    # Get the time the rosbag started recording 
+    # Read first message from each topic
+    for topic_metadata in topic_types:
+        topic_name = topic_metadata.name
+        
+        # Setup storage filter for this topic
+        storage_filter = rosbag2_py.StorageFilter(topics=[topic_name])
+        reader.set_filter(storage_filter)
+        
+        try:
+            # Try to get the first message from this topic
+            (topic, msg, t) = reader.read_next()
+            
+            # Update earliest time if this message is earlier
+            earliest_time = min(earliest_time, t)
+            
+        except:
+            # Skip if we can't read from this topic
+            continue
+    
+    if earliest_time == float('inf'):
+        raise ValueError("No valid timestamps found in the ROS2 bag")
+        
     if topics:
         filt = rosbag2_py.StorageFilter(topics)
         reader.set_filter(filt)
 
-    return reader, type_map
+    return reader, type_map, earliest_time
 
 
 def check_mcap_file_existence(mcap_path):
@@ -128,7 +154,7 @@ def read_messages(reader, topics, type_map, field_extractors):
         field_extractors (dict): Dictionary of field extractors for each topic.
 
     Returns:
-        dict: A dictionary containing extracted values and timestamps for each topic.
+        dict: A dictionary containing extracted values and timestamps (nanoseconds) for each topic.
 
     Raises:
         Exception: If there is an error during message extraction.
@@ -152,13 +178,14 @@ def read_messages(reader, topics, type_map, field_extractors):
     return data
 
 
-def filter_data_with_start_and_end_time(data, topics, start_time, end_time):
+def filter_data_with_start_and_end_time(data, topics, global_start_time, start_time, end_time):
     """
-    Filter data based on the specified time range.
+    Filter data based on the specified time range and return with relative timestamps from the global_start_time
 
     Args:
         data (dict): Dictionary containing extracted data.
         topics (list): List of topics to filter.
+        global_start_time: Start time of the recording
         start_time (float): Optional start time in seconds.
         end_time (float): Optional end time in seconds.
 
@@ -168,16 +195,13 @@ def filter_data_with_start_and_end_time(data, topics, start_time, end_time):
     Raises:
         ValueError: If no data is found for a topic in the specified time range.
     """
-    global_start_time = min(data[t]["timestamps"][0] for t in topics)
     result = {}
-
     for topic, topic_data in data.items():
         timestamps = np.array(topic_data["timestamps"])
         values = np.array(topic_data["values"])
 
         # Convert timestamps to seconds from start
         timestamps = (timestamps - global_start_time) / 1e9
-
         # Filter based on time range if specified
         if start_time is not None or end_time is not None:
             mask = np.ones_like(timestamps, dtype=bool)
@@ -196,7 +220,6 @@ def filter_data_with_start_and_end_time(data, topics, start_time, end_time):
         result[topic] = (timestamps, values)
 
     return result
-
 
 def extract_mcap_data(mcap_path, topics, start_time=None, end_time=None, field_extractors=None):
     """
@@ -223,7 +246,7 @@ def extract_mcap_data(mcap_path, topics, start_time=None, end_time=None, field_e
     field_extractors = initialize_field_extractors(topics, field_extractors)
 
     # Open bag
-    reader, type_map = open_bagfile(str(mcap_path), topics=topics)
+    reader, type_map, global_start_time = open_bagfile(str(mcap_path), topics=topics)
     check_missing_topics(topics, type_map)
 
     # Read messages
@@ -235,7 +258,8 @@ def extract_mcap_data(mcap_path, topics, start_time=None, end_time=None, field_e
         raise ValueError(f"No valid messages found for topics: {empty_topics}")
 
     # Filter data based on time range
-    result = filter_data_with_start_and_end_time(data, topics, start_time, end_time)
+    result = filter_data_with_start_and_end_time(data, topics, global_start_time, start_time, end_time)
 
-    print("Finished extracting the required data for this analysis")
+    print(f"Finished extracting the required data for topics: {topics}")
     return result
+

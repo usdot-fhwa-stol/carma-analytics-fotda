@@ -27,11 +27,11 @@ def test_find_mcap_files(tmp_path):
 def test_run_all_analysis(tmp_path):
     # Mock analysis function
     def mock_analysis(mcap_path, output_dir, stats_dir, data_dir, plots_dir):
-        return {
+        return [{
             "mock_metric_passed": True,
             "mock_metric_failed": False,
             "mock_metric_error": None,
-        }
+        }]
 
     # Create mock MCAP file
     (tmp_path / "test.mcap").touch()
@@ -62,11 +62,11 @@ def test_run_all_analysis(tmp_path):
     assert "metrics_summary" in summary
     assert "analyzed_files" in summary
     assert "test.mcap" in summary["analyzed_files"]
-    assert summary["analyzed_files"]["test.mcap"]["metrics_results"] == {
+    assert summary["analyzed_files"]["test.mcap"]["metrics_results"] == [{
         "mock_metric_passed": True,
         "mock_metric_failed": False,
         "mock_metric_error": None,
-    }
+    }]
 
 
 def test_run_all_analysis_no_mcap_files(tmp_path):
