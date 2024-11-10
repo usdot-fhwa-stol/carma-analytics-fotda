@@ -10,7 +10,18 @@ from utils import calculate_error_statistics, print_stats, align_time_series
 
 STD_DEV_LABEL_STRING = "±1 Std Dev"
 TIME_SECONDS_LABEL_STRING = "Time (seconds)"
+# ROS Topics Constants
+GUIDANCE_STATE_TOPIC = "/guidance/state"
+GUIDANCE_ROUTE_STATE_TOPIC = "/guidance/route_state"
+GUIDANCE_PLAN_TRAJECTORY_TOPIC = "/guidance/plan_trajectory"
+GUIDANCE_CONTROL_CMD_TOPIC = "/guidance/ctrl_cmd"
 
+LOCALIZATION_POSE_TOPIC = "/localization/current_pose" 
+
+HARDWARE_VEHICLE_STATUS_TOPIC = "/hardware_interface/vehicle_status"
+HARDWARE_VEHICLE_TWIST_TOPIC = "/hardware_interface/vehicle/twist"
+HARDWARE_PACMOD_STEER_REPORT_TOPIC = "/hardware_interface/as/pacmod/parsed_tx/steer_rpt"
+HARDWARE_PACMOD_STEER_CMD_TOPIC = "/hardware_interface/as/pacmod/as_rx/steer_cmd"
 
 def get_engage_time(mcap_path):
     """
@@ -31,7 +42,7 @@ def get_engage_time(mcap_path):
 
     not_engaged_anymore = {DRIVERS_READY, ACTIVE, INACTIVE, ENTER_PARK, SHUTDOWN}
 
-    topics = ["/guidance/state"]
+    topics = [GUIDANCE_STATE_TOPIC]
     extracted_data = extract_mcap_data(
         mcap_path, topics, field_extractors={topics[0]: lambda msg: msg.state}
     )
@@ -46,7 +57,7 @@ def get_engage_time(mcap_path):
             break
 
     if start_time is None:
-        raise Exception("Cannot find CARMA engage time in this recording...")
+        raise ValueError("Cannot find CARMA engage time in this recording...")
     
     for timestamp, state in zip(timestamps, states):
         if timestamp > start_time and state in not_engaged_anymore:
@@ -199,7 +210,7 @@ def run_turn_accuracy_analysis(
         save_data_dir: Directory to save extracted data
         save_plot_dir: Directory to save generated plots
     Deps:
-        Topics: [/localization/current_pose, /localization/current_pose]
+        Topics: [/localization/current_pose, /guidance/plan_trajectory]
         Msgs: carma_planning_msgs
     """
     # Extract actual and planned paths
@@ -207,18 +218,18 @@ def run_turn_accuracy_analysis(
     planned_path = []
 
     # Extract messages from MCAP
-    topics = ["/localization/current_pose", "/guidance/plan_trajectory"]
+    topics = [LOCALIZATION_POSE_TOPIC, GUIDANCE_PLAN_TRAJECTORY_TOPIC]
     extracted_data = extract_mcap_data(
         mcap_path,
         topics,
         start_time=start_time,
         end_time=end_time,
         field_extractors={
-            "/localization/current_pose": lambda msg: (
+            LOCALIZATION_POSE_TOPIC: lambda msg: (
                 msg.pose.position.x,
                 msg.pose.position.y,
             ),
-            "/guidance/plan_trajectory": lambda msg: [
+            GUIDANCE_PLAN_TRAJECTORY_TOPIC: lambda msg: [
                 (p.x, p.y) for p in msg.trajectory_points[1:]
             ],  # Skip first point
         },
@@ -471,13 +482,13 @@ def run_acceleration_comfort_analysis(
         autoware_msgs need to be built and sourced
     """
     # Extract vehicle state data
-    topics = ["/hardware_interface/vehicle_status"]
+    topics = [HARDWARE_VEHICLE_STATUS_TOPIC]
     extracted_data = extract_mcap_data(
         mcap_path,
         topics,
         start_time,
         end_time,
-        {"/hardware_interface/vehicle_status": lambda msg: msg.speed},
+        {HARDWARE_VEHICLE_STATUS_TOPIC: lambda msg: msg.speed},
     )
 
     timestamps, speeds = extracted_data[topics[0]]
@@ -637,7 +648,7 @@ def run_lateral_analysis(
         Msgs: geometry_msgs/Twist
     """
 
-    topics = ["/hardware_interface/vehicle/twist"]
+    topics = [HARDWARE_VEHICLE_TWIST_TOPIC]
 
     # Extract linear and angular velocities
     extracted_data = extract_mcap_data(
@@ -646,7 +657,7 @@ def run_lateral_analysis(
         start_time=start_time,
         end_time=end_time,
         field_extractors={
-            "/hardware_interface/vehicle/twist": lambda msg: (
+            HARDWARE_VEHICLE_TWIST_TOPIC: lambda msg: (
                 msg.twist.linear.x,  # longitudinal velocity
                 msg.twist.angular.z,  # angular velocity
             )
@@ -967,8 +978,8 @@ def run_steering_wheel_analysis(
                 /hardware_interface/as/pacmod/as_rx/steer_cmd]
     """
     topics = [
-        "/hardware_interface/as/pacmod/parsed_tx/steer_rpt",
-        "/hardware_interface/as/pacmod/as_rx/steer_cmd"
+        HARDWARE_PACMOD_STEER_REPORT_TOPIC,
+        HARDWARE_PACMOD_STEER_CMD_TOPIC
     ]
     
     extracted_data = extract_mcap_data(
@@ -1098,14 +1109,14 @@ def get_planner_trajectory_intervals(
         Topics: [/guidance/plan_trajectory]
         Msgs: carma_planning_msgs/msg/TrajectoryPlan
     """
-    topics = ["/guidance/plan_trajectory"]
+    topics = [GUIDANCE_PLAN_TRAJECTORY_TOPIC]
     
     # Extract timestamp and planner name from each trajectory plan
     extracted_data = extract_mcap_data(
         mcap_path,
         topics,
-        start_time=0,
-        end_time=500,
+        start_time=start_time,
+        end_time=end_time,
         field_extractors={
             topics[0]: lambda msg: (
                 # trajecteory_plan on this topic is guaranteed to have minimum 2 points
