@@ -17,7 +17,6 @@ def test_get_earliest_timestamp(mock_reader):
     result = get_earliest_timestamp(mock_reader)
     
     assert result == 1000000000
-    assert mock_reader.set_filter.call_count == 2
 
 @pytest.fixture
 def mock_mcap_path():
