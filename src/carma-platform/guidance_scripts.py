@@ -10,6 +10,18 @@ from utils import calculate_error_statistics, print_stats, align_time_series
 
 STD_DEV_LABEL_STRING = "±1 Std Dev"
 TIME_SECONDS_LABEL_STRING = "Time (seconds)"
+# ROS Topics Constants
+GUIDANCE_STATE_TOPIC = "/guidance/state"
+GUIDANCE_ROUTE_STATE_TOPIC = "/guidance/route_state"
+GUIDANCE_PLAN_TRAJECTORY_TOPIC = "/guidance/plan_trajectory"
+GUIDANCE_CONTROL_CMD_TOPIC = "/guidance/ctrl_cmd"
+
+LOCALIZATION_POSE_TOPIC = "/localization/current_pose"
+
+HARDWARE_VEHICLE_STATUS_TOPIC = "/hardware_interface/vehicle_status"
+HARDWARE_VEHICLE_TWIST_TOPIC = "/hardware_interface/vehicle/twist"
+HARDWARE_PACMOD_STEER_REPORT_TOPIC = "/hardware_interface/as/pacmod/parsed_tx/steer_rpt"
+HARDWARE_PACMOD_STEER_CMD_TOPIC = "/hardware_interface/as/pacmod/as_rx/steer_cmd"
 
 
 def get_engage_time(mcap_path):
@@ -31,7 +43,7 @@ def get_engage_time(mcap_path):
 
     not_engaged_anymore = {DRIVERS_READY, ACTIVE, INACTIVE, ENTER_PARK, SHUTDOWN}
 
-    topics = ["/guidance/state"]
+    topics = [GUIDANCE_STATE_TOPIC]
     extracted_data = extract_mcap_data(
         mcap_path, topics, field_extractors={topics[0]: lambda msg: msg.state}
     )
@@ -44,6 +56,9 @@ def get_engage_time(mcap_path):
         if state == ENGAGED:
             start_time = timestamp
             break
+
+    if start_time is None:
+        raise ValueError("Cannot find CARMA engage time in this recording...")
 
     for timestamp, state in zip(timestamps, states):
         if timestamp > start_time and state in not_engaged_anymore:
@@ -78,13 +93,13 @@ def run_crosstrack_analysis(
         Msgs: carma_planning_msgs
     """
 
-    topics = ["/guidance/route_state"]
+    topics = [GUIDANCE_ROUTE_STATE_TOPIC]
     extracted_data = extract_mcap_data(
         mcap_path,
         topics,
         start_time=start_time,
         end_time=end_time,
-        field_extractors={"/guidance/route_state": lambda msg: msg.cross_track},
+        field_extractors={GUIDANCE_ROUTE_STATE_TOPIC: lambda msg: msg.cross_track},
     )
     timestamps, cross_tracks = extracted_data[topics[0]]
 
@@ -153,9 +168,11 @@ def run_crosstrack_analysis(
 
     return (is_passed, stats, plt.gcf(), cross_tracks, timestamps)
 
+
 def process_actual_path(odom_data):
     """Helper function that processes actual path data."""
     return np.array([[point[0], point[1]] for point in odom_data])
+
 
 def process_planned_path(traj_plans):
     """Helper function that processes planned path data with duplicate removal."""
@@ -175,6 +192,7 @@ def process_planned_path(traj_plans):
                     break
 
     return np.array(planned_path)
+
 
 def run_turn_accuracy_analysis(
     mcap_path,
@@ -196,7 +214,7 @@ def run_turn_accuracy_analysis(
         save_data_dir: Directory to save extracted data
         save_plot_dir: Directory to save generated plots
     Deps:
-        Topics: [/localization/current_pose, /localization/current_pose]
+        Topics: [/localization/current_pose, /guidance/plan_trajectory]
         Msgs: carma_planning_msgs
     """
     # Extract actual and planned paths
@@ -204,18 +222,18 @@ def run_turn_accuracy_analysis(
     planned_path = []
 
     # Extract messages from MCAP
-    topics = ["/localization/current_pose", "/guidance/plan_trajectory"]
+    topics = [LOCALIZATION_POSE_TOPIC, GUIDANCE_PLAN_TRAJECTORY_TOPIC]
     extracted_data = extract_mcap_data(
         mcap_path,
         topics,
         start_time=start_time,
         end_time=end_time,
         field_extractors={
-            "/localization/current_pose": lambda msg: (
+            LOCALIZATION_POSE_TOPIC: lambda msg: (
                 msg.pose.position.x,
                 msg.pose.position.y,
             ),
-            "/guidance/plan_trajectory": lambda msg: [
+            GUIDANCE_PLAN_TRAJECTORY_TOPIC: lambda msg: [
                 (p.x, p.y) for p in msg.trajectory_points[1:]
             ],  # Skip first point
         },
@@ -340,7 +358,15 @@ def run_turn_accuracy_analysis(
     else:
         plt.show()
 
-    return (is_passed, stats, plt.gcf(), actual_path, planned_path, distances, timestamps)
+    return (
+        is_passed,
+        stats,
+        plt.gcf(),
+        actual_path,
+        planned_path,
+        distances,
+        timestamps,
+    )
 
 
 def calculate_instant_acceleration(timestamps, speeds):
@@ -359,6 +385,7 @@ def calculate_instant_acceleration(timestamps, speeds):
     accelerations = dv / dt
     # Use timestamps[1:] because the acceleration values correspond to the later point in each pair
     return accelerations, timestamps[1:]
+
 
 def calculate_window_average(timestamps, values, window_size=1.0):
     """
@@ -400,6 +427,7 @@ def calculate_window_average(timestamps, values, window_size=1.0):
             avg_timestamps.append(timestamps[i])
 
     return np.array(window_averages), np.array(avg_timestamps)
+
 
 def plot_acceleration_analysis(
     time_points, accelerations, stats, title, ylabel, comfort_threshold=2.0, ax=None
@@ -468,13 +496,13 @@ def run_acceleration_comfort_analysis(
         autoware_msgs need to be built and sourced
     """
     # Extract vehicle state data
-    topics = ["/hardware_interface/vehicle_status"]
+    topics = [HARDWARE_VEHICLE_STATUS_TOPIC]
     extracted_data = extract_mcap_data(
         mcap_path,
         topics,
         start_time,
         end_time,
-        {"/hardware_interface/vehicle_status": lambda msg: msg.speed},
+        {HARDWARE_VEHICLE_STATUS_TOPIC: lambda msg: msg.speed},
     )
 
     timestamps, speeds = extracted_data[topics[0]]
@@ -634,7 +662,7 @@ def run_lateral_analysis(
         Msgs: geometry_msgs/Twist
     """
 
-    topics = ["/hardware_interface/vehicle/twist"]
+    topics = [HARDWARE_VEHICLE_TWIST_TOPIC]
 
     # Extract linear and angular velocities
     extracted_data = extract_mcap_data(
@@ -643,7 +671,7 @@ def run_lateral_analysis(
         start_time=start_time,
         end_time=end_time,
         field_extractors={
-            "/hardware_interface/vehicle/twist": lambda msg: (
+            HARDWARE_VEHICLE_TWIST_TOPIC: lambda msg: (
                 msg.twist.linear.x,  # longitudinal velocity
                 msg.twist.angular.z,  # angular velocity
             )
@@ -655,8 +683,8 @@ def run_lateral_analysis(
     ang_velocities = np.array([v[1] for v in velocity_data])
 
     # Calculate instantaneous values
-    lateral_acc_inst, lateral_jerk_inst, acc_timestamps, jerk_timestamps = calculate_instant_lateral_values(
-        long_velocities, ang_velocities, timestamps
+    lateral_acc_inst, lateral_jerk_inst, acc_timestamps, jerk_timestamps = (
+        calculate_instant_lateral_values(long_velocities, ang_velocities, timestamps)
     )
 
     # Calculate 1-second window averages
@@ -679,12 +707,14 @@ def run_lateral_analysis(
     jerk_inst_discomfort = np.sum(np.abs(lateral_jerk_inst) > jerk_threshold_to_pass)
     jerk_avg_discomfort = np.sum(np.abs(lateral_jerk_avg) > jerk_threshold_to_pass)
 
-    is_passed = all([
-        acc_inst_discomfort == 0,
-        acc_avg_discomfort == 0,
-        jerk_inst_discomfort == 0,
-        jerk_avg_discomfort == 0
-    ])
+    is_passed = all(
+        [
+            acc_inst_discomfort == 0,
+            acc_avg_discomfort == 0,
+            jerk_inst_discomfort == 0,
+            jerk_avg_discomfort == 0,
+        ]
+    )
 
     # Create two separate figures
     # Figure 1: Acceleration measurements
@@ -698,7 +728,7 @@ def run_lateral_analysis(
         "Instantaneous Lateral Acceleration",
         "Lateral Acceleration (m/s²)",
         comfort_threshold=acc_threshold_to_pass,
-        ax=ax1
+        ax=ax1,
     )
 
     # Plot 1-second average acceleration
@@ -709,7 +739,7 @@ def run_lateral_analysis(
         "1-Second Average Lateral Acceleration",
         "Lateral Acceleration (m/s²)",
         comfort_threshold=acc_threshold_to_pass,
-        ax=ax2
+        ax=ax2,
     )
 
     fig_acc.suptitle("Lateral Acceleration Analysis", fontsize=16, y=1.02)
@@ -726,7 +756,7 @@ def run_lateral_analysis(
         "Instantaneous Lateral Jerk",
         "Lateral Jerk (m/s³)",
         comfort_threshold=jerk_threshold_to_pass,
-        ax=ax3
+        ax=ax3,
     )
 
     # Plot 1-second average jerk
@@ -737,7 +767,7 @@ def run_lateral_analysis(
         "1-Second Average Lateral Jerk",
         "Lateral Jerk (m/s³)",
         comfort_threshold=jerk_threshold_to_pass,
-        ax=ax4
+        ax=ax4,
     )
 
     fig_jerk.suptitle("Lateral Jerk Analysis", fontsize=16, y=1.02)
@@ -806,6 +836,7 @@ def run_lateral_analysis(
         timestamps,
     )
 
+
 def run_guidance_steering_analysis(
     mcap_path,
     error_threshold_to_pass_radian=0.1,
@@ -829,11 +860,8 @@ def run_guidance_steering_analysis(
     Deps:
         Topics: [/guidance/ctrl_cmd, /hardware_interface/vehicle_status]
     """
-    topics = [
-        "/guidance/ctrl_cmd",
-        "/hardware_interface/vehicle_status"
-    ]
-    
+    topics = ["/guidance/ctrl_cmd", "/hardware_interface/vehicle_status"]
+
     extracted_data = extract_mcap_data(
         mcap_path,
         topics,
@@ -841,81 +869,106 @@ def run_guidance_steering_analysis(
         end_time=end_time,
         field_extractors={
             topics[0]: lambda msg: msg.cmd.steering_angle,
-            topics[1]: lambda msg: msg.angle
-        }
+            topics[1]: lambda msg: msg.angle,
+        },
     )
-    
+
     cmd_timestamps, cmd_angles = extracted_data[topics[0]]
     actual_timestamps, actual_angles = extracted_data[topics[1]]
-    
+
     # Convert to numpy arrays
     cmd_timestamps = np.array(cmd_timestamps)
     cmd_angles = np.array(cmd_angles)
     actual_timestamps = np.array(actual_timestamps)
     actual_angles = np.array(actual_angles)
-    
+
     # Align the time series
     common_timestamps, aligned_cmd_angles, aligned_actual_angles = align_time_series(
-        cmd_timestamps, cmd_angles,
-        actual_timestamps, actual_angles
+        cmd_timestamps, cmd_angles, actual_timestamps, actual_angles
     )
 
     # Calculate differences between commanded and actual angles
     error_angles = np.abs(aligned_cmd_angles - aligned_actual_angles)
-    
+
     # Calculate statistics
     stats = calculate_error_statistics(error_angles, start_time, end_time)
-    
+
     # Pass or no pass
     is_passed = float(stats["median"]) < error_threshold_to_pass_radian
-    
+
     # Create visualization
     plt.figure(figsize=(15, 10))
-    
+
     # Plot steering angles
     plt.subplot(2, 1, 1)
-    
+
     # Also plot original data as dots to show sampling
-    plt.plot(cmd_timestamps, cmd_angles, 'b.', markersize=2, alpha=0.3, label='Commanded Samples')
-    plt.plot(actual_timestamps, actual_angles, 'r.', markersize=2, alpha=0.3, label='Actual Samples')
-    
-    plt.title('Steering Angle Comparison')
+    plt.plot(
+        cmd_timestamps,
+        cmd_angles,
+        "b.",
+        markersize=2,
+        alpha=0.3,
+        label="Commanded Samples",
+    )
+    plt.plot(
+        actual_timestamps,
+        actual_angles,
+        "r.",
+        markersize=2,
+        alpha=0.3,
+        label="Actual Samples",
+    )
+
+    plt.title("Steering Angle Comparison")
     plt.xlabel(TIME_SECONDS_LABEL_STRING)
-    plt.ylabel('Steering Angle (rad)')
+    plt.ylabel("Steering Angle (rad)")
     plt.grid(True, alpha=0.3)
     plt.legend()
-    
+
     # Plot error over time
     plt.subplot(2, 1, 2)
-    plt.plot(common_timestamps, error_angles, '.', markersize=2, label='Steering Error', linewidth=1)
-    plt.axhline(y=stats["median"], color='r', linestyle='--', label='Median')
-    plt.axhline(y=error_threshold_to_pass_radian, color='g', linestyle='--', label='Error Threshold')
+    plt.plot(
+        common_timestamps,
+        error_angles,
+        ".",
+        markersize=2,
+        label="Steering Error",
+        linewidth=1,
+    )
+    plt.axhline(y=stats["median"], color="r", linestyle="--", label="Median")
+    plt.axhline(
+        y=error_threshold_to_pass_radian,
+        color="g",
+        linestyle="--",
+        label="Error Threshold",
+    )
     plt.fill_between(
         common_timestamps,
         stats["median"] - stats["std_dev"],
         stats["median"] + stats["std_dev"],
         alpha=0.2,
-        color='r',
-        label=STD_DEV_LABEL_STRING
+        color="r",
+        label=STD_DEV_LABEL_STRING,
     )
-    
-    plt.title('Steering Error Over Time')
+
+    plt.title("Steering Error Over Time")
     plt.xlabel(TIME_SECONDS_LABEL_STRING)
-    plt.ylabel('Error (rad)')
+    plt.ylabel("Error (rad)")
     plt.grid(True, alpha=0.3)
     plt.legend()
-    
+
     plt.tight_layout()
-    
+
     # Print statistics
     print_stats(stats, "Guidance Steering Analysis Statistics")
-    
+
     if save_stats_dir:
         stats_full_path = save_stats_dir / "guidance_steering_analysis.json"
         with open(stats_full_path, "w") as f:
             json.dump(stats, f, indent=2)
         print(f"Stats saved to: {save_stats_dir}")
-    
+
     if save_data_dir:
         np.savez(
             save_data_dir / "guidance_steering_data.npz",
@@ -927,17 +980,18 @@ def run_guidance_steering_analysis(
             original_actual_timestamps=actual_timestamps,
             original_actual_angles=actual_angles,
             error_angles=error_angles,
-            stats=stats
+            stats=stats,
         )
         print(f"\nData saved to: {save_data_dir}")
-    
+
     if save_plot_dir:
         plt.savefig(save_plot_dir / "guidance_steering_analysis.png")
         print(f"\nPlot saved to: {save_plot_dir}")
     else:
         plt.show()
-        
+
     return (is_passed, stats, plt.gcf(), error_angles, common_timestamps)
+
 
 def run_steering_wheel_analysis(
     mcap_path,
@@ -963,11 +1017,8 @@ def run_steering_wheel_analysis(
         Topics: [/hardware_interface/as/pacmod/parsed_tx/steer_rpt,
                 /hardware_interface/as/pacmod/as_rx/steer_cmd]
     """
-    topics = [
-        "/hardware_interface/as/pacmod/parsed_tx/steer_rpt",
-        "/hardware_interface/as/pacmod/as_rx/steer_cmd"
-    ]
-    
+    topics = [HARDWARE_PACMOD_STEER_REPORT_TOPIC, HARDWARE_PACMOD_STEER_CMD_TOPIC]
+
     extracted_data = extract_mcap_data(
         mcap_path,
         topics,
@@ -975,81 +1026,103 @@ def run_steering_wheel_analysis(
         end_time=end_time,
         field_extractors={
             topics[0]: lambda msg: msg.output,
-            topics[1]: lambda msg: msg.command
-        }
+            topics[1]: lambda msg: msg.command,
+        },
     )
-    
+
     actual_timestamps, actual_values = extracted_data[topics[0]]
     cmd_timestamps, cmd_values = extracted_data[topics[1]]
-    
+
     # Convert to numpy arrays
     actual_timestamps = np.array(actual_timestamps)
     actual_values = np.array(actual_values)
     cmd_timestamps = np.array(cmd_timestamps)
     cmd_values = np.array(cmd_values)
-    
+
     # Align the time series
     common_timestamps, aligned_cmd_values, aligned_actual_values = align_time_series(
-        cmd_timestamps, cmd_values,
-        actual_timestamps, actual_values
+        cmd_timestamps, cmd_values, actual_timestamps, actual_values
     )
 
     # Calculate differences between commanded and actual steering wheel values
     error_values = np.abs(aligned_cmd_values - aligned_actual_values)
-    
+
     # Calculate statistics
     stats = calculate_error_statistics(error_values, start_time, end_time)
-    
+
     # Pass or no pass
     is_passed = float(stats["median"]) < error_threshold_to_pass
-    
+
     # Create visualization
     plt.figure(figsize=(15, 10))
-    
+
     # Plot steering Wheel values
     plt.subplot(2, 1, 1)
-    
-    # Also plot original data as dots to show sampling
-    plt.plot(cmd_timestamps, cmd_values, 'b.', markersize=2, alpha=0.3, label='Commanded Samples')
-    plt.plot(actual_timestamps, actual_values, 'r.', markersize=2, alpha=0.3, label='Actual Samples')
 
-    plt.title('Steering Wheel Value Comparison')
+    # Also plot original data as dots to show sampling
+    plt.plot(
+        cmd_timestamps,
+        cmd_values,
+        "b.",
+        markersize=2,
+        alpha=0.3,
+        label="Commanded Samples",
+    )
+    plt.plot(
+        actual_timestamps,
+        actual_values,
+        "r.",
+        markersize=2,
+        alpha=0.3,
+        label="Actual Samples",
+    )
+
+    plt.title("Steering Wheel Value Comparison")
     plt.xlabel(TIME_SECONDS_LABEL_STRING)
-    plt.ylabel('Steering Wheel Value')
+    plt.ylabel("Steering Wheel Value")
     plt.grid(True, alpha=0.3)
     plt.legend()
-    
+
     # Plot error over time
     plt.subplot(2, 1, 2)
-    plt.plot(common_timestamps, error_values, '.', markersize=2, label='Steering Error', linewidth=1)
-    plt.axhline(y=stats["median"], color='r', linestyle='--', label='Median')
-    plt.axhline(y=error_threshold_to_pass, color='g', linestyle='--', label='Error Threshold')
+    plt.plot(
+        common_timestamps,
+        error_values,
+        ".",
+        markersize=2,
+        label="Steering Error",
+        linewidth=1,
+    )
+    plt.axhline(y=stats["median"], color="r", linestyle="--", label="Median")
+    plt.axhline(
+        y=error_threshold_to_pass, color="g", linestyle="--", label="Error Threshold"
+    )
     plt.fill_between(
         common_timestamps,
         stats["median"] - stats["std_dev"],
         stats["median"] + stats["std_dev"],
         alpha=0.2,
-        color='r',
-        label=STD_DEV_LABEL_STRING
+        color="r",
+        label=STD_DEV_LABEL_STRING,
     )
-    
-    plt.title('Steering Wheel Error Over Time')
+
+    plt.title("Steering Wheel Error Over Time")
     plt.xlabel(TIME_SECONDS_LABEL_STRING)
-    plt.ylabel('Error')
+    plt.ylabel("Error")
     plt.grid(True, alpha=0.3)
     plt.legend()
-    
+
     plt.tight_layout()
-    
+
     # Print statistics
     print_stats(stats, "Steering Wheel Analysis Statistics")
-    
+
     if save_stats_dir:
         stats_full_path = save_stats_dir / "steering_wheel_analysis.json"
         with open(stats_full_path, "w") as f:
             json.dump(stats, f, indent=2)
         print(f"Stats saved to: {save_stats_dir}")
-    
+
     if save_data_dir:
         np.savez(
             save_data_dir / "steering_wheel_data.npz",
@@ -1059,15 +1132,91 @@ def run_steering_wheel_analysis(
             actual_timestamps=actual_timestamps,
             actual_values=actual_values,
             error_values=error_values,
-            stats=stats
+            stats=stats,
         )
         print(f"\nData saved to: {save_data_dir}")
-    
+
     if save_plot_dir:
         plt.savefig(save_plot_dir / "steering_wheel_analysis.png")
         print(f"\nPlot saved to: {save_plot_dir}")
     else:
         plt.show()
-        
+
     return (is_passed, stats, plt.gcf(), error_values, common_timestamps)
+
+
+def get_planner_trajectory_intervals(
+    mcap_path,
+    planner_plugin_name,
+    start_time=None,
+    end_time=None,
+):
+    """
+    Extract time intervals when a specific planner was active based on trajectory plans.
+    Uses header stamp time and first point of each plan for decision making.
+
+    Args:
+        mcap_path: Path to MCAP file
+        planner_plugin_name: Name of the planner plugin to track (e.g. "guidance/plugins/inlanecruising_plugin")
+        start_time: Optional start time to begin analysis
+        end_time: Optional end time to end analysis
+
+    Returns:
+        List of tuples [(start_time1, end_time1), (start_time2, end_time2), ...] representing
+        time intervals when the specified planner was active
+
+    Deps:
+        Topics: [/guidance/plan_trajectory]
+        Msgs: carma_planning_msgs/msg/TrajectoryPlan
+    """
+    topics = [GUIDANCE_PLAN_TRAJECTORY_TOPIC]
+
+    # Extract timestamp and planner name from each trajectory plan
+    extracted_data = extract_mcap_data(
+        mcap_path,
+        topics,
+        start_time=start_time,
+        end_time=end_time,
+        field_extractors={
+            topics[0]: lambda msg: (
+                # trajecteory_plan on this topic is guaranteed to have minimum 2 points
+                msg.trajectory_points[0].planner_plugin_name
+            )
+        },
+    )
+
+    timestamps, plan_data = extracted_data[topics[0]]
+
+    # Initialize variables
+    intervals = []
+    current_start = None
+
+    # Process each trajectory plan
+    for i in range(len(timestamps)):
+        # Check if this is the planner we're looking for
+        is_target_planner = plan_data[i] == planner_plugin_name
+
+        if is_target_planner and current_start is None:
+            # Start of a new interval
+            current_start = timestamps[i]
+        elif not is_target_planner and current_start is not None:
+            # End of current interval
+            intervals.append((current_start, timestamps[i]))
+            current_start = None
+
+    # Handle case where planner was active at end of data
+    if current_start is not None:
+        # Add 0.1s just to account for the fact that trajectories last for 0.1s
+        new_end_time = timestamps[-1] + 0.1
+        intervals.append((current_start, new_end_time))
+
+    # Print summary
+    print(f"\nFound {len(intervals)} intervals for planner: {planner_plugin_name}")
+    for i, (start, end) in enumerate(intervals):
+        duration = end - start
+        print(f"Interval {i+1}: {duration:.2f} seconds (from {start:.2f} to {end:.2f})")
+
+    return intervals
+
+
 # More guidance specific analysis scripts to come ....

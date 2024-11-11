@@ -6,7 +6,7 @@ This file contains various analysis functions for CARMA Platform data, focusing 
 
 ### get_engage_time
 
-Get the (engage, disengage_time) as a tuple from /guidance/state. Returns last recorded time if no disengaged.
+Get the (engage, disengage_time) as a tuple from `/guidance/state`. Returns last recorded time if no disengaged.
 NOTE: If there are multiple engage operations, it will only take the first engage time as the start_time.
 
 #### Parameters
@@ -19,7 +19,7 @@ NOTE: If there are multiple engage operations, it will only take the first engag
 
 ### run_crosstrack_analysis
 
-Analyzes cross-track error from CARMA Platform's internal route logic using topic /guidance/route_state
+Analyzes cross-track error from CARMA Platform's internal route logic using topic `/guidance/route_state`
 
 #### Parameters
 
@@ -45,6 +45,8 @@ This plot shows the cross-track error over time, including the median and standa
 ### run_turn_accuracy_analysis
 
 Analyzes turn accuracy by comparing actual path to planned trajectory using spline fitting over time.
+-`/localization/current_pose`: Source of actual traveled trajectory
+-`/guidance/plan_trajectory`: Source of planned trajectory
 
 #### Parameters
 
@@ -67,7 +69,7 @@ Analyzes turn accuracy by comparing actual path to planned trajectory using spli
 
 ### run_acceleration_comfort_analysis
 
-Analyzes acceleration comfort based on vehicle status data.
+Analyzes acceleration comfort based on vehicle status data using topic `/hardware_interface/vehicle_status` for the vehicle's speed
 
 #### Parameters
 
@@ -228,6 +230,22 @@ If directories are provided:
 - Plots saved as:
   - "guidance_steering_analysis.png"
   - "steering_wheel_analysis.png"
+
+### get_planner_trajectory_intervals
+Extract time intervals when a specific planner was active based on trajectory plans.
+Uses topic `/guidance/plan_trajectory`
+
+#### Parameters
+
+- mcap_path: Path to MCAP file
+- planner_plugin_name: Name of the planner plugin to track (e.g. `guidance/plugins/inlanecruising_plugin`)
+- start_time: Optional start time to begin analysis
+- end_time: Optional end time to end analysis
+
+#### Output
+
+Returns a list of tuples `[(start_time1, end_time1), (start_time2, end_time2), ...]` representing time intervals when the specified planner was active
+
 
 ## Adding New Analysis Functions
 
