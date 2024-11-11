@@ -1,0 +1,38 @@
+Node/Component,Callback Description,Mean (ms),Min (ms),Median (ms),Max (ms),Std Dev,Count
+arbitrator,arbitrator Subscription Callback topic: /guidance/state,0.003076961575408261,0.000441,0.002206,0.188438,0.01085704190236346,1041
+arbitrator,arbitrator Timer Callback period: 100 ms,0.034257140939597315,0.009255,0.016584,4.241204,0.1732225540630796,1043
+arbitrator,arbitrator Timer Callback period: 500 ms,102.27462840669855,100.250218,101.631959,127.721515,2.4957728825755137,209
+arbitrator,arbitrator Subscription Callback topic: /hardware_interface/vehicle/twist,0.00609170556621881,0.001058,0.002863,1.17959,0.04486311547590048,2605
+plan_delegator,plan_delegator Subscription Callback topic: /hardware_interface/vehicle/twist,0.007614502984084882,0.000734,0.00307,7.285678,0.13565303891021427,3016
+plan_delegator,plan_delegator Subscription Callback topic: /localization/current_pose,0.13727455166994107,0.024592,0.056928,10.031564,0.40519874142990014,5090
+plan_delegator,plan_delegator Timer Callback period: 100 ms,0.11620888450433108,0.028756,0.054525,5.662789,0.34038853051336543,1039
+plan_delegator,plan_delegator Subscription Callback topic: /guidance/state,0.004704320230105465,0.000477,0.002396,0.611121,0.0286327068994644,1043
+route_following_plugin,route_following_plugin Timer Callback period: 100 ms,0.045929313875598086,0.017644,0.029474,3.927244,0.14740368504730128,1045
+route_following_plugin,route_following_plugin Subscription Callback topic: /hardware_interface/vehicle/twist,0.004288604613385315,0.000589,0.0026615,0.72995,0.022263142484904443,3078
+approaching_emergency_vehicle_plugin,approaching_emergency_vehicle_plugin Subscription Callback topic: /hardware_interface/vehicle/twist,0.00415172843555264,0.000662,0.002977,0.69095,0.0182577770883997,3049
+approaching_emergency_vehicle_plugin,approaching_emergency_vehicle_plugin Subscription Callback topic: /guidance/state,0.006831378977820636,0.000873,0.002589,0.712187,0.04602715838215066,1037
+lci_strategic_plugin,lci_strategic_plugin Subscription Callback topic: /message/bsm_outbound,0.019059039767216294,0.006735,0.01207,0.883866,0.049443952392262486,1031
+lci_strategic_plugin,lci_strategic_plugin Timer Callback period: 500 ms,0.0400240673076923,0.010802,0.015599,3.149794,0.22171497222791342,208
+lci_strategic_plugin,lci_strategic_plugin Timer Callback period: 100 ms,0.005324319884726225,0.00094,0.001973,1.053177,0.041326429001893414,1041
+sci_strategic_plugin,sci_strategic_plugin Subscription Callback topic: /message/bsm_outbound,0.018792356589147286,0.007164,0.011792500000000001,0.977882,0.05095071155266971,1032
+sci_strategic_plugin,sci_strategic_plugin Subscription Callback topic: /localization/current_pose,0.009878430223441788,0.001325,0.003096,5.858612,0.11432385400694257,5102
+sci_strategic_plugin,sci_strategic_plugin Timer Callback period: 100 ms,0.0025085615384615382,0.000626,0.0018665,0.294272,0.010500693143355624,1040
+cooperative_lanechange,cooperative_lanechange Subscription Callback topic: /message/bsm_outbound,0.00561847619047619,0.001546,0.003834,0.386605,0.020303460793980686,1029
+cooperative_lanechange,cooperative_lanechange Subscription Callback topic: /hardware_interface/vehicle/twist,0.005211985234899329,0.000793,0.002685,2.660643,0.05871722178367321,2980
+cooperative_lanechange,cooperative_lanechange Subscription Callback topic: /localization/current_pose,0.009500063850687622,0.000969,0.003146,1.690116,0.07244365468979296,5090
+yield_plugin,yield_plugin Subscription Callback topic: /message/bsm_outbound,0.016491520000000003,0.005228,0.008943,0.736997,0.04768841527995983,1025
+trajectory_executor,trajectory_executor Subscription Callback topic: /guidance/state,0.01227291627469426,0.000646,0.002272,7.973493,0.24655459141509792,1063
+trajectory_executor,trajectory_executor Timer Callback period: 100 ms,0.027658467544684852,0.008347,0.014652,3.629219,0.13515284434790914,1063
+pure_pursuit,pure_pursuit Subscription Callback topic: /localization/current_pose,0.013425926153846156,0.001743,0.0053915000000000005,5.691145,0.10292564051804183,5200
+pure_pursuit,pure_pursuit Subscription Callback topic: /hardware_interface/vehicle/twist,0.01223960071942446,0.001228,0.005348,1.841597,0.07072222727562726,3058
+twist_filter,twist_filter Subscription Callback topic: /guidance/ctrl_raw,0.04221358255741776,0.00986,0.0166285,7.05099,0.23767682125798484,3222
+twist_gate,twist_gate Subscription Callback topic: /guidance/lamp_cmd,0.006993526543452614,0.000694,0.0029245,2.780104,0.0632217047739918,5086
+twist_gate,twist_gate Subscription Callback topic: /guidance/ctrl_cmd,0.3797376594157862,0.042266,0.119467,18.686696,0.9437337278269669,3218
+cpp_message,cpp_message Subscription Callback topic: /message/outgoing_j2735_bsm,0.3995793151458138,0.052236,0.108021,10.359285,0.8057937940798234,1063
+j2735_convertor,j2735_convertor Subscription Callback topic: /message/bsm_outbound,0.04425820884289746,0.01042,0.016552,5.34576,0.2238345438216059,1063
+bsm_generator,bsm_generator Subscription Callback topic: /hardware_interface/gnss_fix_fused,0.012238535552491629,0.001092,0.003472,5.753299,0.15301251164380214,5077
+bsm_generator,bsm_generator Subscription Callback topic: /hardware_interface/imu_raw,0.00784807705026455,0.001021,0.003175,5.575156,0.09677003690426306,12096
+bsm_generator,bsm_generator Timer Callback period: 100 ms,1.4926387949200375,0.163293,0.807293,28.120221,2.416220258792105,1063
+bsm_generator,bsm_generator Subscription Callback topic: /hardware_interface/velocity_accel_cov,0.008304627287319422,0.00091,0.00281,3.574484,0.09714957530827464,3115
+bsm_generator,bsm_generator Subscription Callback topic: /localization/current_pose,0.03666579410624273,0.005322,0.010159,18.460172,0.3643987035984638,5158
+bsm_generator,bsm_generator Subscription Callback topic: /hardware_interface/vehicle/twist,0.008877437335958005,0.000995,0.0028305,2.201586,0.08298944094271425,3048
