@@ -145,6 +145,90 @@ Shows instantaneous and 1-second average lateral jerk over time.
 - Analysis passes only if no comfort threshold violations occur in any metric
 - Time-weighted averaging is used for the 1-second window calculations
 
+
+### run_guidance_steering_analysis
+
+Analyzes steering performance by comparing commanded vs actual steering angles at guidance level.
+Time series alignment is performed to match commanded and actual values
+Both instantaneous and statistical measures are considered
+- `/guidance/ctrl_cmd`: Source of commanded steering angles
+- `/hardware_interface/vehicle_status`: Source of actual vehicle steering angles
+
+#### Parameters
+
+- `mcap_path`: Path to MCAP file
+- `error_threshold_to_pass_radian`: Threshold for passing the analysis (default: 0.1 radians)
+- `start_time`: Time to start the analysis (optional)
+- `end_time`: Time to end the analysis (optional)
+- `save_stats_dir`: Directory to save extracted statistics (optional)
+- `save_data_dir`: Directory to save extracted data (optional)
+- `save_plot_dir`: Directory to save generated plots (optional)
+
+#### Output
+
+- Returns a tuple: (is_passed, stats, plot_figure, error_angles, common_timestamps)
+- Saves statistics as JSON, data as NPZ, and plot as PNG (if directories are provided)
+
+#### Example Plot
+
+![Guidance Steering Analysis](guidance_steering_analysis.png)
+
+This plot shows:
+- Top panel: Comparison of commanded vs actual steering angles over time
+- Bottom panel: Steering error over time, including the median and standard deviation
+
+### run_steering_wheel_analysis
+
+Analyzes steering performance by comparing commanded vs actual steering values at PACMod level.
+Time series alignment is performed to match commanded and actual values.
+Both instantaneous and statistical measures are considered
+- `/hardware_interface/as/pacmod/parsed_tx/steer_rpt`: Source of actual steering wheel values
+- `/hardware_interface/as/pacmod/as_rx/steer_cmd`: Source of commanded steering wheel values
+
+#### Parameters
+
+- `mcap_path`: Path to MCAP file
+- `error_threshold_to_pass`: Threshold for passing the analysis (default: 0.1)
+- `start_time`: Time to start the analysis (optional)
+- `end_time`: Time to end the analysis (optional)
+- `save_stats_dir`: Directory to save extracted statistics (optional)
+- `save_data_dir`: Directory to save extracted data (optional)
+- `save_plot_dir`: Directory to save generated plots (optional)
+
+#### Output
+
+- Returns a tuple: (is_passed, stats, plot_figure, error_values, common_timestamps)
+- Saves statistics as JSON, data as NPZ, and plot as PNG (if directories are provided)
+
+#### Example Plot
+
+![Steering Wheel Analysis](steering_wheel_analysis.png)
+
+This plot shows:
+- Top panel: Comparison of commanded vs actual steering wheel values over time
+- Bottom panel: Steering error over time, including the median and standard deviation
+
+#### Analysis Metrics
+
+Both functions calculate the following statistics:
+- Minimum error
+- Maximum error
+- Mean error
+- Median error
+- Standard deviation
+- Root mean square error (RMSE)
+- Error percentiles (25th, 75th, 95th)
+
+#### Saved Outputs
+
+If directories are provided:
+
+- Statistics saved as JSON in "guidance_steering_analysis.json" and  "steering_wheel_analysis.json"
+- Data saved as NPZ in "guidance_steering_data.npz" and "steering_wheel_data.npz"
+- Plots saved as:
+  - "guidance_steering_analysis.png"
+  - "steering_wheel_analysis.png"
+
 ## Adding New Analysis Functions
 
 To add a new analysis function:

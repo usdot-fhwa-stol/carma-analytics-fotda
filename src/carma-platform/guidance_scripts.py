@@ -1,31 +1,15 @@
 from parse_ros2_bags import open_bagfile, extract_mcap_data
 import numpy as np
 from matplotlib import pyplot as plt
-import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import CubicSpline
 from pathlib import Path
 from scipy.spatial import KDTree
 import json
+from utils import calculate_error_statistics, print_stats, align_time_series
 
 STD_DEV_LABEL_STRING = "±1 Std Dev"
 TIME_SECONDS_LABEL_STRING = "Time (seconds)"
-
-def print_stats(stats: dict, title: str, decimal_places: int = 4) -> None:
-    """
-    Print statistics.
-
-    Args:
-        stats: Dictionary of statistics
-        title: Title for the statistics block
-        decimal_places: Number of decimal places (default: 4)
-    """
-    print(f"\n{title}:")
-    for key, value in stats.items():
-        if isinstance(value, (int, bool)):
-            print(f"{key}: {value}")
-        else:
-            print(f"{key}: {value:.{decimal_places}f}")
 
 
 def get_engage_time(mcap_path):
@@ -105,17 +89,7 @@ def run_crosstrack_analysis(
     timestamps, cross_tracks = extracted_data[topics[0]]
 
     # Calculate statistics
-    stats = {
-        "minimum": np.min(cross_tracks),
-        "maximum": np.max(cross_tracks),
-        "median": np.median(cross_tracks),
-        "std_dev": np.std(cross_tracks),
-        "mean": np.mean(cross_tracks),
-        "sample_count": len(cross_tracks),
-        "rms": np.sqrt(np.mean(np.square(cross_tracks))),
-        "start_time_since_recording": start_time,
-        "end_time_since_recording": end_time,
-    }
+    stats = calculate_error_statistics(cross_tracks, start_time, end_time)
 
     # Pass or no pass
     is_passed = float(stats["median"]) < error_threshold_to_pass_meter
@@ -279,17 +253,7 @@ def run_turn_accuracy_analysis(
     distances = np.array(distances)
 
     # Calculate statistics
-    stats = {
-        "minimum": np.min(distances),
-        "maximum": np.max(distances),
-        "median": np.median(distances),
-        "mean": np.mean(distances),
-        "std_dev": np.std(distances),
-        "rms": np.sqrt(np.mean(np.square(distances))),
-        "sample_count": len(distances),
-        "start_time_since_recording": start_time,
-        "end_time_since_recording": end_time,
-    }
+    stats = calculate_error_statistics(distances, start_time, end_time)
 
     # Pass or no pass
     is_passed = float(stats["median"]) < error_threshold_to_pass_meter
@@ -437,27 +401,6 @@ def calculate_window_average(timestamps, values, window_size=1.0):
 
     return np.array(window_averages), np.array(avg_timestamps)
 
-def calculate_acceleration_stats(accelerations):
-    """
-    Calculate statistics for acceleration data.
-
-    Args:
-        accelerations: Array of acceleration values
-
-    Returns:
-        dict: Statistics dictionary
-    """
-    return {
-        "minimum": np.min(accelerations),
-        "maximum": np.max(accelerations),
-        "median": np.median(accelerations),
-        "mean": np.mean(accelerations),
-        "std_dev": np.std(accelerations),
-        "rms": np.sqrt(np.mean(np.square(accelerations))),
-        "sample_count": len(accelerations),
-    }
-
-
 def plot_acceleration_analysis(
     time_points, accelerations, stats, title, ylabel, comfort_threshold=2.0, ax=None
 ):
@@ -540,13 +483,13 @@ def run_acceleration_comfort_analysis(
 
     # Calculate instant accelerations
     accelerations, time_points = calculate_instant_acceleration(timestamps, speeds)
-    instant_stats = calculate_acceleration_stats(accelerations)
+    instant_stats = calculate_error_statistics(accelerations, start_time, end_time)
 
     # Calculate 1-second average accelerations
     avg_accelerations, avg_timepoints = calculate_window_average(
         time_points, accelerations
     )
-    avg_stats = calculate_acceleration_stats(avg_accelerations)
+    avg_stats = calculate_error_statistics(avg_accelerations, start_time, end_time)
 
     # Create visualization
     _, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12))
@@ -725,10 +668,10 @@ def run_lateral_analysis(
     )
 
     # Calculate statistics
-    acc_inst_stats = calculate_acceleration_stats(lateral_acc_inst)
-    acc_avg_stats = calculate_acceleration_stats(lateral_acc_avg)
-    jerk_inst_stats = calculate_acceleration_stats(lateral_jerk_inst)
-    jerk_avg_stats = calculate_acceleration_stats(lateral_jerk_avg)
+    acc_inst_stats = calculate_error_statistics(lateral_acc_inst)
+    acc_avg_stats = calculate_error_statistics(lateral_acc_avg)
+    jerk_inst_stats = calculate_error_statistics(lateral_jerk_inst)
+    jerk_avg_stats = calculate_error_statistics(lateral_jerk_avg)
 
     # Calculate comfort metrics
     acc_inst_discomfort = np.sum(np.abs(lateral_acc_inst) > acc_threshold_to_pass)
@@ -862,4 +805,269 @@ def run_lateral_analysis(
         lateral_jerk_avg,
         timestamps,
     )
+
+def run_guidance_steering_analysis(
+    mcap_path,
+    error_threshold_to_pass_radian=0.1,
+    start_time=None,
+    end_time=None,
+    save_stats_dir=None,
+    save_data_dir=None,
+    save_plot_dir=None,
+):
+    """
+    Analyzes steering performance by comparing commanded vs actual steering angles at guidance level.
+
+    Args:
+        mcap_path: Path to MCAP file
+        error_threshold_to_pass_radian: Maximum allowed steering error in radians
+        start_time: Time to start the analysis
+        end_time: Time to end the analysis
+        save_stats_dir: Directory to save analysis stats
+        save_data_dir: Directory to save extracted data
+        save_plot_dir: Directory to save generated plots
+    Deps:
+        Topics: [/guidance/ctrl_cmd, /hardware_interface/vehicle_status]
+    """
+    topics = [
+        "/guidance/ctrl_cmd",
+        "/hardware_interface/vehicle_status"
+    ]
+    
+    extracted_data = extract_mcap_data(
+        mcap_path,
+        topics,
+        start_time=start_time,
+        end_time=end_time,
+        field_extractors={
+            topics[0]: lambda msg: msg.cmd.steering_angle,
+            topics[1]: lambda msg: msg.angle
+        }
+    )
+    
+    cmd_timestamps, cmd_angles = extracted_data[topics[0]]
+    actual_timestamps, actual_angles = extracted_data[topics[1]]
+    
+    # Convert to numpy arrays
+    cmd_timestamps = np.array(cmd_timestamps)
+    cmd_angles = np.array(cmd_angles)
+    actual_timestamps = np.array(actual_timestamps)
+    actual_angles = np.array(actual_angles)
+    
+    # Align the time series
+    common_timestamps, aligned_cmd_angles, aligned_actual_angles = align_time_series(
+        cmd_timestamps, cmd_angles,
+        actual_timestamps, actual_angles
+    )
+
+    # Calculate differences between commanded and actual angles
+    error_angles = np.abs(aligned_cmd_angles - aligned_actual_angles)
+    
+    # Calculate statistics
+    stats = calculate_error_statistics(error_angles, start_time, end_time)
+    
+    # Pass or no pass
+    is_passed = float(stats["median"]) < error_threshold_to_pass_radian
+    
+    # Create visualization
+    plt.figure(figsize=(15, 10))
+    
+    # Plot steering angles
+    plt.subplot(2, 1, 1)
+    
+    # Also plot original data as dots to show sampling
+    plt.plot(cmd_timestamps, cmd_angles, 'b.', markersize=2, alpha=0.3, label='Commanded Samples')
+    plt.plot(actual_timestamps, actual_angles, 'r.', markersize=2, alpha=0.3, label='Actual Samples')
+    
+    plt.title('Steering Angle Comparison')
+    plt.xlabel(TIME_SECONDS_LABEL_STRING)
+    plt.ylabel('Steering Angle (rad)')
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    
+    # Plot error over time
+    plt.subplot(2, 1, 2)
+    plt.plot(common_timestamps, error_angles, '.', markersize=2, label='Steering Error', linewidth=1)
+    plt.axhline(y=stats["median"], color='r', linestyle='--', label='Median')
+    plt.axhline(y=error_threshold_to_pass_radian, color='g', linestyle='--', label='Error Threshold')
+    plt.fill_between(
+        common_timestamps,
+        stats["median"] - stats["std_dev"],
+        stats["median"] + stats["std_dev"],
+        alpha=0.2,
+        color='r',
+        label=STD_DEV_LABEL_STRING
+    )
+    
+    plt.title('Steering Error Over Time')
+    plt.xlabel(TIME_SECONDS_LABEL_STRING)
+    plt.ylabel('Error (rad)')
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    
+    plt.tight_layout()
+    
+    # Print statistics
+    print_stats(stats, "Guidance Steering Analysis Statistics")
+    
+    if save_stats_dir:
+        stats_full_path = save_stats_dir / "guidance_steering_analysis.json"
+        with open(stats_full_path, "w") as f:
+            json.dump(stats, f, indent=2)
+        print(f"Stats saved to: {save_stats_dir}")
+    
+    if save_data_dir:
+        np.savez(
+            save_data_dir / "guidance_steering_data.npz",
+            common_timestamps=common_timestamps,
+            cmd_angles_aligned=aligned_cmd_angles,
+            actual_angles_aligned=aligned_actual_angles,
+            original_cmd_timestamps=cmd_timestamps,
+            original_cmd_angles=cmd_angles,
+            original_actual_timestamps=actual_timestamps,
+            original_actual_angles=actual_angles,
+            error_angles=error_angles,
+            stats=stats
+        )
+        print(f"\nData saved to: {save_data_dir}")
+    
+    if save_plot_dir:
+        plt.savefig(save_plot_dir / "guidance_steering_analysis.png")
+        print(f"\nPlot saved to: {save_plot_dir}")
+    else:
+        plt.show()
+        
+    return (is_passed, stats, plt.gcf(), error_angles, common_timestamps)
+
+def run_steering_wheel_analysis(
+    mcap_path,
+    error_threshold_to_pass=0.1,
+    start_time=None,
+    end_time=None,
+    save_stats_dir=None,
+    save_data_dir=None,
+    save_plot_dir=None,
+):
+    """
+    Analyzes steering performance by comparing commanded vs actual steering values at PACMod level.
+
+    Args:
+        mcap_path: Path to MCAP file
+        error_threshold_to_pass: Maximum allowed steering error
+        start_time: Time to start the analysis
+        end_time: Time to end the analysis
+        save_stats_dir: Directory to save analysis stats
+        save_data_dir: Directory to save extracted data
+        save_plot_dir: Directory to save generated plots
+    Deps:
+        Topics: [/hardware_interface/as/pacmod/parsed_tx/steer_rpt,
+                /hardware_interface/as/pacmod/as_rx/steer_cmd]
+    """
+    topics = [
+        "/hardware_interface/as/pacmod/parsed_tx/steer_rpt",
+        "/hardware_interface/as/pacmod/as_rx/steer_cmd"
+    ]
+    
+    extracted_data = extract_mcap_data(
+        mcap_path,
+        topics,
+        start_time=start_time,
+        end_time=end_time,
+        field_extractors={
+            topics[0]: lambda msg: msg.output,
+            topics[1]: lambda msg: msg.command
+        }
+    )
+    
+    actual_timestamps, actual_values = extracted_data[topics[0]]
+    cmd_timestamps, cmd_values = extracted_data[topics[1]]
+    
+    # Convert to numpy arrays
+    actual_timestamps = np.array(actual_timestamps)
+    actual_values = np.array(actual_values)
+    cmd_timestamps = np.array(cmd_timestamps)
+    cmd_values = np.array(cmd_values)
+    
+    # Align the time series
+    common_timestamps, aligned_cmd_values, aligned_actual_values = align_time_series(
+        cmd_timestamps, cmd_values,
+        actual_timestamps, actual_values
+    )
+
+    # Calculate differences between commanded and actual steering wheel values
+    error_values = np.abs(aligned_cmd_values - aligned_actual_values)
+    
+    # Calculate statistics
+    stats = calculate_error_statistics(error_values, start_time, end_time)
+    
+    # Pass or no pass
+    is_passed = float(stats["median"]) < error_threshold_to_pass
+    
+    # Create visualization
+    plt.figure(figsize=(15, 10))
+    
+    # Plot steering Wheel values
+    plt.subplot(2, 1, 1)
+    
+    # Also plot original data as dots to show sampling
+    plt.plot(cmd_timestamps, cmd_values, 'b.', markersize=2, alpha=0.3, label='Commanded Samples')
+    plt.plot(actual_timestamps, actual_values, 'r.', markersize=2, alpha=0.3, label='Actual Samples')
+
+    plt.title('Steering Wheel Value Comparison')
+    plt.xlabel(TIME_SECONDS_LABEL_STRING)
+    plt.ylabel('Steering Wheel Value')
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    
+    # Plot error over time
+    plt.subplot(2, 1, 2)
+    plt.plot(common_timestamps, error_values, '.', markersize=2, label='Steering Error', linewidth=1)
+    plt.axhline(y=stats["median"], color='r', linestyle='--', label='Median')
+    plt.axhline(y=error_threshold_to_pass, color='g', linestyle='--', label='Error Threshold')
+    plt.fill_between(
+        common_timestamps,
+        stats["median"] - stats["std_dev"],
+        stats["median"] + stats["std_dev"],
+        alpha=0.2,
+        color='r',
+        label=STD_DEV_LABEL_STRING
+    )
+    
+    plt.title('Steering Wheel Error Over Time')
+    plt.xlabel(TIME_SECONDS_LABEL_STRING)
+    plt.ylabel('Error')
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    
+    plt.tight_layout()
+    
+    # Print statistics
+    print_stats(stats, "Steering Wheel Analysis Statistics")
+    
+    if save_stats_dir:
+        stats_full_path = save_stats_dir / "steering_wheel_analysis.json"
+        with open(stats_full_path, "w") as f:
+            json.dump(stats, f, indent=2)
+        print(f"Stats saved to: {save_stats_dir}")
+    
+    if save_data_dir:
+        np.savez(
+            save_data_dir / "steering_wheel_data.npz",
+            common_timestamps=common_timestamps,
+            cmd_timestamps=cmd_timestamps,
+            cmd_values=cmd_values,
+            actual_timestamps=actual_timestamps,
+            actual_values=actual_values,
+            error_values=error_values,
+            stats=stats
+        )
+        print(f"\nData saved to: {save_data_dir}")
+    
+    if save_plot_dir:
+        plt.savefig(save_plot_dir / "steering_wheel_analysis.png")
+        print(f"\nPlot saved to: {save_plot_dir}")
+    else:
+        plt.show()
+        
+    return (is_passed, stats, plt.gcf(), error_values, common_timestamps)
 # More guidance specific analysis scripts to come ....
