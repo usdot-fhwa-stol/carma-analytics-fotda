@@ -7,22 +7,14 @@ from parse_ros2_bags import extract_mcap_data, get_earliest_timestamp
 def mock_reader():
     return MagicMock()
 
-@pytest.fixture
-def mock_topic_types():
-    topic1 = MagicMock()
-    topic1.name = "/topic1"
-    topic2 = MagicMock()
-    topic2.name = "/topic2"
-    return [topic1, topic2]
-
-def test_get_earliest_timestamp(mock_reader, mock_topic_types):
+def test_get_earliest_timestamp(mock_reader):
     mock_reader.read_next.side_effect = [
         # Topic messages should generally arrive with timestamps in order
         ("/topic2", "msg2", 1000000000),
         ("/topic1", "msg1", 2000000000)
     ]
     
-    result = get_earliest_timestamp(mock_reader, mock_topic_types)
+    result = get_earliest_timestamp(mock_reader)
     
     assert result == 1000000000
     assert mock_reader.set_filter.call_count == 2
