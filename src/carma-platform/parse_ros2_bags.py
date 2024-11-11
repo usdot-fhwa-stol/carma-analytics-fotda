@@ -78,7 +78,7 @@ def open_bagfile(path, topics=[], serialization_format="cdr", storage_id="mcap")
     }
 
     # Get the earliest timestamp from all topics
-    earliest_time = get_earliest_timestamp(reader, topic_types)
+    earliest_time = get_earliest_timestamp(reader)
 
     if topics:
         filt = rosbag2_py.StorageFilter(topics)
