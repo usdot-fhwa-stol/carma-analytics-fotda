@@ -81,13 +81,19 @@ def test_run_turn_accuracy_analysis(mock_mcap_path):
         }
         mock_plt.figure.return_value = MagicMock()
 
-        is_passed, stats, plot_figure, actual_path, planned_path, distances, timestamps = (
-            run_turn_accuracy_analysis(
-                mock_mcap_path,
-                error_threshold_to_pass_meter=2.0,
-                start_time=0,
-                end_time=2,
-            )
+        (
+            is_passed,
+            stats,
+            plot_figure,
+            actual_path,
+            planned_path,
+            distances,
+            timestamps,
+        ) = run_turn_accuracy_analysis(
+            mock_mcap_path,
+            error_threshold_to_pass_meter=2.0,
+            start_time=0,
+            end_time=2,
         )
 
         expected_actual_path = [[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]
@@ -119,6 +125,7 @@ def test_calculate_instant_acceleration():
     assert accelerations == approx([1, 3, 5])
     assert time_points == approx([1, 2, 3])
 
+
 def test_calculate_window_average():
     """Test the calculate_window_average function for averaging values"""
     timestamps = np.array([0, 0.5, 1.0, 1.5, 2.0])
@@ -148,24 +155,60 @@ def test_run_acceleration_comfort_analysis(mock_mcap_path):
 
         # Use more data points with 0.1s intervals to ensure window calculations work
         timestamps = np.arange(0, 3.1, 0.1)  # 0 to 3 seconds with 0.1s intervals
-        speeds = np.array([
-            0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8,
-            2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 2.8, 2.6, 2.4, 2.2,
-            2.0, 1.8, 1.6, 1.4, 1.2, 1.0, 0.8, 0.6, 0.4, 0.2, 0
-        ])
+        speeds = np.array(
+            [
+                0,
+                0.2,
+                0.4,
+                0.6,
+                0.8,
+                1.0,
+                1.2,
+                1.4,
+                1.6,
+                1.8,
+                2.0,
+                2.2,
+                2.4,
+                2.6,
+                2.8,
+                3.0,
+                2.8,
+                2.6,
+                2.4,
+                2.2,
+                2.0,
+                1.8,
+                1.6,
+                1.4,
+                1.2,
+                1.0,
+                0.8,
+                0.6,
+                0.4,
+                0.2,
+                0,
+            ]
+        )
 
         mock_extract.return_value = {
             "/hardware_interface/vehicle_status": (timestamps, speeds)
         }
 
-        (is_passed, instant_stats, avg_stats, plot_figure,
-         accelerations, avg_accelerations, time_points, avg_timepoints) = (
-            run_acceleration_comfort_analysis(
-                mock_mcap_path,
-                comfort_deceleration_threshold_to_pass=3.0,
-                start_time=0,
-                end_time=3,
-            )
+        (
+            is_passed,
+            instant_stats,
+            avg_stats,
+            plot_figure,
+            accelerations,
+            avg_accelerations,
+            time_points,
+            avg_timepoints,
+        ) = run_acceleration_comfort_analysis(
+            mock_mcap_path,
+            comfort_deceleration_threshold_to_pass=3.0,
+            start_time=0,
+            end_time=3,
         )
 
         # Test instant acceleration stats
@@ -190,6 +233,7 @@ def test_run_acceleration_comfort_analysis(mock_mcap_path):
         assert len(avg_accelerations) > 0
         assert len(avg_timepoints) > 0
 
+
 def test_calculate_instant_lateral_values():
     """Test the calculate_instant_lateral_values function with known values"""
     # Test data
@@ -198,8 +242,8 @@ def test_calculate_instant_lateral_values():
     timestamps = np.array([0.0, 1.0, 2.0, 3.0])
 
     # Calculate values
-    lateral_acc, lateral_jerk, acc_timestamps, jerk_timestamps = calculate_instant_lateral_values(
-        long_velocities, ang_velocities, timestamps
+    lateral_acc, lateral_jerk, acc_timestamps, jerk_timestamps = (
+        calculate_instant_lateral_values(long_velocities, ang_velocities, timestamps)
     )
 
     # Test output lengths
@@ -216,23 +260,26 @@ def test_calculate_instant_lateral_values():
     expected_jerk = np.array([0.3, 0.5, 0.7])
     np.testing.assert_array_almost_equal(lateral_jerk, expected_jerk)
 
+
 def test_calculate_instant_lateral_values_zero_input():
     """Test with zero inputs"""
     long_velocities = np.zeros(3)
     ang_velocities = np.zeros(3)
     timestamps = np.array([0.0, 1.0, 2.0])
 
-    lateral_acc, lateral_jerk, acc_timestamps, jerk_timestamps = calculate_instant_lateral_values(
-        long_velocities, ang_velocities, timestamps
+    lateral_acc, lateral_jerk, acc_timestamps, jerk_timestamps = (
+        calculate_instant_lateral_values(long_velocities, ang_velocities, timestamps)
     )
 
     assert np.all(lateral_acc == 0)
     assert np.all(lateral_jerk == 0)
 
+
 def test_run_lateral_analysis(mock_mcap_path):
     """Test the run_lateral_analysis function with mocked data"""
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, \
-         patch("guidance_scripts.plt") as mock_plt:
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
+        "guidance_scripts.plt"
+    ) as mock_plt:
 
         # Mock timestamps and twist messages
         timestamps = np.array([0.0, 0.5, 1.0, 1.5, 2.0])
@@ -241,7 +288,7 @@ def test_run_lateral_analysis(mock_mcap_path):
             (1.0, 0.2),
             (1.5, 0.3),
             (2.0, 0.4),
-            (2.5, 0.5)
+            (2.5, 0.5),
         ]
 
         # Setup mock return value
@@ -258,16 +305,24 @@ def test_run_lateral_analysis(mock_mcap_path):
         mock_ax4 = MagicMock()
         mock_plt.subplots.side_effect = [
             (mock_fig_acc, (mock_ax1, mock_ax2)),
-            (mock_fig_jerk, (mock_ax3, mock_ax4))
+            (mock_fig_jerk, (mock_ax3, mock_ax4)),
         ]
 
         # Run analysis
-        (is_passed, acc_inst_stats, acc_avg_stats, jerk_inst_stats, jerk_avg_stats,
-         figures, lateral_acc_inst, lateral_acc_avg, lateral_jerk_inst, lateral_jerk_avg,
-         timestamps_out) = run_lateral_analysis(
-            mock_mcap_path,
-            acc_threshold_to_pass=2.0,
-            jerk_threshold_to_pass=2.0
+        (
+            is_passed,
+            acc_inst_stats,
+            acc_avg_stats,
+            jerk_inst_stats,
+            jerk_avg_stats,
+            figures,
+            lateral_acc_inst,
+            lateral_acc_avg,
+            lateral_jerk_inst,
+            lateral_jerk_avg,
+            timestamps_out,
+        ) = run_lateral_analysis(
+            mock_mcap_path, acc_threshold_to_pass=2.0, jerk_threshold_to_pass=2.0
         )
 
         # Test that values were calculated correctly
@@ -289,10 +344,12 @@ def test_run_lateral_analysis(mock_mcap_path):
         # Test output timestamps
         np.testing.assert_array_equal(timestamps_out, timestamps)
 
+
 def test_run_lateral_analysis_exceeds_threshold(mock_mcap_path):
     """Test run_lateral_analysis when values exceed comfort thresholds"""
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, \
-         patch("guidance_scripts.plt") as mock_plt:
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
+        "guidance_scripts.plt"
+    ) as mock_plt:
 
         # Setup mock data with high acceleration/jerk values
         timestamps = np.array([0.0, 0.5, 1.0, 1.5])
@@ -300,7 +357,7 @@ def test_run_lateral_analysis_exceeds_threshold(mock_mcap_path):
             (2.5, 1.0),  # Will create high lateral acceleration
             (5.0, 1.0),
             (10.0, 1.0),
-            (15.0, 1.0)
+            (15.0, 1.0),
         ]
         mock_extract.return_value = {
             "/hardware_interface/vehicle/twist": (timestamps, velocity_data)
@@ -309,143 +366,157 @@ def test_run_lateral_analysis_exceeds_threshold(mock_mcap_path):
         # Mock figure creation
         mock_plt.subplots.side_effect = [
             (MagicMock(), (MagicMock(), MagicMock())),
-            (MagicMock(), (MagicMock(), MagicMock()))
+            (MagicMock(), (MagicMock(), MagicMock())),
         ]
 
         # Run analysis with low thresholds
         result = run_lateral_analysis(
             mock_mcap_path,
             acc_threshold_to_pass=1.0,  # Low threshold
-            jerk_threshold_to_pass=1.0   # Low threshold
+            jerk_threshold_to_pass=1.0,  # Low threshold
         )
 
         # Test that analysis failed due to exceeded thresholds
         assert result[0] == False  # is_passed should be False
 
+
 def test_run_guidance_steering_analysis(mock_mcap_path):
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, \
-         patch("guidance_scripts.plt") as mock_plt:
-        
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
+        "guidance_scripts.plt"
+    ) as mock_plt:
+
         # Mock timestamps and steering angles
         timestamps = np.array([0, 1, 2, 3, 4])
         cmd_angles = np.array([0.1, 0.2, 0.3, 0.2, 0.1])
         actual_angles = np.array([0.12, 0.19, 0.31, 0.18, 0.11])
-        
+
         mock_extract.return_value = {
             "/guidance/ctrl_cmd": (timestamps, cmd_angles),
-            "/hardware_interface/vehicle_status": (timestamps, actual_angles)
+            "/hardware_interface/vehicle_status": (timestamps, actual_angles),
         }
-        
+
         # Mock plt.figure to return a MagicMock
         mock_plt.figure.return_value = MagicMock()
-        
+
         # Run analysis
-        is_passed, stats, plot_figure, error_angles, common_timestamps = run_guidance_steering_analysis(
-            mock_mcap_path,
-            error_threshold_to_pass_radian=0.1,
-            start_time=0,
-            end_time=4
+        is_passed, stats, plot_figure, error_angles, common_timestamps = (
+            run_guidance_steering_analysis(
+                mock_mcap_path,
+                error_threshold_to_pass_radian=0.1,
+                start_time=0,
+                end_time=4,
+            )
         )
-        
+
         # Test output values
         assert is_passed == True  # Error should be within threshold
         assert stats["minimum"] == approx(0.01, rel=1e-2)  # Minimum error
         assert stats["maximum"] == approx(0.02, rel=1e-2)  # Maximum error
         assert stats["median"] == approx(0.015, rel=1e-2)  # Median error
-        
+
         # Test that arrays have correct lengths
         assert len(error_angles) == len(common_timestamps)
-        
+
         # Test that plot was created
         assert plot_figure is not None
         mock_plt.figure.assert_called_once_with(figsize=(15, 10))
 
+
 def test_run_guidance_steering_analysis_fails_threshold(mock_mcap_path):
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, \
-         patch("guidance_scripts.plt") as mock_plt:
-        
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
+        "guidance_scripts.plt"
+    ) as mock_plt:
+
         # Mock data with large steering errors
         timestamps = np.array([0, 1, 2])
         cmd_angles = np.array([0.1, 0.2, 0.3])
         actual_angles = np.array([0.3, 0.4, 0.5])  # Large differences
-        
+
         mock_extract.return_value = {
             "/guidance/ctrl_cmd": (timestamps, cmd_angles),
-            "/hardware_interface/vehicle_status": (timestamps, actual_angles)
+            "/hardware_interface/vehicle_status": (timestamps, actual_angles),
         }
-        
+
         mock_plt.figure.return_value = MagicMock()
-        
+
         # Run analysis with strict threshold
         is_passed, stats, _, _, _ = run_guidance_steering_analysis(
-            mock_mcap_path,
-            error_threshold_to_pass_radian=0.1  # Strict threshold
+            mock_mcap_path, error_threshold_to_pass_radian=0.1  # Strict threshold
         )
-        
+
         assert is_passed == False  # Should fail due to large errors
         assert stats["median"] > 0.1  # Median error should exceed threshold
 
+
 def test_run_steering_wheel_analysis(mock_mcap_path):
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, \
-         patch("guidance_scripts.plt") as mock_plt:
-        
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
+        "guidance_scripts.plt"
+    ) as mock_plt:
+
         # Mock timestamps and steering values
         timestamps = np.array([0, 1, 2, 3, 4])
         cmd_values = np.array([0.5, 1.0, 1.5, 1.0, 0.5])
         actual_values = np.array([0.48, 1.02, 1.47, 1.03, 0.51])
-        
+
         mock_extract.return_value = {
-            "/hardware_interface/as/pacmod/parsed_tx/steer_rpt": (timestamps, actual_values),
-            "/hardware_interface/as/pacmod/as_rx/steer_cmd": (timestamps, cmd_values)
+            "/hardware_interface/as/pacmod/parsed_tx/steer_rpt": (
+                timestamps,
+                actual_values,
+            ),
+            "/hardware_interface/as/pacmod/as_rx/steer_cmd": (timestamps, cmd_values),
         }
-        
+
         mock_plt.figure.return_value = MagicMock()
-        
+
         # Run analysis
-        is_passed, stats, plot_figure, error_values, common_timestamps = run_steering_wheel_analysis(
-            mock_mcap_path,
-            error_threshold_to_pass=0.1,
-            start_time=0,
-            end_time=4
+        is_passed, stats, plot_figure, error_values, common_timestamps = (
+            run_steering_wheel_analysis(
+                mock_mcap_path, error_threshold_to_pass=0.1, start_time=0, end_time=4
+            )
         )
-        
+
         # Test output values
         assert is_passed == True  # Error should be within threshold
         assert stats["minimum"] == approx(0.02, rel=1e-2)  # Minimum error
         assert stats["maximum"] == approx(0.03, rel=1e-2)  # Maximum error
         assert stats["median"] == approx(0.025, rel=1e-2)  # Median error
-        
+
         # Test that arrays have correct lengths
         assert len(error_values) == len(common_timestamps)
-        
+
         # Test that plot was created
         assert plot_figure is not None
         mock_plt.figure.assert_called_once_with(figsize=(15, 10))
 
+
 def test_run_steering_wheel_analysis_fails_threshold(mock_mcap_path):
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, \
-         patch("guidance_scripts.plt") as mock_plt:
-        
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
+        "guidance_scripts.plt"
+    ) as mock_plt:
+
         # Mock data with large steering errors
         timestamps = np.array([0, 1, 2])
         cmd_values = np.array([0.5, 1.0, 1.5])
         actual_values = np.array([0.7, 1.2, 1.7])  # Large differences
-        
+
         mock_extract.return_value = {
-            "/hardware_interface/as/pacmod/parsed_tx/steer_rpt": (timestamps, actual_values),
-            "/hardware_interface/as/pacmod/as_rx/steer_cmd": (timestamps, cmd_values)
+            "/hardware_interface/as/pacmod/parsed_tx/steer_rpt": (
+                timestamps,
+                actual_values,
+            ),
+            "/hardware_interface/as/pacmod/as_rx/steer_cmd": (timestamps, cmd_values),
         }
-        
+
         mock_plt.figure.return_value = MagicMock()
-        
+
         # Run analysis with strict threshold
         is_passed, stats, _, _, _ = run_steering_wheel_analysis(
-            mock_mcap_path,
-            error_threshold_to_pass=0.1  # Strict threshold
+            mock_mcap_path, error_threshold_to_pass=0.1  # Strict threshold
         )
-        
+
         assert is_passed == False  # Should fail due to large errors
         assert stats["median"] > 0.1  # Median error should exceed threshold
+
 
 def test_get_planner_trajectory_intervals(mock_mcap_path):
     # Mock the extract_mcap_data function
@@ -464,14 +535,12 @@ def test_get_planner_trajectory_intervals(mock_mcap_path):
                     ("guidance/plugins/cooperative_lanechange"),
                     ("guidance/plugins/cooperative_lanechange"),
                     ("guidance/plugins/inlanecruising_plugin"),
-                ]
+                ],
             )
         }
 
         # Call the function and assert the expected output
-        intervals = get_planner_trajectory_intervals(mock_mcap_path, "guidance/plugins/inlanecruising_plugin")
-        assert intervals == [
-            (0.0, 3.0),
-            (5.0, 7.0),
-            (9.0, 9.1)
-        ]
+        intervals = get_planner_trajectory_intervals(
+            mock_mcap_path, "guidance/plugins/inlanecruising_plugin"
+        )
+        assert intervals == [(0.0, 3.0), (5.0, 7.0), (9.0, 9.1)]

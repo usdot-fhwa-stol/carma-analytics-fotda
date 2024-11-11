@@ -8,7 +8,7 @@ from guidance_scripts import (
     run_lateral_analysis,
     run_guidance_steering_analysis,
     run_steering_wheel_analysis,
-    get_planner_trajectory_intervals
+    get_planner_trajectory_intervals,
 )
 from run_all_analysis import run_all_analysis
 import argparse
@@ -16,8 +16,9 @@ import argcomplete
 from environment_scripts import (
     extract_lanelet2_map_from_mcap,
     filter_map_points_for_trajectory,
-    plot_2d_map_and_pose
+    plot_2d_map_and_pose,
 )
+
 # VARIOUS THRESHOLDS FOR THE METRICS
 # 1. Cross_track analysis
 CROSS_TRACK_ERROR_THRESHOLD_METER = 2.0
@@ -31,6 +32,7 @@ JERK_THRESHOLD_TO_PASS_MS3 = 3.0
 # 5. Steering angle and steering wheel analysis
 STEERING_ANGLE_ERROR_THREHOLD_RADIAN = 0.1
 STEERING_WHEEL_ANGLE_ERROR_THRESHOLD_RADIAN = 0.1
+
 
 def analyze_mcap_file_for_control_analysis(
     mcap_path: Path, output_dir: Path, stats_dir: Path, data_dir: Path, plots_dir: Path
@@ -46,17 +48,19 @@ def analyze_mcap_file_for_control_analysis(
     # Run all the tests for engage to disengage
     # and specifically for lane change durations:
     intervals = [(engage_time, disengage_time)]
-    planner_plugin_name="/guidance/plugins/cooperative_lanechange"
+    planner_plugin_name = "/guidance/plugins/cooperative_lanechange"
     try:
         new_intervals = get_planner_trajectory_intervals(
             mcap_path=mcap_path,
             planner_plugin_name=planner_plugin_name,
             start_time=engage_time,
-            end_time=disengage_time
+            end_time=disengage_time,
         )
         intervals.extend(new_intervals)
     except Exception as e:
-        print(f"Error getting start and end time {planner_plugin_name}: for mcap {mcap_path}: {e}")
+        print(
+            f"Error getting start and end time {planner_plugin_name}: for mcap {mcap_path}: {e}"
+        )
         return None
 
     all_analysis_stats = []
@@ -75,33 +79,43 @@ def analyze_mcap_file_for_control_analysis(
             )
             analysis_stats["run_crosstrack_analysis"] = is_passed
         except Exception as e:
-            print(f"Error analyzing {mcap_path} for metric run_crosstrack_analysis: {e}")
+            print(
+                f"Error analyzing {mcap_path} for metric run_crosstrack_analysis: {e}"
+            )
             analysis_stats["run_crosstrack_analysis"] = None
 
         # 2. Turn accuracy analysis by spline fitting
         try:
-            is_passed, _, _, actual_path, planned_path, _, _ = run_turn_accuracy_analysis(
-                mcap_path,
-                TURN_ACCURACY_ERROR_THRESHOLD_METER,
-                start_time,
-                end_time,
-                stats_dir,
-                data_dir,
-                plots_dir,
+            is_passed, _, _, actual_path, planned_path, _, _ = (
+                run_turn_accuracy_analysis(
+                    mcap_path,
+                    TURN_ACCURACY_ERROR_THRESHOLD_METER,
+                    start_time,
+                    end_time,
+                    stats_dir,
+                    data_dir,
+                    plots_dir,
+                )
             )
             analysis_stats["run_turn_accuracy_analysis"] = is_passed
         except Exception as e:
-            print(f"Error analyzing {mcap_path} for metric run_turn_accuracy_analysis: {e}")
+            print(
+                f"Error analyzing {mcap_path} for metric run_turn_accuracy_analysis: {e}"
+            )
             analysis_stats["run_turn_accuracy_analysis"] = None
 
         # 2.a Visualize traveled path and planned path on actual map
         # This is for visual verification
         try:
             lanelet2_map_data = extract_lanelet2_map_from_mcap(str(mcap_path))
-            if (list(planned_path)):
-                plot_2d_map_and_pose(lanelet2_map_data, list(planned_path), plots_dir / "planned_path")
-            if (list(actual_path)):
-                plot_2d_map_and_pose(lanelet2_map_data, list(actual_path), plots_dir / "actual_path")
+            if list(planned_path):
+                plot_2d_map_and_pose(
+                    lanelet2_map_data, list(planned_path), plots_dir / "planned_path"
+                )
+            if list(actual_path):
+                plot_2d_map_and_pose(
+                    lanelet2_map_data, list(actual_path), plots_dir / "actual_path"
+                )
         except Exception as e:
             print(f"Error plotting {mcap_path} for plotting lanelet2 map data: {e}")
 
@@ -137,9 +151,7 @@ def analyze_mcap_file_for_control_analysis(
             )
             analysis_stats["run_lateral_analysis"] = is_passed
         except Exception as e:
-            print(
-                f"Error analyzing {mcap_path} for metric run_lateral_analysis: {e}"
-            )
+            print(f"Error analyzing {mcap_path} for metric run_lateral_analysis: {e}")
             analysis_stats["run_lateral_analysis"] = None
 
         # 5.A Steering angle analysis
@@ -153,13 +165,15 @@ def analyze_mcap_file_for_control_analysis(
                 data_dir,
                 plots_dir,
             )
-            analysis_stats["run_guidance_steering_analysis"] = steering_analysis_results[0]
+            analysis_stats["run_guidance_steering_analysis"] = (
+                steering_analysis_results[0]
+            )
         except Exception as e:
             print(
                 f"Error analyzing {mcap_path} for metric run_guidance_steering_analysis: {e}"
             )
             analysis_stats["run_guidance_steering_analysis"] = None
-        
+
         # 5.B Steering wheel angle analysis
         try:
             steering_wheel_analysis_results = run_steering_wheel_analysis(
@@ -171,13 +185,15 @@ def analyze_mcap_file_for_control_analysis(
                 data_dir,
                 plots_dir,
             )
-            analysis_stats["run_steering_wheel_analysis"] = steering_wheel_analysis_results[0]
+            analysis_stats["run_steering_wheel_analysis"] = (
+                steering_wheel_analysis_results[0]
+            )
         except Exception as e:
             print(
                 f"Error analyzing {mcap_path} for metric run_steering_wheel_analysis: {e}"
             )
             analysis_stats["run_steering_wheel_analysis"] = None
-        
+
         all_analysis_stats.append(analysis_stats)
 
     return all_analysis_stats
