@@ -60,13 +60,17 @@ import argparse
 # ----------------------------------------
 # SCRIPT USAGE INSTRUCTIONS
 # ----------------------------------------
-# From terminal, run 'python3 analyze_callback_durations.py"
-# Additional arguments supported:
-#       -v  --verbose    | Print out debug information to the terminal when analyzing a trace session
-#       -sp --show-plots | Display plots immediately when they are generated. Regardless of this flag,
-#                        |      plots will still be saved in an output directory when generated.
-# NOTE: Search for all 'TODO for user' statements in this script to find parameters that can be customized
-#       by the user prior to running this analysis script.
+# 1. Basic usage:
+#     python3 carma_analyze_callback_durations.py /path/to/trace/sessions
+
+# 2. All options:
+#     python3 carma_analyze_callback_durations.py [-h] [-o OUTPUT_DIR] [-v] [-sp] input_dir
+
+# Arguments:
+#     input_dir            Directory containing trace sessions
+#     -o, --output-dir     Optional output directory (default: input_dir/trace_results)
+#     -v, --verbose        Enable detailed progress output
+#     -sp, --show-plots    Display plots during analysis (also saves to files)
 
 # ----------------------------------------
 # SCRIPT OUTPUTS
@@ -215,7 +219,6 @@ def plot_callback_durations_histogram(duration_df, callback_description, results
 
     return
 
-
 def analyze_callback_durations(data_util, callback_symbols, results_directory,
                                timestamp_start_analysis, trace_session_filename,
                                components_to_analyze, show_plots=False, verbose=False, 
@@ -331,159 +334,12 @@ def analyze_callback_durations(data_util, callback_symbols, results_directory,
     f.close()
     return
 
-def aggregate_session_statistics(results_dir):
-    """
-    Aggregate statistics across all analyzed sessions, properly accounting for 
-    sequential pipeline behavior.
-    
-    Args:
-        results_dir (str or Path): Directory containing analysis results
-    """
-    results_path = Path(results_dir)
-    session_dirs = [d for d in results_path.iterdir() 
-                   if d.is_dir() and d.name.startswith('my-tracing-session')]
-    
-    if not session_dirs:
-        raise ValueError(f"No session directories found in {results_dir}")
-    
-    all_component_stats = []
-    
-    # Collect stats from all sessions
-    for session_dir in session_dirs:
-        component_files = list(session_dir.glob('component_stats_*.csv'))
-        if component_files:
-            latest_component = max(component_files, key=lambda x: x.stat().st_mtime)
-            comp_df = pd.read_csv(latest_component)
-            comp_df['Session'] = session_dir.name
-            all_component_stats.append(comp_df)
-    
-    if not all_component_stats:
-        raise ValueError("No statistics files found")
-        
-    # Combine all sessions' data
-    combined_df = pd.concat(all_component_stats, ignore_index=True)
-    
-    # Calculate per-component statistics across sessions
-    component_summary = combined_df.groupby('Node/Component').agg({
-        'Mean (ms)': ['mean', 'std', 'min', 'max'],
-        'Min (ms)': 'min',
-        'Max (ms)': 'max',
-        'Median (ms)': 'mean',  # Using mean of medians
-        'Std Dev': ['mean', 'std'],
-        'Count': 'sum'
-    }).round(6)
-    
-    component_summary.columns = [f"{col[0]}_{col[1]}" if col[1] else col[0] 
-                               for col in component_summary.columns]
-    component_summary = component_summary.reset_index()
-    
-    # Calculate pipeline statistics (sequential addition)
-    session_summaries = []
-    for session in combined_df['Session'].unique():
-        session_data = combined_df[combined_df['Session'] == session]
-        
-        # For sequential pipeline:
-        total_mean = session_data['Mean (ms)'].sum()  # Means add directly
-        total_variance = (session_data['Std Dev'] ** 2).sum()  # Variances add for independent components
-        total_std = np.sqrt(total_variance)
-        total_min = session_data['Min (ms)'].sum()  # Best case: all components at their minimum
-        total_max = session_data['Max (ms)'].sum()  # Worst case: all components at their maximum
-        
-        session_summaries.append({
-            'Session': session,
-            'Total Mean (ms)': total_mean,
-            'Total Std Dev (ms)': total_std,
-            'Total Min (ms)': total_min,
-            'Total Max (ms)': total_max
-        })
-    
-    pipeline_summary = pd.DataFrame(session_summaries)
-    
-    # Calculate aggregate pipeline statistics across sessions
-    pipeline_stats = {
-        'Total Pipeline Statistics (ms)': [
-            'Mean Latency',
-            'Std Dev',
-            'Min Latency',
-            'Max Latency',
-            'Sessions Analyzed'
-        ],
-        'Value': [
-            f"{pipeline_summary['Total Mean (ms)'].mean():.4f} ± {pipeline_summary['Total Mean (ms)'].std():.4f}",
-            f"{pipeline_summary['Total Std Dev (ms)'].mean():.4f} ± {pipeline_summary['Total Std Dev (ms)'].std():.4f}",
-            f"{pipeline_summary['Total Min (ms)'].mean():.4f} ± {pipeline_summary['Total Min (ms)'].std():.4f}",
-            f"{pipeline_summary['Total Max (ms)'].mean():.4f} ± {pipeline_summary['Total Max (ms)'].std():.4f}",
-            len(session_dirs)
-        ]
-    }
-    
-    pipeline_stats_df = pd.DataFrame(pipeline_stats)
-    
-    # Save results
-    timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    # Save component summary
-    component_summary_path = results_path / f"aggregated_component_stats_{timestamp}.csv"
-    component_summary.to_csv(component_summary_path, index=False)
-    
-    # Save pipeline summary
-    pipeline_summary_path = results_path / f"aggregated_pipeline_stats_{timestamp}.csv"
-    pipeline_stats_df.to_csv(pipeline_summary_path, index=False)
-    
-    # Create human-readable summary
-    summary_path = results_path / f"aggregated_analysis_summary_{timestamp}.txt"
-    with open(summary_path, 'w') as f:
-        f.write("Aggregated Sequential Pipeline Statistics\n")
-        f.write(f"Generated: {dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"Number of Sessions Analyzed: {len(session_dirs)}\n\n")
-        
-        f.write("Component-wise Statistics:\n")
-        f.write(component_summary.to_string(index=False))
-        
-        f.write("\n\nPipeline Statistics:\n")
-        f.write(pipeline_stats_df.to_string(index=False))
-        
-        f.write("\n\nPer-Session Pipeline Totals:\n")
-        f.write(pipeline_summary.to_string(index=False))
-        
-        f.write("\n\nNotes:")
-        f.write("\n- Statistics represent end-to-end sequential processing time")
-        f.write("\n- Mean ± Std shows variation across sessions")
-        f.write("\n- Min/Max represent best/worst case scenarios")
-        f.write("\n- Total Std Dev accounts for component independence")
-    
-    print(f"\nAggregated analysis results saved in {results_path}:")
-    print(f"- Component summary: {component_summary_path.name}")
-    print(f"- Pipeline summary: {pipeline_summary_path.name}")
-    print(f"- Analysis summary: {summary_path.name}")
-    
-    return component_summary, pipeline_stats_df, pipeline_summary
-
-# Example usage in main():
-# After processing all sessions, add:
-try:
-    component_summary, pipeline_summary = aggregate_session_statistics(output_dir)
-    if verbose_flag:
-        print("\nComponent-wise Summary Statistics:")
-        print(component_summary)
-        print("\nPipeline Summary Statistics:")
-        print(pipeline_summary)
-except Exception as e:
-    print(f"Error aggregating statistics: {e}")
-
-def initialize_directory(trace_session_directory, trace_session, session_num, trace_sessions):
+def get_trace_path(trace_session_directory, trace_session, session_num, trace_sessions):
     # Analyze each trace session in 'tracing_sessions'
     print("**************************************************************")
     trace_path = trace_session_directory + "/" + trace_session + "/ust"
     print("Analyzing trace session: " + str(trace_path) + " (" + str(session_num) + " of " + str(len(trace_sessions)) + ")")
-
-    # Create a folder that results and plots will be saved in
-    results_directory = str(trace_session) + "-results"
-    os.makedirs(results_directory, exist_ok=True)
-    current_directory = os.path.dirname(os.path.realpath(__file__))
-    print("All generated statistics and plots will be stored in directory: " + str(current_directory) + "/" + str(results_directory))
-    
-    return results_directory, trace_path
+    return trace_path
 
 def initialize_ros2_tracing(trace_path):
     # Process data in tracing session
@@ -496,267 +352,127 @@ def initialize_ros2_tracing(trace_path):
 
     return data_util, callback_symbols
 
-def analyze_sequential_latencies(input_dir):
+def extract_all_traces(input_dir, output_dir=None, show_plots=False, verbose=False):
     """
-    Analyze sequential component latencies and save results in the input directory.
+    Process all trace sessions in the input directory, extracting callback statistics.
     
     Args:
-        input_dir (str or Path): Path to directory containing CSV files
-        
-    Saves:
-        - component_stats.csv: Component-wise statistics
-        - pipeline_stats.csv: Overall pipeline statistics
-        - analysis_summary.txt: Human-readable summary
+        input_dir (str or Path): Directory containing trace sessions
+        output_dir (str or Path, optional): Directory for output. If None, uses input_dir/analysis_results
+        show_plots (bool): Whether to display plots
+        verbose (bool): Whether to print detailed progress
     """
     input_path = Path(input_dir)
-    all_components = []
-    
-    # Process each CSV file
-    for csv_file in input_path.glob('*.csv'):
-        try:
-            df = pd.read_csv(csv_file)
-            component_stats = df.groupby('Node/Component').agg({
-                'Mean (ms)': 'first',
-                'Min (ms)': 'first',
-                'Median (ms)': 'first',
-                'Max (ms)': 'first',
-                'Std Dev': 'first',
-                'Count': 'first'
-            }).reset_index()
-            all_components.append(component_stats)
-        except Exception as e:
-            print(f"Error processing {csv_file}: {e}")
-    
-    if not all_components:
-        raise ValueError(f"No valid CSV files found in {input_dir}")
-    
-    # Combine and process component statistics
-    combined_stats = pd.concat(all_components, ignore_index=True)
-    final_component_stats = combined_stats.groupby('Node/Component').agg({
-        'Mean (ms)': 'mean',
-        'Min (ms)': 'min',
-        'Median (ms)': 'median',
-        'Max (ms)': 'max',
-        'Std Dev': 'mean',
-        'Count': 'sum'
-    }).reset_index()
-    
-    # Calculate pipeline statistics
-    confidence_level = 0.95
-    z_value = stats.norm.ppf((1 + confidence_level) / 2)
-    
-    total_variance_independent = np.sum(final_component_stats['Std Dev']**2)
-    total_variance_correlated = np.sum(final_component_stats['Std Dev'])**2
-    
-    std_dev_independent = np.sqrt(total_variance_independent)
-    std_dev_correlated = np.sqrt(total_variance_correlated)
-    
-    total_samples = int(final_component_stats['Count'].min())
-    total_mean = float(final_component_stats['Mean (ms)'].sum())
-    
-    margin_error_independent = z_value * (std_dev_independent / np.sqrt(total_samples))
-    margin_error_correlated = z_value * (std_dev_correlated / np.sqrt(total_samples))
-    
-    # Create pipeline stats DataFrame
-    pipeline_stats = pd.DataFrame({
-        'Metric': [
-            'Total Mean (ms)',
-            'Total Min (ms)',
-            'Total Max (ms)',
-            'Independent Std Dev',
-            'Correlated Std Dev',
-            'Independent CI Lower',
-            'Independent CI Upper',
-            'Correlated CI Lower',
-            'Correlated CI Upper',
-            'Total Samples'
-        ],
-        'Value': [
-            total_mean,
-            float(final_component_stats['Min (ms)'].sum()),
-            float(final_component_stats['Max (ms)'].sum()),
-            float(std_dev_independent),
-            float(std_dev_correlated),
-            float(total_mean - margin_error_independent),
-            float(total_mean + margin_error_independent),
-            float(total_mean - margin_error_correlated),
-            float(total_mean + margin_error_correlated),
-            total_samples
-        ]
-    })
-    
-    # Create timestamp
-    timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    # Save component statistics to CSV
-    csv_path = input_path / f"component_stats_{timestamp}.csv"
-    final_component_stats.to_csv(csv_path, index=False)
-    
-    # Save pipeline statistics to CSV
-    pipeline_csv_path = input_path / f"pipeline_stats_{timestamp}.csv"
-    pipeline_stats.to_csv(pipeline_csv_path, index=False)
-    
-    # Create human-readable summary
-    summary_path = input_path / f"analysis_summary_{timestamp}.txt"
-    with open(summary_path, 'w') as f:
-        f.write("Sequential Component Latency Analysis\n")
-        f.write(f"Generated: {dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-        
-        f.write("Component-wise Statistics:\n")
-        f.write(final_component_stats.to_string())
-        
-        f.write("\n\nPipeline Statistics:\n")
-        f.write(pipeline_stats.to_string())
-        
-    print(f"\nAnalysis results saved in {input_path}:")
-    print(f"- Component statistics: {csv_path.name}")
-    print(f"- Pipeline statistics: {pipeline_csv_path.name}")
-    print(f"- Analysis summary: {summary_path.name}")
-    
-    return final_component_stats, pipeline_stats
-
-
-def main():
-    """
-    Main function to analyze ROS2 tracing data.
-    Automatically detects tracing sessions in input directory.
-    If output directory is not specified, creates 'analysis_results' in input directory.
-    
-    Usage: python script.py [-v|--verbose] [-sp|--show-plots] [-o|--output-dir output_dir] -i|--input-dir input_dir
-    """
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Analyze ROS2 tracing data')
-    parser.add_argument('-i', '--input-dir', help='Directory containing tracing sessions')
-    parser.add_argument('-o', '--output-dir', help='Directory to save analysis results (optional)')
-    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
-    parser.add_argument('-sp', '--show-plots', action='store_true', help='Show plots during analysis')
-    args = parser.parse_args()
-
-    input_dir = Path(args.input_dir)
-    verbose_flag = args.verbose
-    show_plots_flag = args.show_plots
-
-    # Set up output directory
-    if args.output_dir:
-        output_dir = Path(args.output_dir)
+    if output_dir:
+        output_path = Path(output_dir)
     else:
-        # Create 'analysis_results' directory inside input directory
-        output_dir = input_dir / 'analysis_results'
+        output_path = input_path / 'analysis_results'
     
-    # Create output directory if it doesn't exist
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path.mkdir(parents=True, exist_ok=True)
 
-    # Find all tracing sessions
+    # Find trace sessions
     trace_sessions = [
-        d.name for d in input_dir.iterdir() 
+        d.name for d in input_path.iterdir() 
         if d.is_dir() and d.name.startswith('my-tracing-session')
     ]
 
     if not trace_sessions:
-        print(f"No tracing sessions found in {input_dir}")
+        print(f"No trace sessions found in {input_dir}")
         return
 
-    if verbose_flag:
-        print(f"Found {len(trace_sessions)} tracing sessions:")
-        for session in trace_sessions:
-            print(f"  - {session}")
-        print(f"\nResults will be saved in: {output_dir}")
+    # Define component groups
+    planning_nodes = ["arbitrator", "plan_delegator"]
+    strategic_plugin_nodes = [
+        "route_following_plugin",
+        "approaching_emergency_vehicle_plugin",
+        "lci_strategic_plugin",
+        "sci_strategic_plugin",
+        "platoon_strategic_ihp"
+    ]
+    tactical_plugin_nodes = [
+        "inlanecruising_plugin",
+        "cooperative_lanechange",
+        "stop_and_wait_plugin",
+        "yield_plugin",
+        "intersection_transit_maneuvering",
+        "light_controlled_intersection_tactical_plugin",
+        "platooning_tactical_plugin",
+        "stop_controlled_intersection_tactical_plugin"
+    ]
+    control_nodes = [
+        "trajectory_executor",
+        "trajectory_follower",
+        "twist_filter",
+        "twist_gate"
+    ]
+    v2x_nodes = ["cpp_message", "j2735_convertor", "bsm_generator"]
 
-    # Process each tracing session
+    components_to_analyze = (
+        planning_nodes + 
+        strategic_plugin_nodes + 
+        tactical_plugin_nodes + 
+        control_nodes + 
+        v2x_nodes
+    )
+
     for session_num, trace_session in enumerate(sorted(trace_sessions), 1):
-        session_output_dir = output_dir / trace_session
+        session_output_dir = output_path / trace_session
         session_output_dir.mkdir(exist_ok=True)
 
-        if verbose_flag:
+        if verbose:
             print(f"\nProcessing session {session_num}/{len(trace_sessions)}: {trace_session}")
 
-        # Initialize directory and get trace path
-        results_directory, trace_path = initialize_directory(
-            str(input_dir), trace_session, session_num, trace_sessions
-        )
+        try:
+            # Initialize tracing
+            trace_path = str(input_path / trace_session / "ust")
+            events = load_file(trace_path)
+            handler = Ros2Handler.process(events)
+            data_util = Ros2DataModelUtil(handler.data)
+            callback_symbols = data_util.get_callback_symbols()
 
-        # # Initialize ROS2 tracing
-        # data_util, callback_symbols = initialize_ros2_tracing(trace_path)
+            # Get timestamps
+            timestamp_started = get_timestamp_carma_started(data_util, callback_symbols, verbose)
 
-        # # Get timestamps
-        # timestamp_carma_started = get_timestamp_carma_started(
-        #     data_util, callback_symbols, verbose_flag
-        # )
-        # timestamp_carma_engaged = get_timestamp_carma_engaged(
-        #     data_util, callback_symbols, verbose_flag
-        # )
+            # Analyze callbacks
+            analyze_callback_durations(
+                data_util, 
+                callback_symbols, 
+                session_output_dir,
+                timestamp_started,
+                trace_session,
+                components_to_analyze,
+                show_plots,
+                verbose
+            )
 
-        # # Define component groups
-        # planning_nodes = [
-        #     "arbitrator",
-        #     "plan_delegator"
-        # ]
+        except Exception as e:
+            print(f"Error processing {trace_session}: {e}")
+            continue
 
-        # strategic_plugin_nodes = [
-        #     "route_following_plugin",
-        #     "approaching_emergency_vehicle_plugin",
-        #     "lci_strategic_plugin",
-        #     "sci_strategic_plugin",
-        #     "platoon_strategic_ihp"
-        # ]
+        if verbose:
+            print(f"Completed trace extraction for {trace_session}")
 
-        # tactical_plugin_nodes = [
-        #     "inlanecruising_plugin",
-        #     "cooperative_lanechange",
-        #     "stop_and_wait_plugin",
-        #     "yield_plugin",
-        #     "intersection_transit_maneuvering",
-        #     "light_controlled_intersection_tactical_plugin",
-        #     "platooning_tactical_plugin",
-        #     "stop_controlled_intersection_tactical_plugin"
-        # ]
+    print(f"\nTrace extraction complete. Results saved in {output_path}")
 
-        # control_nodes = [
-        #     "trajectory_executor",
-        #     "pure_pursuit",
-        #     "twist_filter",
-        #     "twist_gate"
-        # ]
+def main():
+    """
+    Main function to extract trace data.
+    
+    Usage: python carma_analyze_callback_durations.py [-v] [-sp] [-o OUTPUT_DIR] input_dir
+    """
+    parser = argparse.ArgumentParser(description='Extract ROS2 trace data statistics')
+    parser.add_argument('input_dir', help='Directory containing trace sessions')
+    parser.add_argument('-o', '--output-dir', help='Directory to save results (optional)')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
+    parser.add_argument('-sp', '--show-plots', action='store_true', help='Show plots during analysis')
+    args = parser.parse_args()
 
-        # v2x_nodes = [
-        #     "cpp_message",
-        #     "j2735_convertor",
-        #     "bsm_generator"
-        # ]
-
-        # # Combine all components
-        # components_to_analyze = (
-        #     planning_nodes + 
-        #     strategic_plugin_nodes + 
-        #     tactical_plugin_nodes + 
-        #     control_nodes + 
-        #     v2x_nodes
-        # )
-
-        # # Analyze callback durations
-        # analyze_callback_durations(
-        #     data_util, 
-        #     callback_symbols, 
-        #     session_output_dir,
-        #     timestamp_carma_started, 
-        #     trace_session,
-        #     components_to_analyze,
-        #     show_plots_flag, 
-        #     verbose_flag
-        # )
-        
-        # # Analyze sequential latencies
-        # analyze_sequential_latencies(session_output_dir)
-
-        
-
-        if verbose_flag:
-            print(f"Completed analysis for {trace_session}")
-
-    aggregate_session_statistics(output_dir)
-
-    print(f"\nAnalysis complete. Results saved in {output_dir}")
-
+    extract_all_traces(
+        input_dir=args.input_dir,
+        output_dir=args.output_dir,
+        show_plots=args.show_plots,
+        verbose=args.verbose
+    )
 
 if __name__ == "__main__":
     main()
