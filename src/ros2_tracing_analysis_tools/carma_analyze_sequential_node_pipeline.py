@@ -22,11 +22,11 @@ import scipy.stats as stats
 # ----------------------------------------
 # USAGE INSTRUCTIONS
 # ----------------------------------------
-# 1. Basic usage (after running trace_analyzer.py):
-#     python3 pipeline_analyzer.py /path/to/trace/results
+# 1. Basic usage (after running carma_analyze_callback_durations.py):
+#     python3 carma_analyze_sequential_node_pipeline.py /path/to/trace/results
 
 # 2. All options:
-#     python3 pipeline_analyzer.py [-h] [-o OUTPUT_DIR] [-p PLUGINS [PLUGINS ...]] [-v] input_dir
+#     python3 carma_analyze_sequential_node_pipeline.py [-h] [-o OUTPUT_DIR] [-p PLUGINS [PLUGINS ...]] [-v] input_dir
 
 # Arguments:
 #     input_dir             Directory containing trace analysis results
@@ -62,7 +62,7 @@ import scipy.stats as stats
 # - Combined standard deviations (within + between session)
 
 # Notes:
-# - Processes trace analysis results from trace_analyzer.py
+# - Processes trace analysis results from carma_analyze_callback_durations.py
 # - Calculates sequential pipeline metrics
 # - Handles both single-session and multi-session analysis
 
@@ -363,7 +363,7 @@ def main():
     """
     Main function to run pipeline analysis on trace data.
     
-    Usage: python pipeline_analyzer.py [-v] [-o OUTPUT_DIR] [-p PLUGINS [PLUGINS ...]] input_dir
+    Usage: python carma_analyze_sequential_node_pipeline.py [-v] [-o OUTPUT_DIR] [-p PLUGINS [PLUGINS ...]] input_dir
     """
     parser = argparse.ArgumentParser(description='Analyze pipeline latencies from trace data')
     parser.add_argument('input_dir', help='Directory containing trace session data')
