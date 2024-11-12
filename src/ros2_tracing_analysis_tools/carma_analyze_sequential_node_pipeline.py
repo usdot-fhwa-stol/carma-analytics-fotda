@@ -383,7 +383,7 @@ def main():
 
     # Use specified plugins or default control pipeline plugins
     plugins_to_analyze = args.plugins if args.plugins else control_pipeline_plugins
-    print(plugins_to_analyze)
+
     analyze_all_sessions(
         input_dir=args.input_dir,
         output_dir=args.output_dir,
