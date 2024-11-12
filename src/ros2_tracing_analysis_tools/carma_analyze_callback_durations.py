@@ -286,21 +286,23 @@ def process_component_timer_callbacks(timer_data_list, component_name, results_d
         print(f"\nFrequency statistics saved to: {freq_file}")
 
     # Create frequency plots
-    fig, ax = plt.subplots(len(timer_callbacks), 1, figsize=(10, 5*len(timer_callbacks)))
-    axes = ax if len(timer_callbacks) > 1 else [ax]
-    
-    if len(timer_callbacks) == 1:
-        axes = [axes]
-
-    for timer, ax in zip(timer_callbacks, axes):
+    n_timers = len(timer_callbacks)
+    if n_timers == 1:
+        fig, ax = plt.subplots(figsize=(10, 5))
+        timer = timer_callbacks[0]
         ax.plot(timer['timestamps'], timer['raw_frequency'], 'b.')
         ax.set_title(f"{timer['description']} Frequency")
         ax.set_xlabel('Time (s)')
         ax.set_ylabel('Frequency (Hz)')
         ax.grid(True)
-        
-        if verbose:
-            print(f"Plotting frequency data for: {timer['description']}")
+    else:
+        fig, axes = plt.subplots(n_timers, 1, figsize=(10, 5*n_timers))
+        for timer, ax in zip(timer_callbacks, axes):
+            ax.plot(timer['timestamps'], timer['raw_frequency'], 'b.')
+            ax.set_title(f"{timer['description']} Frequency")
+            ax.set_xlabel('Time (s)')
+            ax.set_ylabel('Frequency (Hz)')
+            ax.grid(True)
     
     plt.tight_layout()
     freq_plot = results_directory / f"{component_name}_timer_frequency_plot.png"
