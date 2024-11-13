@@ -98,6 +98,13 @@ For each analyzed trace session, the script creates a new results folder contain
 #### Example Frequency vs Time plot of Timer Callbacks
 ![Example Frequency vs Time plot of Timer Callbacks](docs/example_arbitrator_timer_frequency_plot.png)
 
+#### Example Frequency vs Time statistics for Timer Callbacks
+```
+Callback,Mean Freq (Hz),Std Dev Freq,Min Freq (Hz),Max Freq (Hz)
+arbitrator Timer Callback period: 100 ms,10.104585156200141,1.828551449695657,0.4739594812039514,52.77601857717348
+arbitrator Timer Callback period: 500 ms,2.0050672179789815,0.20900011265593338,0.43296472160151894,5.259835893120127
+```
+
 ## Script 2: Pipeline Latency Analyzer
 
 ### Usage
