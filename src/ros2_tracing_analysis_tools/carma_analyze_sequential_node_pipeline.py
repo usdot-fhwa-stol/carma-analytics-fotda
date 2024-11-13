@@ -5,68 +5,6 @@ import pandas as pd
 from pathlib import Path
 import scipy.stats as stats
 
-# Pipeline Latency Analyzer for CARMA Platform
-
-# This script analyzes sequential component latencies from trace data, focusing on
-# end-to-end pipeline performance across multiple sessions.
-
-# ----------------------------------------
-# DEPENDENCIES
-# ----------------------------------------
-# - Python 3.8+
-# - Required packages:
-#     numpy
-#     pandas
-#     scipy
-
-# ----------------------------------------
-# USAGE INSTRUCTIONS
-# ----------------------------------------
-# 1. Basic usage (after running carma_analyze_callback_durations.py):
-#     python3 carma_analyze_sequential_node_pipeline.py /path/to/trace/results
-
-# 2. All options:
-#     python3 carma_analyze_sequential_node_pipeline.py [-h] [-o OUTPUT_DIR] [-p PLUGINS [PLUGINS ...]] [-v] input_dir
-
-# Arguments:
-#     input_dir             Directory containing trace analysis results
-#     -o, --output-dir     Optional output directory (default: input_dir/analysis_results)
-#     -p, --plugins        Space-separated list of specific plugins to analyze
-#     -v, --verbose        Enable detailed progress output
-
-# Default analyzed plugins if none specified:
-#     - arbitrator
-#     - plan_delegator
-#     - trajectory_executor
-#     - trajectory_follower
-#     - twist_filter
-#     - twist_gate
-
-# ----------------------------------------
-# OUTPUTS
-# ----------------------------------------
-# For each session:
-# 1. Component statistics (CSV)
-# 2. Pipeline statistics (CSV)
-# 3. Analysis summary (TXT)
-
-# Additionally creates aggregated statistics across all sessions:
-# 1. aggregated_component_stats_{timestamp}.csv
-# 2. aggregated_pipeline_stats_{timestamp}.csv
-# 3. aggregated_analysis_summary_{timestamp}.txt
-
-# Analysis includes:
-# - Individual component statistics
-# - End-to-end pipeline performance
-# - Cross-session variations
-# - Combined standard deviations (within + between session)
-
-# Notes:
-# - Processes trace analysis results from carma_analyze_callback_durations.py
-# - Calculates sequential pipeline metrics
-# - Handles both single-session and multi-session analysis
-
-
 def write_analysis_summary_to_text_file(file_path, title, timestamp, components_df, pipeline_df, 
                          num_sessions=None, plugin_names=None):
     """Write analysis summary to a text file with consistent formatting."""

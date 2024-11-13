@@ -34,53 +34,6 @@ from pathlib import Path
 import scipy.stats as stats
 import argparse
 
-# Instructions for running script:
-
-# ----------------------------------------
-# WORKSPACE SETUP INSTRUCTIONS
-# ----------------------------------------
-# This script requires a workspace setup as follows:
-#   <workspace-directory>/carma-analytics-fotda
-#   <workspace-directory>/tracetools_analysis/    NOTE: 'foxy' branch required; instructions included below
-#   <workspace-directory>/ros2_tracing/           NOTE: 'foxy' branch required; instructions included below
-#   The 'tracetools_analysis' and 'ros2_tracing' repos can be cloned out via git and set to their 'foxy' branch
-#         git clone -b foxy https://github.com/usdot-fhwa-stol/tracetools_analysis
-#         git clone -b foxy https://github.com/ros2/ros2_tracing
-
-
-# ----------------------------------------
-# DEPENDENCIES
-# ----------------------------------------
-# Python 3.8
-# Numpy: sudo apt-get install python3-numpy
-# Pandas: sudo apt-get install python3-pandas
-# Babeltrace and lttng with Python Bindings: sudo apt-get install python3-babeltrace python3-lttng
-
-
-# ----------------------------------------
-# SCRIPT USAGE INSTRUCTIONS
-# ----------------------------------------
-# 1. Basic usage:
-#     python3 carma_analyze_callback_durations.py /path/to/trace/sessions
-
-# 2. All options:
-#     python3 carma_analyze_callback_durations.py [-h] [-o OUTPUT_DIR] [-v] [-sp] input_dir
-
-# Arguments:
-#     input_dir            Directory containing trace sessions
-#     -o, --output-dir     Optional output directory (default: input_dir/trace_results)
-#     -v, --verbose        Enable detailed progress output
-#     -sp, --show-plots    Display plots during analysis (also saves to files)
-
-# ----------------------------------------
-# SCRIPT OUTPUTS
-# ----------------------------------------
-# For each trace session analyzed by this script, a new folder will be created (in the same directory as
-# this script) containing the analysis results for that trace session. Within that results folder, there will
-# be one .csv file containing a summary of the callback duration statistics for each analyzed callback.
-# Additionally, two plots (each stored as a separate .png file) will be generated for each callback: one containing
-# a scatter plot of callback durations vs. time, and one containing a histogram of the callback durations.
-
 # TODO for user: These are callbacks to ignore; callbacks containing these strings typically do not affect
 #      CARMA Platform planning and controls, and can be edited as needed
 CALLBACKS_TO_IGNORE = ["parameter_events",
