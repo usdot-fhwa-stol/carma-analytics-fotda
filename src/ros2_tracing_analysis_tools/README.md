@@ -67,13 +67,13 @@ For each analyzed trace session, the script creates a new results folder contain
     - Histogram of callback durations
 
 #### Example csv file
-![Example Extracted Trace Data](example_extracted_trace_data.png)
+![Example Extracted Trace Data](docs/example_extracted_trace_data.png)
 
 #### Example callback duration plot vs time
-![Example Callback Dueation Scatter Plot](example_callback_duration_scatter_plot.png)
+![Example Callback Dueation Scatter Plot](docs/example_callback_duration_scatter_plot.png)
 
 #### Example callback duration histogram
-![Example Callback Duration Histogram](example_callback_duration_histogram.png)
+![Example Callback Duration Histogram](docs/example_callback_duration_histogram.png)
 
 ## Script 2: Pipeline Latency Analyzer
 
