@@ -30,48 +30,20 @@ import csv # Meaningful statistics are outputted to a csv file
 import matplotlib.pyplot as plt
 import os
 
-# Instructions for running script:
+from pathlib import Path
+import scipy.stats as stats
+import argparse
 
-# ----------------------------------------
-# WORKSPACE SETUP INSTRUCTIONS
-# ----------------------------------------
-# This script requires a workspace setup as follows:
-#   <workspace-directory>/carma-analytics-fotda
-#   <workspace-directory>/tracetools_analysis/    NOTE: 'foxy' branch required; instructions included below
-#   <workspace-directory>/ros2_tracing/           NOTE: 'foxy' branch required; instructions included below
-#   The 'tracetools_analysis' and 'ros2_tracing' repos can be cloned out via git and set to their 'foxy' branch
-#         git clone -b foxy https://github.com/ros-tracing/tracetools_analysis
-#         git clone -b foxy https://github.com/ros2/ros2_tracing
-
-
-# ----------------------------------------
-# DEPENDENCIES
-# ----------------------------------------
-# Python 3.8
-# Numpy: sudo apt-get install python3-numpy
-# Pandas: sudo apt-get install python3-pandas
-# Babeltrace and lttng with Python Bindings: sudo apt-get install python3-babeltrace python3-lttng
-
-
-# ----------------------------------------
-# SCRIPT USAGE INSTRUCTIONS
-# ----------------------------------------
-# From terminal, run 'python3 analyze_callback_durations.py"
-# Additional arguments supported:
-#       -v  --verbose    | Print out debug information to the terminal when analyzing a trace session
-#       -sp --show-plots | Display plots immediately when they are generated. Regardless of this flag,
-#                        |      plots will still be saved in an output directory when generated.
-# NOTE: Search for all 'TODO for user' statements in this script to find parameters that can be customized
-#       by the user prior to running this analysis script.
-
-# ----------------------------------------
-# SCRIPT OUTPUTS
-# ----------------------------------------
-# For each trace session analyzed by this script, a new folder will be created (in the same directory as
-# this script) containing the analysis results for that trace session. Within that results folder, there will
-# be one .csv file containing a summary of the callback duration statistics for each analyzed callback.
-# Additionally, two plots (each stored as a separate .png file) will be generated for each callback: one containing
-# a scatter plot of callback durations vs. time, and one containing a histogram of the callback durations.
+# TODO for user: These are callbacks to ignore; callbacks containing these strings typically do not affect
+#      CARMA Platform planning and controls, and can be edited as needed
+CALLBACKS_TO_IGNORE = ["parameter_events",
+                        "list_parameters", #ros2 service
+                        "georeference",
+                        "load_node", #ros2 service
+                        "system_alert",
+                        "ChangeState",
+                        "carma_wm",
+                        "ComponentManager"]
 
 def get_timestamp_carma_engaged(data_util, callback_symbols, verbose=False):
     '''
@@ -202,8 +174,8 @@ def plot_callback_durations_histogram(duration_df, callback_description, results
 
 def analyze_callback_durations(data_util, callback_symbols, results_directory,
                                timestamp_start_analysis, trace_session_filename,
-                               components_to_analyze, callbacks_to_ignore,
-                               show_plots=False, verbose=False):
+                               components_to_analyze, show_plots=False, verbose=False, 
+                               callbacks_to_ignore = CALLBACKS_TO_IGNORE):
     '''
     Main function for analyzing callback durations. This function calls other functions as needed to
     generate statistics for a given callback and generate informative plots.
@@ -315,111 +287,145 @@ def analyze_callback_durations(data_util, callback_symbols, results_directory,
     f.close()
     return
 
+def get_trace_path(trace_session_directory, trace_session, session_num, trace_sessions):
+    # Analyze each trace session in 'tracing_sessions'
+    print("**************************************************************")
+    trace_path = trace_session_directory + "/" + trace_session + "/ust"
+    print("Analyzing trace session: " + str(trace_path) + " (" + str(session_num) + " of " + str(len(trace_sessions)) + ")")
+    return trace_path
+
+def initialize_ros2_tracing(trace_path):
+    # Process data in tracing session
+    # References data loading steps from tracetools_analysis 'callback_durations.ipny' example
+    #       Jupyter Notebook: https://github.com/ros-tracing/tracetools_analysis/blob/foxy/tracetools_analysis/analysis/callback_duration.ipynb
+    events = load_file(trace_path)
+    handler = Ros2Handler.process(events)
+    data_util = Ros2DataModelUtil(handler.data)
+    callback_symbols = data_util.get_callback_symbols() # Mappings between a callback object and its resolved symbol.
+
+    return data_util, callback_symbols
+
+def extract_all_traces(input_dir, output_dir=None, show_plots=False, verbose=False):
+    """
+    Process all trace sessions in the input directory, extracting callback statistics.
+    
+    Args:
+        input_dir (str or Path): Directory containing trace sessions
+        output_dir (str or Path, optional): Directory for output. If None, uses input_dir/analysis_results
+        show_plots (bool): Whether to display plots
+        verbose (bool): Whether to print detailed progress
+    """
+    input_path = Path(input_dir)
+    if output_dir:
+        output_path = Path(output_dir)
+    else:
+        output_path = input_path / 'analysis_results'
+    
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    # Find trace sessions
+    trace_sessions = [
+        d.name for d in input_path.iterdir() 
+        if d.is_dir() and d.name.startswith('my-tracing-session')
+    ]
+
+    if not trace_sessions:
+        print(f"No trace sessions found in {input_dir}")
+        return
+
+    # Define component groups
+    planning_nodes = ["arbitrator", "plan_delegator"]
+    strategic_plugin_nodes = [
+        "route_following_plugin",
+        "approaching_emergency_vehicle_plugin",
+        "lci_strategic_plugin",
+        "sci_strategic_plugin",
+        "platoon_strategic_ihp"
+    ]
+    tactical_plugin_nodes = [
+        "inlanecruising_plugin",
+        "cooperative_lanechange",
+        "stop_and_wait_plugin",
+        "yield_plugin",
+        "intersection_transit_maneuvering",
+        "light_controlled_intersection_tactical_plugin",
+        "platooning_tactical_plugin",
+        "stop_controlled_intersection_tactical_plugin"
+    ]
+    control_nodes = [
+        "trajectory_executor",
+        "trajectory_follower",
+        "twist_filter",
+        "twist_gate"
+    ]
+    v2x_nodes = ["cpp_message", "j2735_convertor", "bsm_generator"]
+
+    components_to_analyze = (
+        planning_nodes + 
+        strategic_plugin_nodes + 
+        tactical_plugin_nodes + 
+        control_nodes + 
+        v2x_nodes
+    )
+
+    for session_num, trace_session in enumerate(sorted(trace_sessions), 1):
+        session_output_dir = output_path / trace_session
+        session_output_dir.mkdir(exist_ok=True)
+
+        if verbose:
+            print(f"\nProcessing session {session_num}/{len(trace_sessions)}: {trace_session}")
+
+        try:
+            # Initialize tracing
+            trace_path = str(input_path / trace_session / "ust")
+            events = load_file(trace_path)
+            handler = Ros2Handler.process(events)
+            data_util = Ros2DataModelUtil(handler.data)
+            callback_symbols = data_util.get_callback_symbols()
+
+            # Get timestamps
+            timestamp_started = get_timestamp_carma_started(data_util, callback_symbols, verbose)
+
+            # Analyze callbacks
+            analyze_callback_durations(
+                data_util, 
+                callback_symbols, 
+                session_output_dir,
+                timestamp_started,
+                trace_session,
+                components_to_analyze,
+                show_plots,
+                verbose
+            )
+
+        except Exception as e:
+            print(f"Error processing {trace_session}: {e}")
+            continue
+
+        if verbose:
+            print(f"Completed trace extraction for {trace_session}")
+
+    print(f"\nTrace extraction complete. Results saved in {output_path}")
+
 def main():
+    """
+    Main function to extract trace data.
+    
+    Usage: python carma_analyze_callback_durations.py [-v] [-sp] [-o OUTPUT_DIR] input_dir
+    """
+    parser = argparse.ArgumentParser(description='Extract ROS2 trace data statistics')
+    parser.add_argument('input_dir', help='Directory containing trace sessions')
+    parser.add_argument('-o', '--output-dir', help='Directory to save results (optional)')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
+    parser.add_argument('-sp', '--show-plots', action='store_true', help='Show plots during analysis')
+    args = parser.parse_args()
 
-    # Parse command line arguments to set 'verbose_flag' and 'show_plots_flag'
-    verbose_flag = False # True if user wants debug information outputted directly to terminal
-    show_plots_flag = False # True if user wants generated plots to be displayed (regardless of this setting, plots will always be saved as a .png)
-    if len(sys.argv) > 0:
-        for arg in sys.argv[1:]:
-            if(arg == "-v" or arg == "--verbose"):
-                verbose_flag = True
-            elif(arg == "-sp" or arg == "--show-plots"):
-                show_plots_flag = True
-            else:
-                print("Unrecognized argument: " + str(arg))
-
-    # TODO for user: All trace sessions should be stored in a central directory. Add one or more trace sessions to
-    #      the 'trace_sessions' list, and set 'trace_sessions_directory' to the central directory that they're stored in.
-    trace_sessions = ["example-trace-directory-1",
-                      "example-trace-directory-2",
-                      "example-trace-directory-3"]
-    trace_session_directory = "/example-directory-containing-trace-sessions"
-
-    session_num = 1
-    for trace_session in trace_sessions:
-        # Analyze each trace session in 'tracing_sessions'
-
-        print("**************************************************************")
-        trace_path = trace_session_directory + trace_session + "/ust"
-        print("Analyzing trace session: " + str(trace_path) + " (" + str(session_num) + " of " + str(len(trace_sessions)) + ")")
-
-        # Create a folder that results and plots will be saved in
-        results_directory = str(trace_session) + "-results"
-        os.makedirs(results_directory, exist_ok=True)
-        current_directory = os.path.dirname(os.path.realpath(__file__))
-        print("All generated statistics and plots will be stored in directory: " + str(current_directory) + "/" + str(results_directory))
-
-        # Process data in tracing session
-        # References data loading steps from tracetools_analysis 'callback_durations.ipny' example
-        #       Jupyter Notebook: https://github.com/ros-tracing/tracetools_analysis/blob/foxy/tracetools_analysis/analysis/callback_duration.ipynb
-        events = load_file(trace_path)
-        handler = Ros2Handler.process(events)
-        data_util = Ros2DataModelUtil(handler.data)
-        callback_symbols = data_util.get_callback_symbols() # Mappings between a callback object and its resolved symbol.
-
-        # Obtain informative timestamps from trace session
-        timestamp_carma_started = get_timestamp_carma_started(data_util, callback_symbols, verbose_flag)
-        timestamp_carma_engaged = get_timestamp_carma_engaged(data_util, callback_symbols, verbose_flag)
-
-        # TODO for user: Update the logical groups (add nodes, remove nodes, etc.) as needed to
-        #      analyze nodes/components that you're interested in. The below logical groups are just an example,
-        #      but include all functional ROS 2 strategic and tactical plugins at the time this
-        #      script was created.
-
-        # Organize ROS 2 nodes and services into logical groups
-        planning_nodes = ["arbitrator",
-                          "plan_delegator"]
-
-        strategic_plugin_nodes = ["route_following_plugin",
-                                  "approaching_emergency_vehicle_plugin",
-                                  "lci_strategic_plugin",
-                                  "sci_strategic_plugin",
-                                  "platoon_strategic_ihp"]
-
-        tactical_plugin_nodes = ["inlanecruising_plugin",
-                                 "cooperative_lanechange",
-                                 "stop_and_wait_plugin",
-                                 "yield_plugin",
-                                 "intersection_transit_maneuvering",
-                                 "light_controlled_intersection_tactical_plugin",
-                                 "platooning_tactical_plugin",
-                                 "stop_controlled_intersection_tactical_plugin"]
-
-        control_nodes = ["trajectory_executor",
-                         "pure_pursuit",
-                         "twist_filter",
-                         "twist_gate"]
-
-
-        v2x_nodes = ["cpp_message",
-                     "j2735_convertor",
-                     "bsm_generator"]
-
-        # Example of combining logical groups for planning and control ROS 2 stack
-        components_to_analyze = planning_nodes + strategic_plugin_nodes + tactical_plugin_nodes + \
-                                    control_nodes + v2x_nodes
-
-        # TODO for user: These are callbacks to ignore; callbacks containing these strings typically do not affect
-        #      CARMA Platform planning and controls, and can be edited as needed
-        callbacks_to_ignore = ["parameter_events",
-                               "list_parameters", #ros2 service
-                               "georeference",
-                               "load_node", #ros2 service
-                               "system_alert",
-                               "ChangeState",
-                               "carma_wm",
-                               "ComponentManager"]
-
-        # Perform statistical analysis on callbacks included in the trace session. Output results to
-        #       a .csv file and save informative plots for each callback
-        analyze_callback_durations(data_util, callback_symbols, results_directory,
-                               timestamp_carma_started, trace_session,
-                               components_to_analyze, callbacks_to_ignore,
-                               show_plots_flag, verbose_flag)
-
-        session_num += 1
-
+    extract_all_traces(
+        input_dir=args.input_dir,
+        output_dir=args.output_dir,
+        show_plots=args.show_plots,
+        verbose=args.verbose
+    )
 
 if __name__ == "__main__":
     main()
