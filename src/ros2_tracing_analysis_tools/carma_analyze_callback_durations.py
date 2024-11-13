@@ -357,7 +357,7 @@ def analyze_callback_durations(data_util, callback_symbols, results_directory,
             # Calculate basic statistics
             mean_duration_ms = duration_df['duration'].mean()
             minimum_duration_ms = duration_df['duration'].min()
-            median_duration_ms = duration_df['duration'].median()ff
+            median_duration_ms = duration_df['duration'].median()
             maximum_duration_ms = duration_df['duration'].max()
             std_dev_duration_ms = duration_df['duration'].std()
             total_count = duration_df['duration'].count()
