@@ -172,11 +172,106 @@ def plot_callback_durations_histogram(duration_df, callback_description, results
 
     return
 
+def process_component_timer_callbacks(timer_data_list, component_name, results_directory, show_plots=False, verbose=False):
+    """
+    Process and save all Timer callback data for a component.
+    
+    Args:
+        timer_data_list (list): List of dictionaries containing:
+            - description: Callback description
+            - duration_df: DataFrame with timestamp and duration data
+        component_name (str): Name of the component
+        results_directory (Path): Directory to save results
+        show_plots (bool): Whether to display plots
+        verbose (bool): Whether to print detailed information
+    """
+    if not timer_data_list:
+        return
+
+    results_directory = Path(results_directory)
+    frequency_stats = []
+    timer_callbacks = []
+
+    # Process each timer callback
+    for timer_data in timer_data_list:
+        description = timer_data['description']
+        duration_df = timer_data['duration_df']
+
+        # Calculate frequency
+        duration_df = duration_df.sort_values('timestamp')
+        time_diffs = duration_df['timestamp'].diff().dropna()
+        frequency = 1 / time_diffs  # Convert to Hz
+
+        # Calculate statistics
+        stats = {
+            'description': description,
+            'mean_freq': frequency.mean(),
+            'std_freq': frequency.std(),
+            'min_freq': frequency.min(),
+            'max_freq': frequency.max(),
+            'raw_frequency': frequency,
+            'timestamps': duration_df['timestamp'][1:]  # Align with frequency data
+        }
+        
+        timer_callbacks.append(stats)
+        frequency_stats.append([
+            description,
+            stats['mean_freq'],
+            stats['std_freq'],
+            stats['min_freq'],
+            stats['max_freq']
+        ])
+
+        if verbose:
+            print(f"\nFrequency Analysis for {description}:")
+            print(f"Mean Frequency: {stats['mean_freq']:.2f} Hz")
+            print(f"Std Dev Frequency: {stats['std_freq']:.2f} Hz")
+            print(f"Min/Max Frequency: {stats['min_freq']:.2f} / {stats['max_freq']:.2f} Hz")
+
+    # Save frequency statistics to CSV
+    freq_file = results_directory / f"{component_name}_timer_frequency.csv"
+    with open(freq_file, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Callback', 'Mean Freq (Hz)', 'Std Dev Freq', 'Min Freq (Hz)', 'Max Freq (Hz)'])
+        writer.writerows(frequency_stats)
+
+    if verbose:
+        print(f"\nFrequency statistics saved to: {freq_file}")
+
+    # Create frequency plots
+    n_timers = len(timer_callbacks)
+    if n_timers == 1:
+        fig, ax = plt.subplots(figsize=(10, 5))
+        timer = timer_callbacks[0]
+        ax.plot(timer['timestamps'], timer['raw_frequency'], 'b.')
+        ax.set_title(f"{timer['description']} Frequency")
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Frequency (Hz)')
+        ax.grid(True)
+    else:
+        fig, axes = plt.subplots(n_timers, 1, figsize=(10, 5*n_timers))
+        for timer, ax in zip(timer_callbacks, axes):
+            ax.plot(timer['timestamps'], timer['raw_frequency'], 'b.')
+            ax.set_title(f"Frequency vs Time Plot for {timer['description']}")
+            ax.set_xlabel('Time (s)')
+            ax.set_ylabel('Frequency (Hz)')
+            ax.grid(True)
+    
+    plt.tight_layout()
+    freq_plot = results_directory / f"{component_name}_timer_frequency_plot.png"
+    plt.savefig(freq_plot)
+    if show_plots:
+        plt.show()
+    plt.close()
+
+    if verbose:
+        print(f"Frequency plots saved to: {freq_plot}")
+        
 def analyze_callback_durations(data_util, callback_symbols, results_directory,
                                timestamp_start_analysis, trace_session_filename,
                                components_to_analyze, show_plots=False, verbose=False, 
                                callbacks_to_ignore = CALLBACKS_TO_IGNORE):
-    '''
+    """
     Main function for analyzing callback durations. This function calls other functions as needed to
     generate statistics for a given callback and generate informative plots.
 
@@ -191,11 +286,17 @@ def analyze_callback_durations(data_util, callback_symbols, results_directory,
     :param show_plots: Flag indicating whether the generated plot should be immediately displayed to the user before being saved.
     :param verbose: Flag indicating whether debug information should be printed to terminal.
 
+    Additional outputs:
+    - {component}_timer_frequency.csv: Frequency analysis for Timer callbacks
+    - {component}_timer_frequency_plot.png: Visualization of Timer frequencies
+    
     :return: None
-    '''
+    """
 
-    # Create .csv file in which results for each callback will be stored
-    csv_results_filename = str(results_directory) + "/all_results_" + str(trace_session_filename) + ".csv"
+    results_directory = Path(results_directory)
+    
+    # Create main results CSV
+    csv_results_filename = results_directory / f"all_results_{trace_session_filename}.csv"
     f = open(csv_results_filename, 'w')
     csv_results_writer = csv.writer(f)
     csv_results_writer.writerow(["Node/Component", "Callback Description", "Mean (ms)",
@@ -203,87 +304,100 @@ def analyze_callback_durations(data_util, callback_symbols, results_directory,
                                 "Count"])
 
     for component in components_to_analyze:
-        # For each component, log statisics and generate plots for callbacks. If a callback contains content
-        #     that matches a string in "callbacks_to_ignore", the callback will be skipped (no results or
-        #     plots will be generated).
+        if verbose:
+            print("*******************************************************************")
+            print(f"Analyzing {component}")
+            print("*******************************************************************")
 
-        if(verbose):
-            print("*******************************************************************")
-            print("Analyzing " + str(component))
-            print("*******************************************************************")
+        # Collect timer callback data for this component
+        timer_data_list = []
 
         for obj, symbol in callback_symbols.items():
             owner_info = data_util.get_callback_owner_info(obj)
             if owner_info is None:
                 owner_info = "[unknown]"
 
-            # Skip callback if it is not related to the current 'component' being analyzed
+            # Skip if not related to current component
             if (component not in owner_info) and (component not in symbol):
                 continue
 
-            # Skip callback if it includes content that user wants to ignore
+            # Skip ignored callbacks
             if any((callback in owner_info or callback in symbol) for callback in callbacks_to_ignore):
                 continue
 
-            # Generate descriptive information for this callback
+            # Generate callback description
             callback_description = ""
+            is_timer = False
             if "Timer" in owner_info:
-                callback_description = component + " Timer Callback" + owner_info.split(",")[-1]
-            if "Subscription" in owner_info:
-                callback_description = component + " Subscription Callback" + owner_info.split(",")[-1]
-            if "plan_trajectory" in owner_info:
-                callback_description = component + " PlanTrajectory Callback" + owner_info.split(",")[-1]
-            if "plan_maneuvers" in owner_info:
-                callback_description = component + " PlanManeuvers Callback" + owner_info.split(",")[-1]
+                callback_description = f"{component} Timer Callback{owner_info.split(',')[-1]}"
+                is_timer = True
+            elif "Subscription" in owner_info:
+                callback_description = f"{component} Subscription Callback{owner_info.split(',')[-1]}"
+            elif "plan_trajectory" in owner_info:
+                callback_description = f"{component} PlanTrajectory Callback{owner_info.split(',')[-1]}"
+            elif "plan_maneuvers" in owner_info:
+                callback_description = f"{component} PlanManeuvers Callback{owner_info.split(',')[-1]}"
 
-            # Create dataframe of durations for this callback
+            # Get duration data
             duration_df = data_util.get_callback_durations(obj)
-
-            # Remove all entries that occurred before the given 'timestamp_start_analysis'
+            
+            # Filter and process timestamps
             duration_df = duration_df[duration_df['timestamp'] > timestamp_start_analysis]
-
-            # Update all timestamps to be "seconds since timestamp_start_analysis"
             duration_df['timestamp'] = duration_df['timestamp'] - timestamp_start_analysis
-
-            # Change timestamp from np.datetime64 to seconds for easier statistical analysis
             duration_df['timestamp'] = duration_df['timestamp'] / np.timedelta64(1, 's')
 
-            # If dataframe is empty, skip
-            if(duration_df.empty):
-                if(verbose):
-                    print("Skipping empty dataframe: " + str(callback_description))
+            if duration_df.empty:
+                if verbose:
+                    print(f"Skipping empty dataframe: {callback_description}")
                 continue
-            else:
-                if(verbose):
-                    print(callback_description)
+            
+            if verbose:
+                print(callback_description)
 
-            # Extract statistics on the callback
-            mean_duration_ms =    duration_df['duration'].mean()
+            # Calculate basic statistics
+            mean_duration_ms = duration_df['duration'].mean()
             minimum_duration_ms = duration_df['duration'].min()
-            median_duration_ms =  duration_df['duration'].median()
+            median_duration_ms = duration_df['duration'].median()
             maximum_duration_ms = duration_df['duration'].max()
             std_dev_duration_ms = duration_df['duration'].std()
-            total_count =         duration_df['duration'].count()
+            total_count = duration_df['duration'].count()
 
-            # Store statistics in .csv
-            csv_results_writer.writerow([component, callback_description, mean_duration_ms,
-                                        minimum_duration_ms, median_duration_ms, maximum_duration_ms,
-                                        std_dev_duration_ms, total_count])
+            # Save to main results CSV
+            csv_results_writer.writerow([
+                component, callback_description, mean_duration_ms,
+                minimum_duration_ms, median_duration_ms, maximum_duration_ms,
+                std_dev_duration_ms, total_count
+            ])
 
-            # Generate plots for callback duration
+            # Generate standard plots
             plot_callback_durations_scatter_plot(duration_df, callback_description, results_directory, show_plots)
             plot_callback_durations_histogram(duration_df, callback_description, results_directory, show_plots)
 
-            if(verbose):
-                print("Mean: " + str(mean_duration_ms) + " ms")
-                print("Minimum: " + str(minimum_duration_ms) + " ms")
-                print("Median: " + str(median_duration_ms) + " ms")
-                print("Maximum: " + str(maximum_duration_ms) + " ms")
-                print("Standard Deviation: " + str(std_dev_duration_ms) + " ms")
-                print("Count: " + str(total_count))
+            # Store Timer callback data for later processing
+            if is_timer:
+                timer_data_list.append({
+                    'description': callback_description,
+                    'duration_df': duration_df
+                })
+
+            if verbose:
+                print(f"Mean: {mean_duration_ms} ms")
+                print(f"Minimum: {minimum_duration_ms} ms")
+                print(f"Median: {median_duration_ms} ms")
+                print(f"Maximum: {maximum_duration_ms} ms")
+                print(f"Standard Deviation: {std_dev_duration_ms} ms")
+                print(f"Count: {total_count}")
                 print("-------------------------")
 
-    # Close .csv file
+        # Process all Timer callbacks for this component at once
+        process_component_timer_callbacks(
+            timer_data_list,
+            component,
+            results_directory,
+            show_plots,
+            verbose
+        )
+
     f.close()
     return
 

@@ -2,13 +2,12 @@
 
 This repository contains two main analysis scripts for the ROS2 Tracing Analysis for CARMA Platform: 
 - Callback Duration Analyzer 
-- Pipeline Latency Analyzer.
+- Pipeline Latency Analyzer
 
 #### Notes
 - The Pipeline Latency Analyzer processes trace analysis results from the Callback Duration Analyzer
 - The Pipeline Latency Analyzer calculates sequential pipeline metrics
 - The Pipeline Latency Analyzer supports both single-session and multi-session analysis
-
 
 ## Workspace Setup
 
@@ -53,27 +52,58 @@ python3 carma_analyze_callback_durations.py /path/to/trace/sessions
 python3 carma_analyze_callback_durations.py [-h] [-o OUTPUT_DIR] [-v] [-sp] input_dir
 ```
 
+#### Process Component Timer Callbacks
+To process specific component timer callbacks:
+```bash
+python3 process_component_timer_callbacks.py [-h] [-o OUTPUT_DIR] [-c COMPONENTS [COMPONENTS ...]] [-v] input_dir
+```
+
 #### Arguments
+Common arguments for both scripts:
 - `input_dir`: Directory containing trace sessions
 - `-o, --output-dir`: Optional output directory (default: input_dir/trace_results)
 - `-v, --verbose`: Enable detailed progress output
-- `-sp, --show-plots`: Display plots during analysis (also saves to files)
+
+Additional arguments:
+- `-sp, --show-plots`: Display plots during analysis (also saves to files) [callback_durations.py only]
+- `-c, --components`: Space-separated list of specific components to analyze [process_component_timer_callbacks.py only]
 
 ### Outputs
 For each analyzed trace session, the script creates a new results folder containing:
-- CSV file with callback duration statistics for each specified componenets
+- CSV file with callback duration statistics for each specified components
 - Two plots per callback:
     - Scatter plot (callback durations vs. time)
     - Histogram of callback durations
+- Timer Callback Analysis:
+    For each component with timer callbacks, additional files are generated:
+    - {component}_timer_frequency.csv: Contains frequency statistics for each timer:
+        - Mean Frequency (Hz)
+        - Standard Deviation of Frequency
+        - Minimum Frequency (Hz)
+        - Maximum Frequency (Hz)
+    - {component}_timer_frequency_plot.png: Visualization showing:
+        - Frequency vs Time plots for each timer
+        - Single plot for one timer
+        - Multiple subplots if component has multiple timers
 
 #### Example csv file
 ![Example Extracted Trace Data](docs/example_extracted_trace_data.png)
 
 #### Example callback duration plot vs time
-![Example Callback Dueation Scatter Plot](docs/example_callback_duration_scatter_plot.png)
+![Example Callback Duration Scatter Plot](docs/example_callback_duration_scatter_plot.png)
 
 #### Example callback duration histogram
 ![Example Callback Duration Histogram](docs/example_callback_duration_histogram.png)
+
+#### Example Frequency vs Time plot of Timer Callbacks
+![Example Frequency vs Time plot of Timer Callbacks](docs/example_arbitrator_timer_frequency_plot.png)
+
+#### Example Frequency vs Time statistics for Timer Callbacks
+```
+Callback,Mean Freq (Hz),Std Dev Freq,Min Freq (Hz),Max Freq (Hz)
+arbitrator Timer Callback period: 100 ms,10.104585156200141,1.828551449695657,0.4739594812039514,52.77601857717348
+arbitrator Timer Callback period: 500 ms,2.0050672179789815,0.20900011265593338,0.43296472160151894,5.259835893120127
+```
 
 ## Script 2: Pipeline Latency Analyzer
 
