@@ -6,7 +6,7 @@ This file contains various analysis functions for CARMA Platform data, focusing 
 
 ### get_engage_time
 
-Get the (engage, disengage_time) as a tuple from /guidance/state. Returns last recorded time if no disengaged.
+Get the (engage, disengage_time) as a tuple from `/guidance/state`. Returns last recorded time if no disengaged.
 NOTE: If there are multiple engage operations, it will only take the first engage time as the start_time.
 
 #### Parameters
@@ -19,7 +19,7 @@ NOTE: If there are multiple engage operations, it will only take the first engag
 
 ### run_crosstrack_analysis
 
-Analyzes cross-track error from CARMA Platform's internal route logic using topic /guidance/route_state
+Analyzes cross-track error from CARMA Platform's internal route logic using topic `/guidance/route_state`
 
 #### Parameters
 
@@ -45,6 +45,8 @@ This plot shows the cross-track error over time, including the median and standa
 ### run_turn_accuracy_analysis
 
 Analyzes turn accuracy by comparing actual path to planned trajectory using spline fitting over time.
+-`/localization/current_pose`: Source of actual traveled trajectory
+-`/guidance/plan_trajectory`: Source of planned trajectory
 
 #### Parameters
 
@@ -67,7 +69,7 @@ Analyzes turn accuracy by comparing actual path to planned trajectory using spli
 
 ### run_acceleration_comfort_analysis
 
-Analyzes acceleration comfort based on vehicle status data.
+Analyzes acceleration comfort based on vehicle status data using topic `/hardware_interface/vehicle_status` for the vehicle's speed
 
 #### Parameters
 
@@ -144,6 +146,106 @@ Shows instantaneous and 1-second average lateral jerk over time.
 - Comfort thresholds are applied to both instantaneous and averaged values
 - Analysis passes only if no comfort threshold violations occur in any metric
 - Time-weighted averaging is used for the 1-second window calculations
+
+
+### run_guidance_steering_analysis
+
+Analyzes steering performance by comparing commanded vs actual steering angles at guidance level.
+Time series alignment is performed to match commanded and actual values
+Both instantaneous and statistical measures are considered
+- `/guidance/ctrl_cmd`: Source of commanded steering angles
+- `/hardware_interface/vehicle_status`: Source of actual vehicle steering angles
+
+#### Parameters
+
+- `mcap_path`: Path to MCAP file
+- `error_threshold_to_pass_radian`: Threshold for passing the analysis (default: 0.1 radians)
+- `start_time`: Time to start the analysis (optional)
+- `end_time`: Time to end the analysis (optional)
+- `save_stats_dir`: Directory to save extracted statistics (optional)
+- `save_data_dir`: Directory to save extracted data (optional)
+- `save_plot_dir`: Directory to save generated plots (optional)
+
+#### Output
+
+- Returns a tuple: (is_passed, stats, plot_figure, error_angles, common_timestamps)
+- Saves statistics as JSON, data as NPZ, and plot as PNG (if directories are provided)
+
+#### Example Plot
+
+![Guidance Steering Analysis](guidance_steering_analysis.png)
+
+This plot shows:
+- Top panel: Comparison of commanded vs actual steering angles over time
+- Bottom panel: Steering error over time, including the median and standard deviation
+
+### run_steering_wheel_analysis
+
+Analyzes steering performance by comparing commanded vs actual steering values at PACMod level.
+Time series alignment is performed to match commanded and actual values.
+Both instantaneous and statistical measures are considered
+- `/hardware_interface/as/pacmod/parsed_tx/steer_rpt`: Source of actual steering wheel values
+- `/hardware_interface/as/pacmod/as_rx/steer_cmd`: Source of commanded steering wheel values
+
+#### Parameters
+
+- `mcap_path`: Path to MCAP file
+- `error_threshold_to_pass`: Threshold for passing the analysis (default: 0.1)
+- `start_time`: Time to start the analysis (optional)
+- `end_time`: Time to end the analysis (optional)
+- `save_stats_dir`: Directory to save extracted statistics (optional)
+- `save_data_dir`: Directory to save extracted data (optional)
+- `save_plot_dir`: Directory to save generated plots (optional)
+
+#### Output
+
+- Returns a tuple: (is_passed, stats, plot_figure, error_values, common_timestamps)
+- Saves statistics as JSON, data as NPZ, and plot as PNG (if directories are provided)
+
+#### Example Plot
+
+![Steering Wheel Analysis](steering_wheel_analysis.png)
+
+This plot shows:
+- Top panel: Comparison of commanded vs actual steering wheel values over time
+- Bottom panel: Steering error over time, including the median and standard deviation
+
+#### Analysis Metrics
+
+Both functions calculate the following statistics:
+- Minimum error
+- Maximum error
+- Mean error
+- Median error
+- Standard deviation
+- Root mean square error (RMSE)
+- Error percentiles (25th, 75th, 95th)
+
+#### Saved Outputs
+
+If directories are provided:
+
+- Statistics saved as JSON in "guidance_steering_analysis.json" and  "steering_wheel_analysis.json"
+- Data saved as NPZ in "guidance_steering_data.npz" and "steering_wheel_data.npz"
+- Plots saved as:
+  - "guidance_steering_analysis.png"
+  - "steering_wheel_analysis.png"
+
+### get_planner_trajectory_intervals
+Extract time intervals when a specific planner was active based on trajectory plans.
+Uses topic `/guidance/plan_trajectory`
+
+#### Parameters
+
+- mcap_path: Path to MCAP file
+- planner_plugin_name: Name of the planner plugin to track (e.g. `guidance/plugins/inlanecruising_plugin`)
+- start_time: Optional start time to begin analysis
+- end_time: Optional end time to end analysis
+
+#### Output
+
+Returns a list of tuples `[(start_time1, end_time1), (start_time2, end_time2), ...]` representing time intervals when the specified planner was active
+
 
 ## Adding New Analysis Functions
 

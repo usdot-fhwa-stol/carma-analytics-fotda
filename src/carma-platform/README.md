@@ -83,31 +83,92 @@ analysis_20241025_065250
 ### Example Analysis Summary (JSON)
 ```
 {
-  "analysis_time": "2024-10-25T06:52:52.306773",
+  "analysis_time": "2024-11-10T18:44:44.798284",
   "analysis_type": "analysis",
-  "total_files_analyzed": 2,
+  "total_files_analyzed": 6,
   "metrics_summary": {
     "run_crosstrack_analysis": {
-      "total_files": 2,
+      "total_files": 6,
       "passed": 1,
       "failed": 0,
-      "errors": 1,
-      "pass_rate": "50.00%",
-      "error_rate": "50.00%"
+      "errors": 5,
+      "pass_rate": "16.67%",
+      "error_rate": "83.33%"
+    },
+    "run_turn_accuracy_analysis": {
+      "total_files": 6,
+      "passed": 1,
+      "failed": 0,
+      "errors": 5,
+      "pass_rate": "16.67%",
+      "error_rate": "83.33%"
+    },
+    "run_acceleration_comfort_analysis": {
+      "total_files": 6,
+      "passed": 0,
+      "failed": 0,
+      "errors": 6,
+      "pass_rate": "0.00%",
+      "error_rate": "100.00%"
+    },
+    "run_lateral_analysis": {
+      "total_files": 6,
+      "passed": 1,
+      "failed": 0,
+      "errors": 5,
+      "pass_rate": "16.67%",
+      "error_rate": "83.33%"
+    },
+    "run_guidance_steering_analysis": {
+      "total_files": 6,
+      "passed": 0,
+      "failed": 0,
+      "errors": 6,
+      "pass_rate": "0.00%",
+      "error_rate": "100.00%"
+    },
+    "run_steering_wheel_analysis": {
+      "total_files": 6,
+      "passed": 1,
+      "failed": 0,
+      "errors": 5,
+      "pass_rate": "16.67%",
+      "error_rate": "83.33%"
     }
   },
   "analyzed_files": {
+    "bag1_0.mcap": {
+      "output_dir": "/workspaces/carma/src/analysis-data/analysis_20241110_184413/bag1_0",
+      "metrics_results": []
+    },
+    "ros2_bag_mish3_0.mcap": {
+      "output_dir": "/workspaces/carma/src/analysis-data/analysis_20241110_184413/ros2_bag_mish3_0",
+      "metrics_results": []
+    },
+    "ros2_bag_mish4_0.mcap": {
+      "output_dir": "/workspaces/carma/src/analysis-data/analysis_20241110_184413/ros2_bag_mish4_0",
+      "metrics_results": [
+        {
+          "run_crosstrack_analysis": true,
+          "run_turn_accuracy_analysis": true,
+          "run_acceleration_comfort_analysis": null,
+          "run_lateral_analysis": true,
+          "run_guidance_steering_analysis": null,
+          "run_steering_wheel_analysis": true
+        }
+      ]
+    },
+    "rosbag2-full_0.mcap": {
+      "output_dir": "/workspaces/carma/src/analysis-data/analysis_20241110_184413/rosbag2-full_0",
+      "metrics_results": []
+    },
     "rosbag2_2024-10-22_213643_0.mcap": {
-      "output_dir": "/workspaces/carma/src/analysis-data/analysis_20241025_065250/rosbag2_2024-10-22_213643_0",
-      "metrics_results": {
-        "run_crosstrack_analysis": true
-      }
+      "output_dir": "/workspaces/carma/src/analysis-data/analysis_20241110_184413/rosbag2_2024-10-22_213643_0",
+      "metrics_results": []
     },
     "rosbag2_2024_10_08-20_00_45_0.mcap": {
-      "output_dir": "/workspaces/carma/src/analysis-data/analysis_20241025_065250/rosbag2_2024_10_08-20_00_45_0",
-      "metrics_results": {
-        "run_crosstrack_analysis": null
-      }
+      "output_dir": "/workspaces/carma/src/analysis-data/analysis_20241110_184413/rosbag2_2024_10_08-20_00_45_0",
+      "metrics_results": []
     }
   }
 }

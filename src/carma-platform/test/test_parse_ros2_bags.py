@@ -1,7 +1,22 @@
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from parse_ros2_bags import extract_mcap_data
+from parse_ros2_bags import extract_mcap_data, get_earliest_timestamp
+
+@pytest.fixture
+def mock_reader():
+    return MagicMock()
+
+def test_get_earliest_timestamp(mock_reader):
+    mock_reader.read_next.side_effect = [
+        # Topic messages should generally arrive with timestamps in order
+        ("/topic2", "msg2", 1000000000),
+        ("/topic1", "msg1", 2000000000)
+    ]
+    
+    result = get_earliest_timestamp(mock_reader)
+    
+    assert result == 1000000000
 
 @pytest.fixture
 def mock_mcap_path():
@@ -28,7 +43,7 @@ def test_extract_mcap_data_success(mock_exists, mock_get_message, mock_deseriali
         ("/topic1", b"data1", 1000000000),
         ("/topic1", b"data2", 2000000000)
     ]
-    mock_open_bagfile.return_value = (mock_reader, {"/topic1": "std_msgs/String"})
+    mock_open_bagfile.return_value = (mock_reader, {"/topic1": "std_msgs/String"}, 0)
     mock_deserialize.side_effect = [MagicMock(data="message1"), MagicMock(data="message2")]
 
     result = extract_mcap_data(mock_mcap_path, ["/topic1"], field_extractors={"/topic1": lambda msg: msg.data})
