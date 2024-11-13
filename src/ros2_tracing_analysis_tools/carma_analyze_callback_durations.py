@@ -252,7 +252,7 @@ def process_component_timer_callbacks(timer_data_list, component_name, results_d
         fig, axes = plt.subplots(n_timers, 1, figsize=(10, 5*n_timers))
         for timer, ax in zip(timer_callbacks, axes):
             ax.plot(timer['timestamps'], timer['raw_frequency'], 'b.')
-            ax.set_title(f"{timer['description']} Frequency")
+            ax.set_title(f"Frequency vs Time Plot for {timer['description']}")
             ax.set_xlabel('Time (s)')
             ax.set_ylabel('Frequency (Hz)')
             ax.grid(True)
