@@ -4,8 +4,19 @@ from datetime import datetime
 import argparse
 import sys
 import os
+from guidance_scripts import *
 
 DEFAULT_CPU_NUM = 8 # 32 for SIM PC, 8 for Spectra PCs
+def get_notable_events_from_mcap(mcap_path):
+    # get earliest topic timestamp as global_start_time
+    reader, type_map, global_start_time = open_bagfile(str(mcap_path))
+
+    (start, end) = get_engage_time(mcap_path)
+
+
+
+    return []
+
 
 def validate_file(file_path):
     """Validate if the file exists and has .csv extension"""
@@ -15,7 +26,7 @@ def validate_file(file_path):
         raise ValueError("File must be a CSV file")
     return file_path
 
-def plot_cpu_usage(csv_file, cpu_number=DEFAULT_CPU_NUM, output_file=None):
+def plot_cpu_usage(csv_file, notable_event_stamps = [], cpu_number=DEFAULT_CPU_NUM, output_file=None):
     """
     Generate CPU usage plot from CSV file with timestamp grouping
 
@@ -96,6 +107,7 @@ def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(description='Generate CPU usage graph from CSV data.')
     parser.add_argument('csv_file', type=str, help='Path to the input CSV file')
+    parser.add_argument('-m', '--mcap', type=str, help='Path to the corresponding ROS2 MCAP file (optional)')
     parser.add_argument('-c', '--cpu-num', type=int, help='Number of CPUs used to record the data (optional)', default=DEFAULT_CPU_NUM)
     parser.add_argument('-o', '--output', type=str, help='Path for the output PNG file (optional)')
 
@@ -106,8 +118,13 @@ def main():
         # Validate input file
         csv_file = validate_file(args.csv_file)
 
+        # List of notable events in the mcap file such as engage, disengage, vector_map broadcasting etc
+        notable_events = []
+        if (args.mcap is not None):
+            notable_events = get_notable_events_from_mcap(args.mcap)
+
         # Generate the plot
-        plot_cpu_usage(csv_file, args.cpu_num, args.output)
+        plot_cpu_usage(csv_file, notable_events, args.cpu_num, args.output)
 
     except (FileNotFoundError, ValueError) as e:
         print(f"Error: {str(e)}", file=sys.stderr)
