@@ -77,7 +77,6 @@ def get_notable_events_from_mcap(mcap_path):
             ("Map Update Published", start_date_time + pd.Timedelta(seconds=(time)))
         )
 
-    print(events)
     return events
 
 
@@ -247,7 +246,7 @@ def main():
         type=str,
         help="Path to the corresponding ROS2 MCAP file (optional)",
     )
-    parser.add_argument(
+    parser.add_argument(mv 
         "-c",
         "--cpu-num",
         type=int,
