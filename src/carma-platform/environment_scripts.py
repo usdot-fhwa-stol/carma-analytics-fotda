@@ -5,48 +5,6 @@ matplotlib.use('Agg')  # Use non-GUI backend for environments without display
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-def extract_map_update_publication_time_from_mcap(filename):
-    """
-    Extract Lanelet2 map update publication time from an MCAP file.
-
-    Args:
-        filename (str): Path to the MCAP file to process
-
-    Returns:
-        list: Time relative to started recording
-    """
-    topic_name = "/environment/semantic_map"
-    all_points = []
-    for msg in read_ros2_messages(filename):
-        if msg.channel.topic == topic_name:
-            for marker in msg.ros_msg.markers:
-                # Extract x,y coordinates from each point in the marker
-                marker_points = [(point.x, point.y) for point in marker.points]
-                all_points.extend(marker_points)
-    print(f"Processed {len(all_points)} data points from {filename} for topic {topic_name}")
-    return all_points
-
-def extract_lanelet2_map_publication_time_from_mcap(filename):
-    """
-    Extract Lanelet2 map publication time from an MCAP file.
-
-    Args:
-        filename (str): Path to the MCAP file to process
-
-    Returns:
-        list: Time relative to started recording
-    """
-    topic_name = "/environment/semantic_map"
-    all_points = []
-    for msg in read_ros2_messages(filename):
-        if msg.channel.topic == topic_name:
-            for marker in msg.ros_msg.markers:
-                # Extract x,y coordinates from each point in the marker
-                marker_points = [(point.x, point.y) for point in marker.points]
-                all_points.extend(marker_points)
-    print(f"Processed {len(all_points)} data points from {filename} for topic {topic_name}")
-    return all_points
-
 def extract_lanelet2_map_from_mcap(filename):
     """
     Extract Lanelet2 map data points from an MCAP file.
