@@ -8,7 +8,6 @@ from guidance_scripts import *
 
 ENVIRONMENT_MAP_UPDATE_TOPIC = "/environment/map_update"
 ENVIRONMENT_SEMANTIC_MAP_TOPIC = "/environment/semantic_map"
-DEFAULT_CPU_NUM = 8  # 32 for SIM PC, 8 for Spectra PCs in vehicles
 
 
 def calculate_time_offset(mcap_path, csv_file):
@@ -44,7 +43,6 @@ def calculate_time_offset(mcap_path, csv_file):
 
 
 def get_notable_events_from_mcap(mcap_path):
-
     events = []
 
     # get earliest topic timestamp as global_start_time
@@ -89,16 +87,13 @@ def validate_file(file_path):
     return file_path
 
 
-def plot_system_usage(
-    csv_file, notable_event_stamps=[], cpu_number=DEFAULT_CPU_NUM, output_file=None
-):
+def plot_system_usage(csv_file, notable_event_stamps=[], output_file=None):
     """
     Generate ROS vs Total CPU and Memory usage plot from CSV file with timestamp grouping
 
     Args:
         csv_file (str): Path to input CSV file
         notable_event_stamps (list): List of tuples containing (event_name, timestamp)
-        cpu_number (int): Number of CPUs
         output_file (str, optional): Path for output PNG file
     """
     try:
@@ -106,7 +101,15 @@ def plot_system_usage(
         df = pd.read_csv(csv_file)
 
         # Verify required columns exist
-        required_columns = ["Timestamp", "CPU (%)", "Memory (%)", "Total CPU (%)"]
+        required_columns = [
+            "Timestamp",
+            "CPU (%)",
+            "Memory (%)",
+            "Total CPU (%)",
+            "Total CPU Num",
+            "Total Memory (%)",
+            "Total Memory (GB)",
+        ]
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             raise ValueError(f"Missing required columns: {', '.join(missing_columns)}")
@@ -126,11 +129,16 @@ def plot_system_usage(
                 {
                     "CPU (%)": "sum",  # Sum all CPU percentages
                     "Memory (%)": "sum",  # Sum all Memory percentages
-                    "Total CPU (%)": "first",  # Take first Total CPU value as it should be same for timestamp
+                    "Total CPU (%)": "first",  # Take first Total CPU value
+                    "Total Memory (%)": "first",  # Take first Total Memory value
                 }
             )
             .reset_index()
         )
+
+        # Static data
+        cpu_number = df["Total CPU Num"].iloc[0]
+        memory_size = df["Total Memory (GB)"].iloc[0]
 
         # Divide the summed CPU by number of cores
         grouped_df["CPU (%)"] = grouped_df["CPU (%)"] / cpu_number
@@ -143,6 +151,7 @@ def plot_system_usage(
         cpu_values = grouped_df["CPU (%)"].to_numpy()
         total_cpu_values = grouped_df["Total CPU (%)"].to_numpy()
         memory_values = grouped_df["Memory (%)"].to_numpy()
+        total_memory_values = grouped_df["Total Memory (%)"].to_numpy()
 
         # Plot CPU usage (top subplot)
         ax1.plot(
@@ -164,15 +173,22 @@ def plot_system_usage(
         ax2.plot(
             timestamps,
             memory_values,
-            label="Total Memory Usage (%)",
+            label="ROS Related Memory (%)",
             color="green",
+            linewidth=2,
+        )
+        ax2.plot(
+            timestamps,
+            total_memory_values,
+            label="Total Memory (%)",
+            color="orange",
             linewidth=2,
         )
 
         # Add notable events if any
         if notable_event_stamps:
             cpu_max = max(total_cpu_values.max(), cpu_values.max()) * 1.1
-            mem_max = memory_values.max() * 1.1
+            mem_max = max(total_memory_values.max(), memory_values.max()) * 1.1
 
             for event_name, event_time in notable_event_stamps:
                 if event_time >= timestamps[0] and event_time <= timestamps[-1]:
@@ -206,12 +222,27 @@ def plot_system_usage(
         ax1.set_ylim(0, max(total_cpu_values.max(), cpu_values.max()) * 1.1)
 
         # Customize Memory plot
-        ax2.set_title("Memory Usage of CARMA")
+        ax2.set_title(f"Memory Usage of CARMA over {memory_size:.2f} GB")
         ax2.set_xlabel("Time")
         ax2.set_ylabel("Memory Usage Percentage (0-100%)")
         ax2.grid(True, linestyle="--", alpha=0.7)
         ax2.legend()
-        ax2.set_ylim(0, memory_values.max() * 1.1)
+        ax2.set_ylim(0, max(total_memory_values.max(), memory_values.max()) * 1.1)
+
+        # Add note about memory measurement
+        note_text = (
+            "Note: Process memory percentages are estimates and may sum >100% due to "
+            "double counting of shared memory. Total memory usage is, however, accurate."
+        )
+
+        fig.text(
+            0.02,
+            0.02,
+            note_text,
+            fontsize=8,
+            style="italic",
+            bbox=dict(facecolor="white", edgecolor="lightgray", alpha=0.8),
+        )
 
         # Rotate x-axis labels for better readability
         plt.xticks(rotation=45)
@@ -247,13 +278,6 @@ def main():
         help="Path to the corresponding ROS2 MCAP file (optional)",
     )
     parser.add_argument(
-        "-c",
-        "--cpu-num",
-        type=int,
-        help="Number of CPUs used to record the data (optional)",
-        default=DEFAULT_CPU_NUM,
-    )
-    parser.add_argument(
         "-o", "--output", type=str, help="Path for the output PNG file (optional)"
     )
 
@@ -277,7 +301,7 @@ def main():
             ]
 
         # Generate the plot
-        plot_system_usage(csv_file, notable_events, args.cpu_num, args.output)
+        plot_system_usage(csv_file, notable_events, args.output)
 
     except (FileNotFoundError, ValueError) as e:
         print(f"Error: {str(e)}", file=sys.stderr)

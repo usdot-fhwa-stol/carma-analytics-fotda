@@ -28,7 +28,6 @@ python3 carma_system_resource_usage_plot.py <csv_file> [-m MCAP_FILE] [-c CPU_CO
 ### Arguments
 - `csv_file`: Path to the input CSV file containing system resource usage data
 - `-m, --mcap`: (Optional) Path to the corresponding ROS2 MCAP file
-- `-c, --cpu-num`: (Optional) Number of CPUs used to record the data (default: 8)
 - `-o, --output`: (Optional) Path for the output PNG file
 
 ### Example
@@ -44,6 +43,9 @@ The input CSV file should contain the following columns:
 - `CPU (%)`: CPU usage percentage per process
 - `Memory (%)`: Memory usage percentage per process
 - `Total CPU (%)`: Total system CPU usage percentage
+- `Total CPU Num`: Total system CPU numbers (should be static)
+- `Total Memory (%)`: Total Virtual Memory usage percentage
+- `Total Memory (GB)`: Total Virtual Memory sizei in GB (should be static)
 
 ### MCAP File Events
 The script extracts the following events from MCAP files:
@@ -63,8 +65,12 @@ CPU Usage (Top):
 - Grid lines for easier reading
 
 Memory Usage (Bottom):
-- Green line: Total memory usage
+- Green line: ROS related processes memory usage (using proportional set size, PSS)
+- Yellow line: Total Virtual Memory usage
 - Grid lines for easier reading
+
+> [!NOTE]
+> Unlike CPU measurements where process percentages sum up to total usage, memory measurements of individual processes may exceed the total system memory usage when summed. This occurs because memory can be shared between processes, leading to double-counting in per-process measurements. While using proportional set size (PSS) provides better estimates, it still may not perfectly reflect actual memory allocation due to the complex nature of memory sharing.
 
 Shared Features:
 - Vertical gray lines: Notable events from MCAP file (if provided)
