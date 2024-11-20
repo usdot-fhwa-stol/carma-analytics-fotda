@@ -246,7 +246,7 @@ def main():
         type=str,
         help="Path to the corresponding ROS2 MCAP file (optional)",
     )
-    parser.add_argument(mv 
+    parser.add_argument(
         "-c",
         "--cpu-num",
         type=int,

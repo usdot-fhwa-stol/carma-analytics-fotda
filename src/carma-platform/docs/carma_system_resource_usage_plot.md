@@ -5,7 +5,7 @@ This script generates system resource usage plots from CSV data collected during
 
 ## Features
 - Visualizes CPU and memory usage trends over time
-- Shows both average CPU per core and total CPU usage
+- Shows both ROS related and total CPU usage
 - Displays total memory consumption percentage
 - Marks notable events from MCAP files (optional)
 - Robust timezone difference handling between CSV and MCAP data (since host machine and container time may vary)
@@ -58,7 +58,7 @@ The script extracts the following events from MCAP files:
 The generated plot includes two subplots:
 
 CPU Usage (Top):
-- Blue line: Average CPU usage per core
+- Blue line: ROS related CPU usage
 - Red line: Total CPU usage
 - Grid lines for easier reading
 
