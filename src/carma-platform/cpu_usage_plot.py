@@ -8,7 +8,7 @@ from guidance_scripts import *
 
 ENVIRONMENT_MAP_UPDATE_TOPIC = "/environment/map_update"
 ENVIRONMENT_SEMANTIC_MAP_TOPIC = "/environment/semantic_map"
-DEFAULT_CPU_NUM = 8 # 32 for SIM PC, 8 for Spectra PCs
+DEFAULT_CPU_NUM = 8 # 32 for SIM PC, 8 for Spectra PCs in vehicles
 
 
 def calculate_time_offset(mcap_path, csv_file):
@@ -65,12 +65,9 @@ def get_notable_events_from_mcap(mcap_path):
         topics
     )
     
-    print(f"error1")
     semantic_map_timestamps, _ = extracted_data[topics[0]]
-    print(f"error2")
 
     map_update_timestamps, _ = extracted_data[topics[1]]
-    print(f"error3")
 
     for time in semantic_map_timestamps:
         events.append(("Semantic Map Published", start_date_time + pd.Timedelta(seconds=(time))))
@@ -78,7 +75,6 @@ def get_notable_events_from_mcap(mcap_path):
     for time in map_update_timestamps:
         events.append(("Map Update Published", start_date_time + pd.Timedelta(seconds=(time))))
 
-    print(events)
     return events
 
 

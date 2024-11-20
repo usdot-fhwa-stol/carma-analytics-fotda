@@ -1,0 +1,66 @@
+# CPU Usage Plot Documentation
+
+## Overview
+This script generates a CPU usage plot from CSV data collected during CARMA Platform execution. It can also overlay important events from a corresponding MCAP file onto the plot, such as system engagement/disengagement times and map updates.
+
+## Features
+- Visualizes CPU usage trends over time
+- Shows both average CPU per core and total CPU usage
+- Marks notable events from MCAP files (optional)
+- Robust timezone difference between CSV and MCAP data (since host machine and container time may vary)
+- Supports custom CPU core count configuration for different PCs
+
+## Prerequisites
+- Python 3.x
+- Required Python packages:
+  - pandas
+  - matplotlib
+  - rosbag2 (for MCAP file handling)
+
+## Usage
+
+### Basic Command
+```bash
+python3 cpu_usage_plot.py <csv_file> [-m MCAP_FILE] [-c CPU_COUNT] [-o OUTPUT_FILE]
+```
+
+### Arguments
+- `csv_file`: Path to the input CSV file containing CPU usage data
+- `-m, --mcap`: (Optional) Path to the corresponding ROS2 MCAP file
+- `-c, --cpu-num`: (Optional) Number of CPUs used to record the data (default: 8)
+- `-o, --output`: (Optional) Path for the output PNG file
+
+### Example
+```bash
+python3 cpu_usage_plot.py cpu_usage_ros2_nodes_2024_11_19-01_41_49.csv -c 32 -m rosbag2_2024-11-19_064200_0.mcap
+```
+
+## Input Format
+
+### CSV File Format
+The input CSV file should contain the following columns:
+- `Timestamp`: Time of the measurement
+- `CPU (%)`: CPU usage percentage per process
+- `Total CPU (%)`: Total system CPU usage percentage
+
+### MCAP File Events
+The script extracts the following events from MCAP files:
+- CARMA System Engagement
+- CARMA System Disengagement
+- Semantic Map Publications
+- Map Updates
+
+## Output
+
+### Plot Contents
+The generated plot includes:
+- Blue line: Average CPU usage per core
+- Red line: Total CPU usage
+- Vertical gray lines: Notable events from MCAP file (if provided)
+- Grid lines for easier reading
+- Rotated timestamps for better readability
+
+### Example Output
+![Example CPU Usage Plot](cpu_usage_ros2_nodes_example.png)
+
+The plot shows CPU usage over time with marked events indicating system state changes and map updates. The x-axis shows the timestamp, and the y-axis shows the CPU usage percentage.
