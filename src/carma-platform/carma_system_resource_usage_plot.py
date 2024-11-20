@@ -93,7 +93,7 @@ def plot_system_usage(
     csv_file, notable_event_stamps=[], cpu_number=DEFAULT_CPU_NUM, output_file=None
 ):
     """
-    Generate CPU and Memory usage plot from CSV file with timestamp grouping
+    Generate ROS vs Total CPU and Memory usage plot from CSV file with timestamp grouping
 
     Args:
         csv_file (str): Path to input CSV file
@@ -148,7 +148,7 @@ def plot_system_usage(
         ax1.plot(
             timestamps,
             cpu_values,
-            label="Average CPU per Core (%)",
+            label="ROS Related CPU (%)",
             color="blue",
             linewidth=2,
         )
