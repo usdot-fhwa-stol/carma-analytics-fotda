@@ -31,12 +31,10 @@ def calculate_time_offset(mcap_path, csv_file):
     csv_start_time = df["Timestamp"].min()
 
     # Calculate hour difference
-    hour_diff = mcap_start_time.hour - csv_start_time.hour
-    time_offset = pd.Timedelta(hours=hour_diff)
+    time_offset = pd.Timedelta(hours=(mcap_start_time.hour - csv_start_time.hour))
 
     print(f"MCAP start time: {mcap_start_time}")
     print(f"CSV start time: {csv_start_time}")
-    print(f"Hour difference: {hour_diff}")
     print(f"Time offset: {time_offset}")
 
     return time_offset
