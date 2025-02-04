@@ -8,7 +8,7 @@ on:
 
 jobs:
   test_and_sonar:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-jammy
 
     steps:
     - name: Checkout repository
@@ -34,7 +34,7 @@ jobs:
         # Install ROS2 Bag analysis dependencies
         sudo apt-get update
         sudo apt-get install -y ros-humble-rosbag2* ros-humble-rclpy*
-        # Configure PYTHONPATH to have modules be found 
+        # Configure PYTHONPATH to have modules be found
         export PYTHONPATH=$PYTHONPATH:/opt/ros/humble/local/lib/python3.10/dist-packages
         export PYTHONPATH=$PYTHONPATH:$(pwd):$(pwd)/src/carma-platform
 
@@ -42,7 +42,7 @@ jobs:
       run: |
         source /opt/ros/humble/setup.bash
         python -m pytest src/carma-platform/test --cov=. --cov-report=xml:./coverage.xml --junitxml=./test-results.xml --cov-context=test
-        
+
     - name: SonarCloud Scan
       uses: SonarSource/sonarcloud-github-action@master
       env:
