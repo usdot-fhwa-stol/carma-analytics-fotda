@@ -8,6 +8,7 @@ from scipy.spatial import KDTree
 import json
 from utils import calculate_error_statistics, print_stats, align_time_series
 
+DEG_TO_RAD = 0.0174533
 STD_DEV_LABEL_STRING = "±1 Std Dev"
 TIME_SECONDS_LABEL_STRING = "Time (seconds)"
 # ROS Topics Constants
@@ -21,14 +22,16 @@ LOCALIZATION_POSE_TOPIC = "/localization/current_pose"
 HARDWARE_VEHICLE_STATUS_TOPIC = "/hardware_interface/vehicle_status"
 HARDWARE_VEHICLE_TWIST_TOPIC = "/hardware_interface/vehicle/twist"
 # Lexus and Freightliners control topics
-HARDWARE_PACMOD_STEER_REPORT_TOPIC = "/hardware_interface/as/pacmod/parsed_tx/steer_rpt"
-HARDWARE_PACMOD_STEER_CMD_TOPIC = "/hardware_interface/as/pacmod/as_rx/steer_cmd"
+HARDWARE_PACMOD_STEER_REPORT_TOPIC = "/hardware_interface/as/pacmod/parsed_tx/steer_rpt" #pacmod3_msgs/msg/SystemRptFloat
+HARDWARE_PACMOD_STEER_CMD_TOPIC = "/hardware_interface/as/pacmod/as_rx/steer_cmd" #pacmod3_msgs/msg/SteeringCmd
 # Fusion control topics
-HARDWARE_DATASPEED_STEER_REPORT_TOPIC = "/dataspeed_todo/steer_rpt"
-HARDWARE_DATASPEED_STEER_CMD_TOPIC = "/dataspeed/steer_cmd"
+HARDWARE_DATASPEED_STEER_REPORT_TOPIC = "/hardware_interface/ds_fusion/steering_report" #dbw_mkz_msgs/SteeringReport
+HARDWARE_DATASPEED_STEER_CMD_TOPIC = "/hardware_interface/ds_fusion/steering_cmd" #dbw_mkz_msgs/SteeringCmd
 # Pacifica control topics
-HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC = "/neweagle_todo/steer_rpt"
-HARDWARE_NEWEAGLE_STEER_CMD_TOPIC = "/neweagle_todo/steer_cmd"
+HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC = "/hardware_interface/steering_report" #raptor_dbw_msgs/SteeringReport
+HARDWARE_NEWEAGLE_STEER_CMD_TOPIC = "/hardware_interface/steering_cmd" #raptor_dbw_msgs/SteeringCmd -> TODO: this is empty!
+
+# TODO: All reports have command and output data..., no need for 2 topics...
 
 def get_engage_time(mcap_path):
     """
@@ -1003,6 +1006,7 @@ def extract_steering_data(mcap_path, start_time=None, end_time=None):
     """
     Extracts steering data from MCAP file by trying different topic pairs.
     Returns the extracted data and used topics for the first valid topic pair found.
+    Supports PACMOD, DATASPEED, and NEWEAGLE steering topics.
 
     Args:
         mcap_path: Path to MCAP file
@@ -1017,13 +1021,13 @@ def extract_steering_data(mcap_path, start_time=None, end_time=None):
     """
     # Define topic pairs and their corresponding extractors
     topic_pairs = [
-        # PACMod control topics (original)
+        # PACMod control topics
         {
             'report_topic': HARDWARE_PACMOD_STEER_REPORT_TOPIC,
             'cmd_topic': HARDWARE_PACMOD_STEER_CMD_TOPIC,
             'extractors': {
-                HARDWARE_PACMOD_STEER_REPORT_TOPIC: lambda msg: msg.output,
-                HARDWARE_PACMOD_STEER_CMD_TOPIC: lambda msg: msg.command,
+                HARDWARE_PACMOD_STEER_REPORT_TOPIC: lambda msg: msg.output, #rad
+                HARDWARE_PACMOD_STEER_CMD_TOPIC: lambda msg: msg.command, #rad
             }
         },
         # Fusion control topics
@@ -1031,8 +1035,8 @@ def extract_steering_data(mcap_path, start_time=None, end_time=None):
             'report_topic': HARDWARE_DATASPEED_STEER_REPORT_TOPIC,
             'cmd_topic': HARDWARE_DATASPEED_STEER_CMD_TOPIC,
             'extractors': {
-                HARDWARE_DATASPEED_STEER_REPORT_TOPIC: lambda msg: msg.output,
-                HARDWARE_DATASPEED_STEER_CMD_TOPIC: lambda msg: msg.command,
+                HARDWARE_DATASPEED_STEER_REPORT_TOPIC: lambda msg: msg.steering_wheel_angle, #rad
+                HARDWARE_DATASPEED_STEER_CMD_TOPIC: lambda msg: msg.steering_wheel_angle_cmd, #rad
             }
         },
         # Pacifica control topics
@@ -1040,8 +1044,8 @@ def extract_steering_data(mcap_path, start_time=None, end_time=None):
             'report_topic': HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC,
             'cmd_topic': HARDWARE_NEWEAGLE_STEER_CMD_TOPIC,
             'extractors': {
-                HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC: lambda msg: msg.output,
-                HARDWARE_NEWEAGLE_STEER_CMD_TOPIC: lambda msg: msg.command,
+                HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC: lambda msg: msg.steering_wheel_angle * DEG_TO_RAD, #deg to rad
+                HARDWARE_NEWEAGLE_STEER_CMD_TOPIC: lambda msg: msg.angle_cmd * DEG_TO_RAD, #deg to rad
             }
         }
     ]
@@ -1092,7 +1096,7 @@ def run_steering_wheel_analysis(
         save_data_dir: Directory to save extracted data
         save_plot_dir: Directory to save generated plots
     """
-    # Extract data from the first valid topic pair
+    # Extract data from 3 possible topic pairs
     extracted_data, used_topics = extract_steering_data(mcap_path, start_time, end_time)
 
     actual_timestamps, actual_values = extracted_data[used_topics[0]]
