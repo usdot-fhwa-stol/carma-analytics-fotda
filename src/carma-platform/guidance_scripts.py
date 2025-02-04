@@ -20,9 +20,15 @@ LOCALIZATION_POSE_TOPIC = "/localization/current_pose"
 
 HARDWARE_VEHICLE_STATUS_TOPIC = "/hardware_interface/vehicle_status"
 HARDWARE_VEHICLE_TWIST_TOPIC = "/hardware_interface/vehicle/twist"
+# Lexus and Freightliners control topics
 HARDWARE_PACMOD_STEER_REPORT_TOPIC = "/hardware_interface/as/pacmod/parsed_tx/steer_rpt"
 HARDWARE_PACMOD_STEER_CMD_TOPIC = "/hardware_interface/as/pacmod/as_rx/steer_cmd"
-
+# Fusion control topics
+HARDWARE_DATASPEED_STEER_REPORT_TOPIC = "/dataspeed_todo/steer_rpt"
+HARDWARE_DATASPEED_STEER_CMD_TOPIC = "/dataspeed/steer_cmd"
+# Pacifica control topics
+HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC = "/neweagle_todo/steer_rpt"
+HARDWARE_NEWEAGLE_STEER_CMD_TOPIC = "/neweagle_todo/steer_cmd"
 
 def get_engage_time(mcap_path):
     """
@@ -993,6 +999,77 @@ def run_guidance_steering_analysis(
     return (is_passed, stats, plt.gcf(), error_angles, common_timestamps)
 
 
+def extract_steering_data(mcap_path, start_time=None, end_time=None):
+    """
+    Extracts steering data from MCAP file by trying different topic pairs.
+    Returns the extracted data and used topics for the first valid topic pair found.
+
+    Args:
+        mcap_path: Path to MCAP file
+        start_time: Time to start the extraction
+        end_time: Time to end the extraction
+
+    Returns:
+        tuple: (extracted_data, used_topics)
+
+    Raises:
+        ValueError: If no valid data found in any topic pairs
+    """
+    # Define topic pairs and their corresponding extractors
+    topic_pairs = [
+        # PACMod control topics (original)
+        {
+            'report_topic': HARDWARE_PACMOD_STEER_REPORT_TOPIC,
+            'cmd_topic': HARDWARE_PACMOD_STEER_CMD_TOPIC,
+            'extractors': {
+                HARDWARE_PACMOD_STEER_REPORT_TOPIC: lambda msg: msg.output,
+                HARDWARE_PACMOD_STEER_CMD_TOPIC: lambda msg: msg.command,
+            }
+        },
+        # Fusion control topics
+        {
+            'report_topic': HARDWARE_DATASPEED_STEER_REPORT_TOPIC,
+            'cmd_topic': HARDWARE_DATASPEED_STEER_CMD_TOPIC,
+            'extractors': {
+                HARDWARE_DATASPEED_STEER_REPORT_TOPIC: lambda msg: msg.output,
+                HARDWARE_DATASPEED_STEER_CMD_TOPIC: lambda msg: msg.command,
+            }
+        },
+        # Pacifica control topics
+        {
+            'report_topic': HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC,
+            'cmd_topic': HARDWARE_NEWEAGLE_STEER_CMD_TOPIC,
+            'extractors': {
+                HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC: lambda msg: msg.output,
+                HARDWARE_NEWEAGLE_STEER_CMD_TOPIC: lambda msg: msg.command,
+            }
+        }
+    ]
+
+    # Try each topic pair until we find one with data
+    for topic_pair in topic_pairs:
+        topics = [topic_pair['report_topic'], topic_pair['cmd_topic']]
+
+        try:
+            current_extracted_data = extract_mcap_data(
+                mcap_path,
+                topics,
+                start_time=start_time,
+                end_time=end_time,
+                field_extractors=topic_pair['extractors']
+            )
+
+            # Check if we got any data
+            if (len(current_extracted_data[topics[0]][0]) > 0 and
+                len(current_extracted_data[topics[1]][0]) > 0):
+                return current_extracted_data, topics
+
+        except Exception as e:
+            print(f"Warning: Could not extract data for topics {topics}: {str(e)}")
+            continue
+
+    raise ValueError("No valid data found in any of the topic pairs")
+
 def run_steering_wheel_analysis(
     mcap_path,
     error_threshold_to_pass=0.1,
@@ -1003,7 +1080,8 @@ def run_steering_wheel_analysis(
     save_plot_dir=None,
 ):
     """
-    Analyzes steering performance by comparing commanded vs actual steering values at PACMod level.
+    Analyzes steering performance by comparing commanded vs actual steering values.
+    Supports multiple vehicle types by checking different topic pairs.
 
     Args:
         mcap_path: Path to MCAP file
@@ -1013,25 +1091,12 @@ def run_steering_wheel_analysis(
         save_stats_dir: Directory to save analysis stats
         save_data_dir: Directory to save extracted data
         save_plot_dir: Directory to save generated plots
-    Deps:
-        Topics: [/hardware_interface/as/pacmod/parsed_tx/steer_rpt,
-                /hardware_interface/as/pacmod/as_rx/steer_cmd]
     """
-    topics = [HARDWARE_PACMOD_STEER_REPORT_TOPIC, HARDWARE_PACMOD_STEER_CMD_TOPIC]
+    # Extract data from the first valid topic pair
+    extracted_data, used_topics = extract_steering_data(mcap_path, start_time, end_time)
 
-    extracted_data = extract_mcap_data(
-        mcap_path,
-        topics,
-        start_time=start_time,
-        end_time=end_time,
-        field_extractors={
-            topics[0]: lambda msg: msg.output,
-            topics[1]: lambda msg: msg.command,
-        },
-    )
-
-    actual_timestamps, actual_values = extracted_data[topics[0]]
-    cmd_timestamps, cmd_values = extracted_data[topics[1]]
+    actual_timestamps, actual_values = extracted_data[used_topics[0]]
+    cmd_timestamps, cmd_values = extracted_data[used_topics[1]]
 
     # Convert to numpy arrays
     actual_timestamps = np.array(actual_timestamps)
@@ -1049,6 +1114,10 @@ def run_steering_wheel_analysis(
 
     # Calculate statistics
     stats = calculate_error_statistics(error_values, start_time, end_time)
+
+    # Add information about which topics were used
+    stats["used_report_topic"] = used_topics[0]
+    stats["used_cmd_topic"] = used_topics[1]
 
     # Pass or no pass
     is_passed = float(stats["median"]) < error_threshold_to_pass
@@ -1077,7 +1146,7 @@ def run_steering_wheel_analysis(
         label="Actual Samples",
     )
 
-    plt.title("Steering Wheel Value Comparison")
+    plt.title(f"Steering Wheel Value Comparison\nUsing topics: {used_topics[0]}, {used_topics[1]}")
     plt.xlabel(TIME_SECONDS_LABEL_STRING)
     plt.ylabel("Steering Wheel Value")
     plt.grid(True, alpha=0.3)
