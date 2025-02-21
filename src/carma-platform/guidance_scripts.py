@@ -23,15 +23,10 @@ HARDWARE_VEHICLE_STATUS_TOPIC = "/hardware_interface/vehicle_status"
 HARDWARE_VEHICLE_TWIST_TOPIC = "/hardware_interface/vehicle/twist"
 # Lexus and Freightliners control topics
 HARDWARE_PACMOD_STEER_REPORT_TOPIC = "/hardware_interface/as/pacmod/parsed_tx/steer_rpt" #pacmod3_msgs/msg/SystemRptFloat
-HARDWARE_PACMOD_STEER_CMD_TOPIC = "/hardware_interface/as/pacmod/as_rx/steer_cmd" #pacmod3_msgs/msg/SteeringCmd
 # Fusion control topics
 HARDWARE_DATASPEED_STEER_REPORT_TOPIC = "/hardware_interface/ds_fusion/steering_report" #dbw_mkz_msgs/SteeringReport
-HARDWARE_DATASPEED_STEER_CMD_TOPIC = "/hardware_interface/ds_fusion/steering_cmd" #dbw_mkz_msgs/SteeringCmd
 # Pacifica control topics
 HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC = "/hardware_interface/steering_report" #raptor_dbw_msgs/SteeringReport
-HARDWARE_NEWEAGLE_STEER_CMD_TOPIC = "/hardware_interface/steering_cmd" #raptor_dbw_msgs/SteeringCmd -> TODO: this is empty!
-
-# TODO: All reports have command and output data..., no need for 2 topics...
 
 def get_engage_time(mcap_path):
     """
@@ -1004,9 +999,9 @@ def run_guidance_steering_analysis(
 
 def extract_steering_data(mcap_path, start_time=None, end_time=None):
     """
-    Extracts steering data from MCAP file by trying different topic pairs.
-    Returns the extracted data and used topics for the first valid topic pair found.
-    Supports PACMOD, DATASPEED, and NEWEAGLE steering topics.
+    Extracts steering data from MCAP file using only steering report topics.
+    Returns the extracted data and used topic for the first valid topic found.
+    Supports PACMOD, DATASPEED, and NEWEAGLE steering report topics.
 
     Args:
         mcap_path: Path to MCAP file
@@ -1014,65 +1009,67 @@ def extract_steering_data(mcap_path, start_time=None, end_time=None):
         end_time: Time to end the extraction
 
     Returns:
-        tuple: (extracted_data, used_topics)
+        tuple: (extracted_data, used_topic)
 
     Raises:
-        ValueError: If no valid data found in any topic pairs
+        ValueError: If no valid data found in any report topics
     """
-    # Define topic pairs and their corresponding extractors
-    topic_pairs = [
-        # PACMod control topics
+    # Define report topics and their corresponding extractors
+    report_topics = [
+        # PACMod report topic
         {
             'report_topic': HARDWARE_PACMOD_STEER_REPORT_TOPIC,
-            'cmd_topic': HARDWARE_PACMOD_STEER_CMD_TOPIC,
             'extractors': {
-                HARDWARE_PACMOD_STEER_REPORT_TOPIC: lambda msg: msg.output, #rad
-                HARDWARE_PACMOD_STEER_CMD_TOPIC: lambda msg: msg.command, #rad
+                HARDWARE_PACMOD_STEER_REPORT_TOPIC: lambda msg: {
+                    'output': msg.output,  # rad
+                    'command': msg.command  # rad
+                }
             }
         },
-        # Fusion control topics
+        # Fusion report topic
         {
             'report_topic': HARDWARE_DATASPEED_STEER_REPORT_TOPIC,
-            'cmd_topic': HARDWARE_DATASPEED_STEER_CMD_TOPIC,
             'extractors': {
-                HARDWARE_DATASPEED_STEER_REPORT_TOPIC: lambda msg: msg.steering_wheel_angle, #rad
-                HARDWARE_DATASPEED_STEER_CMD_TOPIC: lambda msg: msg.steering_wheel_angle_cmd, #rad
+                HARDWARE_DATASPEED_STEER_REPORT_TOPIC: lambda msg: {
+                    'output': msg.steering_wheel_angle,  # rad
+                    'command': msg.steering_wheel_angle_cmd  # rad
+                }
             }
         },
-        # Pacifica control topics
+        # Pacifica report topic
         {
             'report_topic': HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC,
-            'cmd_topic': HARDWARE_NEWEAGLE_STEER_CMD_TOPIC,
             'extractors': {
-                HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC: lambda msg: msg.steering_wheel_angle * DEG_TO_RAD, #deg to rad
-                HARDWARE_NEWEAGLE_STEER_CMD_TOPIC: lambda msg: msg.angle_cmd * DEG_TO_RAD, #deg to rad
+                HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC: lambda msg: {
+                    'output': msg.steering_wheel_angle * DEG_TO_RAD,  # deg to rad
+                    'command': msg.steering_wheel_cmd * DEG_TO_RAD  # deg to rad
+                }
             }
         }
     ]
 
-    # Try each topic pair until we find one with data
-    for topic_pair in topic_pairs:
-        topics = [topic_pair['report_topic'], topic_pair['cmd_topic']]
-
+    # Try each report topic until we find one with data
+    for topic_info in report_topics:
+        report_topic = topic_info['report_topic']
+        
         try:
             current_extracted_data = extract_mcap_data(
                 mcap_path,
-                topics,
+                [report_topic],
                 start_time=start_time,
                 end_time=end_time,
-                field_extractors=topic_pair['extractors']
+                field_extractors=topic_info['extractors']
             )
 
             # Check if we got any data
-            if (len(current_extracted_data[topics[0]][0]) > 0 and
-                len(current_extracted_data[topics[1]][0]) > 0):
-                return current_extracted_data, topics
+            if len(current_extracted_data[report_topic][0]) > 0:
+                return current_extracted_data, report_topic
 
         except Exception as e:
-            print(f"Warning: Could not extract data for topics {topics}: {str(e)}")
+            print(f"Warning: Could not extract data for topic {report_topic}: {str(e)}")
             continue
 
-    raise ValueError("No valid data found in any of the topic pairs")
+    raise ValueError("No valid data found in any of the report topics")
 
 def run_steering_wheel_analysis(
     mcap_path,
