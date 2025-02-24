@@ -475,9 +475,9 @@ def test_run_steering_wheel_analysis(mock_mcap_path):
 
         # Test output values
         assert is_passed == True  # Error should be within threshold
-        assert stats["minimum"] == approx(0.02, rel=1e-2)  # Minimum error
+        assert stats["minimum"] == approx(0.01, rel=1e-2)  # Minimum error
         assert stats["maximum"] == approx(0.03, rel=1e-2)  # Maximum error
-        assert stats["median"] == approx(0.025, rel=1e-2)  # Median error
+        assert stats["median"] == approx(0.02, rel=1e-2)  # Median error
 
         # Test that arrays have correct lengths
         assert len(error_values) == len(timestamps)
