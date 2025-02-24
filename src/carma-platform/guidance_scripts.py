@@ -1009,7 +1009,7 @@ def extract_steering_data(mcap_path, start_time=None, end_time=None):
         end_time: Time to end the extraction
 
     Returns:
-        tuple: (extracted_data, used_topic)
+        tuple: lists of timestamps, actual steering angles, and commanded steering angles, and used topic
 
     Raises:
         ValueError: If no valid data found in any report topics
@@ -1020,30 +1020,30 @@ def extract_steering_data(mcap_path, start_time=None, end_time=None):
         {
             'report_topic': HARDWARE_PACMOD_STEER_REPORT_TOPIC,
             'extractors': {
-                HARDWARE_PACMOD_STEER_REPORT_TOPIC: lambda msg: {
-                    'output': msg.output,  # rad
-                    'command': msg.command  # rad
-                }
+                HARDWARE_PACMOD_STEER_REPORT_TOPIC: lambda msg: (
+                    msg.output,  # rad
+                    msg.command  # rad
+                )
             }
         },
         # Fusion report topic
         {
             'report_topic': HARDWARE_DATASPEED_STEER_REPORT_TOPIC,
             'extractors': {
-                HARDWARE_DATASPEED_STEER_REPORT_TOPIC: lambda msg: {
-                    'output': msg.steering_wheel_angle,  # rad
-                    'command': msg.steering_wheel_angle_cmd  # rad
-                }
+                HARDWARE_DATASPEED_STEER_REPORT_TOPIC: lambda msg: (
+                    msg.steering_wheel_angle,  # rad
+                    msg.steering_wheel_angle_cmd  # rad
+                )
             }
         },
         # Pacifica report topic
         {
             'report_topic': HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC,
             'extractors': {
-                HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC: lambda msg: {
-                    'output': msg.steering_wheel_angle * DEG_TO_RAD,  # deg to rad
-                    'command': msg.steering_wheel_cmd * DEG_TO_RAD  # deg to rad
-                }
+                HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC: lambda msg: (
+                    msg.steering_wheel_angle * DEG_TO_RAD,  # deg to rad
+                    msg.steering_wheel_cmd * DEG_TO_RAD  # deg to rad
+                )
             }
         }
     ]
@@ -1061,14 +1061,17 @@ def extract_steering_data(mcap_path, start_time=None, end_time=None):
                 field_extractors=topic_info['extractors']
             )
 
-            # Check if we got any data
+            # Check if we got any data if so return
             if len(current_extracted_data[report_topic][0]) > 0:
-                return current_extracted_data, report_topic
+                timestamps, angle_values = current_extracted_data[report_topic]
+                actual_sw_angle = np.array([v[0] for v in angle_values])
+                commanded_sw_angle = np.array([v[1] for v in angle_values])
+                return timestamps, actual_sw_angle, commanded_sw_angle, report_topic
 
         except Exception as e:
             print(f"Warning: Could not extract data for topic {report_topic}: {str(e)}")
             continue
-
+    
     raise ValueError("No valid data found in any of the report topics")
 
 def run_steering_wheel_analysis(
@@ -1094,31 +1097,21 @@ def run_steering_wheel_analysis(
         save_plot_dir: Directory to save generated plots
     """
     # Extract data from 3 possible topic pairs
-    extracted_data, used_topics = extract_steering_data(mcap_path, start_time, end_time)
-
-    actual_timestamps, actual_values = extracted_data[used_topics[0]]
-    cmd_timestamps, cmd_values = extracted_data[used_topics[1]]
+    timestamps, actual_values, cmd_values, used_topic  = extract_steering_data(mcap_path, start_time, end_time)
 
     # Convert to numpy arrays
-    actual_timestamps = np.array(actual_timestamps)
+    actual_timestamps = np.array(timestamps)
     actual_values = np.array(actual_values)
-    cmd_timestamps = np.array(cmd_timestamps)
     cmd_values = np.array(cmd_values)
 
-    # Align the time series
-    common_timestamps, aligned_cmd_values, aligned_actual_values = align_time_series(
-        cmd_timestamps, cmd_values, actual_timestamps, actual_values
-    )
-
     # Calculate differences between commanded and actual steering wheel values
-    error_values = np.abs(aligned_cmd_values - aligned_actual_values)
+    error_values = np.abs(cmd_values - actual_values)
 
     # Calculate statistics
     stats = calculate_error_statistics(error_values, start_time, end_time)
 
     # Add information about which topics were used
-    stats["used_report_topic"] = used_topics[0]
-    stats["used_cmd_topic"] = used_topics[1]
+    stats["used_report_topic"] = used_topic
 
     # Pass or no pass
     is_passed = float(stats["median"]) < error_threshold_to_pass
@@ -1131,7 +1124,7 @@ def run_steering_wheel_analysis(
 
     # Also plot original data as dots to show sampling
     plt.plot(
-        cmd_timestamps,
+        timestamps,
         cmd_values,
         "b.",
         markersize=2,
@@ -1147,7 +1140,7 @@ def run_steering_wheel_analysis(
         label="Actual Samples",
     )
 
-    plt.title(f"Steering Wheel Value Comparison\nUsing topics: {used_topics[0]}, {used_topics[1]}")
+    plt.title(f"Steering Wheel Value Comparison\nUsing topic: {used_topic}")
     plt.xlabel(TIME_SECONDS_LABEL_STRING)
     plt.ylabel("Steering Wheel Value")
     plt.grid(True, alpha=0.3)
@@ -1156,7 +1149,7 @@ def run_steering_wheel_analysis(
     # Plot error over time
     plt.subplot(2, 1, 2)
     plt.plot(
-        common_timestamps,
+        timestamps,
         error_values,
         ".",
         markersize=2,
@@ -1168,7 +1161,7 @@ def run_steering_wheel_analysis(
         y=error_threshold_to_pass, color="g", linestyle="--", label="Error Threshold"
     )
     plt.fill_between(
-        common_timestamps,
+        timestamps,
         stats["median"] - stats["std_dev"],
         stats["median"] + stats["std_dev"],
         alpha=0.2,
@@ -1196,10 +1189,8 @@ def run_steering_wheel_analysis(
     if save_data_dir:
         np.savez(
             save_data_dir / "steering_wheel_data.npz",
-            common_timestamps=common_timestamps,
-            cmd_timestamps=cmd_timestamps,
+            timestamps=timestamps,
             cmd_values=cmd_values,
-            actual_timestamps=actual_timestamps,
             actual_values=actual_values,
             error_values=error_values,
             stats=stats,
@@ -1212,7 +1203,7 @@ def run_steering_wheel_analysis(
     else:
         plt.show()
 
-    return (is_passed, stats, plt.gcf(), error_values, common_timestamps)
+    return (is_passed, stats, plt.gcf(), error_values, timestamps)
 
 
 def get_planner_trajectory_intervals(
