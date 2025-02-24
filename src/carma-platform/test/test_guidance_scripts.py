@@ -461,7 +461,8 @@ def test_run_steering_wheel_analysis(mock_mcap_path):
         mock_extract.return_value = {
             "/hardware_interface/as/pacmod/parsed_tx/steer_rpt": (
                 timestamps,
-                (actual_values, cmd_values)
+                actual_values,
+                cmd_values
             ),
         }
 
@@ -501,7 +502,8 @@ def test_run_steering_wheel_analysis_fails_threshold(mock_mcap_path):
         mock_extract.return_value = {
             "/hardware_interface/as/pacmod/parsed_tx/steer_rpt": (
                 timestamps,
-                (actual_values, cmd_values)
+                actual_values,
+                cmd_values
             )
         }
 
