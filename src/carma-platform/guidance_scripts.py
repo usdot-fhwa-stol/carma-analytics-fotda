@@ -1032,7 +1032,7 @@ def extract_steering_data(mcap_path, start_time=None, end_time=None):
             'extractors': {
                 HARDWARE_DATASPEED_STEER_REPORT_TOPIC: lambda msg: (
                     msg.steering_wheel_angle,  # rad
-                    msg.steering_wheel_angle_cmd  # rad
+                    msg.steering_wheel_cmd  # rad
                 )
             }
         },
@@ -1042,7 +1042,7 @@ def extract_steering_data(mcap_path, start_time=None, end_time=None):
             'extractors': {
                 HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC: lambda msg: (
                     msg.steering_wheel_angle * DEG_TO_RAD,  # deg to rad
-                    msg.steering_wheel_cmd * DEG_TO_RAD  # deg to rad
+                    msg.steering_wheel_angle_cmd * DEG_TO_RAD  # deg to rad
                 )
             }
         }
