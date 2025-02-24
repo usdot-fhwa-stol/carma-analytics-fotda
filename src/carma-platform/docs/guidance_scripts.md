@@ -181,9 +181,11 @@ This plot shows:
 
 ### run_steering_wheel_analysis
 
-Analyzes steering performance by comparing commanded vs actual steering values at PACMod level.
+Analyzes steering performance by comparing commanded vs actual steering values at controller level.
 Both instantaneous and statistical measures are considered
-- `/hardware_interface/as/pacmod/parsed_tx/steer_rpt`: Source of actual and commanded steering wheel values
+- `/hardware_interface/as/pacmod/parsed_tx/steer_rpt`: (PACMOD) Source of actual and commanded steering wheel values
+- `/hardware_interface/ds_fusion/steering_report`: (DATASPEED) Source of actual and commanded steering wheel values
+- `/hardware_interface/steering_report`: (NEWEAGLE) Source of actual and commanded steering wheel values
 
 #### Parameters
 
