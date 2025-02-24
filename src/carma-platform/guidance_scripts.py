@@ -1110,9 +1110,6 @@ def run_steering_wheel_analysis(
     # Calculate statistics
     stats = calculate_error_statistics(error_values, start_time, end_time)
 
-    # Add information about which topics were used
-    stats["used_report_topic"] = used_topic
-
     # Pass or no pass
     is_passed = float(stats["median"]) < error_threshold_to_pass
 
