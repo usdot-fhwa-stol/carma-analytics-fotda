@@ -182,10 +182,8 @@ This plot shows:
 ### run_steering_wheel_analysis
 
 Analyzes steering performance by comparing commanded vs actual steering values at PACMod level.
-Time series alignment is performed to match commanded and actual values.
 Both instantaneous and statistical measures are considered
-- `/hardware_interface/as/pacmod/parsed_tx/steer_rpt`: Source of actual steering wheel values
-- `/hardware_interface/as/pacmod/as_rx/steer_cmd`: Source of commanded steering wheel values
+- `/hardware_interface/as/pacmod/parsed_tx/steer_rpt`: Source of actual and commanded steering wheel values
 
 #### Parameters
 
@@ -199,7 +197,7 @@ Both instantaneous and statistical measures are considered
 
 #### Output
 
-- Returns a tuple: (is_passed, stats, plot_figure, error_values, common_timestamps)
+- Returns a tuple: (is_passed, stats, plot_figure, error_values, timestamps)
 - Saves statistics as JSON, data as NPZ, and plot as PNG (if directories are provided)
 
 #### Example Plot

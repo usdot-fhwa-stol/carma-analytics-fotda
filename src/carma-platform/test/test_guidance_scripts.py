@@ -461,15 +461,14 @@ def test_run_steering_wheel_analysis(mock_mcap_path):
         mock_extract.return_value = {
             "/hardware_interface/as/pacmod/parsed_tx/steer_rpt": (
                 timestamps,
-                actual_values,
+                (actual_values, cmd_values)
             ),
-            "/hardware_interface/as/pacmod/as_rx/steer_cmd": (timestamps, cmd_values),
         }
 
         mock_plt.figure.return_value = MagicMock()
 
         # Run analysis
-        is_passed, stats, plot_figure, error_values, common_timestamps = (
+        is_passed, stats, plot_figure, error_values, timestamps = (
             run_steering_wheel_analysis(
                 mock_mcap_path, error_threshold_to_pass=0.1, start_time=0, end_time=4
             )
@@ -482,7 +481,7 @@ def test_run_steering_wheel_analysis(mock_mcap_path):
         assert stats["median"] == approx(0.025, rel=1e-2)  # Median error
 
         # Test that arrays have correct lengths
-        assert len(error_values) == len(common_timestamps)
+        assert len(error_values) == len(timestamps)
 
         # Test that plot was created
         assert plot_figure is not None
