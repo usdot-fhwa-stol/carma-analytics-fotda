@@ -455,21 +455,19 @@ def test_run_steering_wheel_analysis(mock_mcap_path):
 
         # Mock timestamps and steering values
         timestamps = np.array([0, 1, 2, 3, 4])
-        cmd_values = np.array([0.5, 1.0, 1.5, 1.0, 0.5])
-        actual_values = np.array([0.48, 1.02, 1.47, 1.03, 0.51])
+        values = [(0.5, 0.48), (1.0, 1.02), (1.5, 1.47), (1.0, 1.03), (0.5, 0.51)]
 
         mock_extract.return_value = {
             "/hardware_interface/as/pacmod/parsed_tx/steer_rpt": (
                 timestamps,
-                actual_values,
+                values
             ),
-            "/hardware_interface/as/pacmod/as_rx/steer_cmd": (timestamps, cmd_values),
         }
 
         mock_plt.figure.return_value = MagicMock()
 
         # Run analysis
-        is_passed, stats, plot_figure, error_values, common_timestamps = (
+        is_passed, stats, plot_figure, error_values, timestamps = (
             run_steering_wheel_analysis(
                 mock_mcap_path, error_threshold_to_pass=0.1, start_time=0, end_time=4
             )
@@ -477,12 +475,12 @@ def test_run_steering_wheel_analysis(mock_mcap_path):
 
         # Test output values
         assert is_passed == True  # Error should be within threshold
-        assert stats["minimum"] == approx(0.02, rel=1e-2)  # Minimum error
+        assert stats["minimum"] == approx(0.01, rel=1e-2)  # Minimum error
         assert stats["maximum"] == approx(0.03, rel=1e-2)  # Maximum error
-        assert stats["median"] == approx(0.025, rel=1e-2)  # Median error
+        assert stats["median"] == approx(0.02, rel=1e-2)  # Median error
 
         # Test that arrays have correct lengths
-        assert len(error_values) == len(common_timestamps)
+        assert len(error_values) == len(timestamps)
 
         # Test that plot was created
         assert plot_figure is not None
@@ -496,15 +494,13 @@ def test_run_steering_wheel_analysis_fails_threshold(mock_mcap_path):
 
         # Mock data with large steering errors
         timestamps = np.array([0, 1, 2])
-        cmd_values = np.array([0.5, 1.0, 1.5])
-        actual_values = np.array([0.7, 1.2, 1.7])  # Large differences
+        values = [(0.5, 0.7), (1.0, 1.2), (1.5, 1.7)]
 
         mock_extract.return_value = {
             "/hardware_interface/as/pacmod/parsed_tx/steer_rpt": (
                 timestamps,
-                actual_values,
-            ),
-            "/hardware_interface/as/pacmod/as_rx/steer_cmd": (timestamps, cmd_values),
+                values
+            )
         }
 
         mock_plt.figure.return_value = MagicMock()

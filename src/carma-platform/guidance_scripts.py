@@ -8,6 +8,7 @@ from scipy.spatial import KDTree
 import json
 from utils import calculate_error_statistics, print_stats, align_time_series
 
+DEG_TO_RAD = 0.0174533
 STD_DEV_LABEL_STRING = "±1 Std Dev"
 TIME_SECONDS_LABEL_STRING = "Time (seconds)"
 # ROS Topics Constants
@@ -20,9 +21,12 @@ LOCALIZATION_POSE_TOPIC = "/localization/current_pose"
 
 HARDWARE_VEHICLE_STATUS_TOPIC = "/hardware_interface/vehicle_status"
 HARDWARE_VEHICLE_TWIST_TOPIC = "/hardware_interface/vehicle/twist"
-HARDWARE_PACMOD_STEER_REPORT_TOPIC = "/hardware_interface/as/pacmod/parsed_tx/steer_rpt"
-HARDWARE_PACMOD_STEER_CMD_TOPIC = "/hardware_interface/as/pacmod/as_rx/steer_cmd"
-
+# Lexus and Freightliners control topics
+HARDWARE_PACMOD_STEER_REPORT_TOPIC = "/hardware_interface/as/pacmod/parsed_tx/steer_rpt" #pacmod3_msgs/msg/SystemRptFloat
+# Fusion control topics
+HARDWARE_DATASPEED_STEER_REPORT_TOPIC = "/hardware_interface/ds_fusion/steering_report" #dbw_mkz_msgs/SteeringReport
+# Pacifica control topics
+HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC = "/hardware_interface/steering_report" #raptor_dbw_msgs/SteeringReport
 
 def get_engage_time(mcap_path):
     """
@@ -993,6 +997,83 @@ def run_guidance_steering_analysis(
     return (is_passed, stats, plt.gcf(), error_angles, common_timestamps)
 
 
+def extract_steering_data(mcap_path, start_time=None, end_time=None):
+    """
+    Extracts steering data from MCAP file using only steering report topics.
+    Returns the extracted data and used topic for the first valid topic found.
+    Supports PACMOD, DATASPEED, and NEWEAGLE steering report topics.
+
+    Args:
+        mcap_path: Path to MCAP file
+        start_time: Time to start the extraction
+        end_time: Time to end the extraction
+
+    Returns:
+        tuple: lists of timestamps, actual steering angles, and commanded steering angles, and used topic
+
+    Raises:
+        ValueError: If no valid data found in any report topics
+    """
+    # Define report topics and their corresponding extractors
+    report_topics = [
+        # PACMod report topic
+        {
+            'report_topic': HARDWARE_PACMOD_STEER_REPORT_TOPIC,
+            'extractors': {
+                HARDWARE_PACMOD_STEER_REPORT_TOPIC: lambda msg: (
+                    msg.output,  # rad
+                    msg.command  # rad
+                )
+            }
+        },
+        # Fusion report topic
+        {
+            'report_topic': HARDWARE_DATASPEED_STEER_REPORT_TOPIC,
+            'extractors': {
+                HARDWARE_DATASPEED_STEER_REPORT_TOPIC: lambda msg: (
+                    msg.steering_wheel_angle,  # rad
+                    msg.steering_wheel_cmd  # rad
+                )
+            }
+        },
+        # Pacifica report topic
+        {
+            'report_topic': HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC,
+            'extractors': {
+                HARDWARE_NEWEAGLE_STEER_REPORT_TOPIC: lambda msg: (
+                    msg.steering_wheel_angle * DEG_TO_RAD,  # deg to rad
+                    msg.steering_wheel_angle_cmd * DEG_TO_RAD  # deg to rad
+                )
+            }
+        }
+    ]
+
+    # Try each report topic until we find one with data
+    for topic_info in report_topics:
+        report_topic = topic_info['report_topic']
+        
+        try:
+            current_extracted_data = extract_mcap_data(
+                mcap_path,
+                [report_topic],
+                start_time=start_time,
+                end_time=end_time,
+                field_extractors=topic_info['extractors']
+            )
+
+            # Check if we got any data if so return
+            if len(current_extracted_data[report_topic][0]) > 0:
+                timestamps, angle_values = current_extracted_data[report_topic]
+                actual_sw_angle = np.array([v[0] for v in angle_values])
+                commanded_sw_angle = np.array([v[1] for v in angle_values])
+                return timestamps, actual_sw_angle, commanded_sw_angle, report_topic
+
+        except Exception as e:
+            print(f"Warning: Could not extract data for topic {report_topic}: {str(e)}")
+            continue
+    
+    raise ValueError("No valid data found in any of the report topics")
+
 def run_steering_wheel_analysis(
     mcap_path,
     error_threshold_to_pass=0.1,
@@ -1003,7 +1084,8 @@ def run_steering_wheel_analysis(
     save_plot_dir=None,
 ):
     """
-    Analyzes steering performance by comparing commanded vs actual steering values at PACMod level.
+    Analyzes steering performance by comparing commanded vs actual steering values.
+    Supports multiple vehicle types by checking different topic pairs.
 
     Args:
         mcap_path: Path to MCAP file
@@ -1013,39 +1095,17 @@ def run_steering_wheel_analysis(
         save_stats_dir: Directory to save analysis stats
         save_data_dir: Directory to save extracted data
         save_plot_dir: Directory to save generated plots
-    Deps:
-        Topics: [/hardware_interface/as/pacmod/parsed_tx/steer_rpt,
-                /hardware_interface/as/pacmod/as_rx/steer_cmd]
     """
-    topics = [HARDWARE_PACMOD_STEER_REPORT_TOPIC, HARDWARE_PACMOD_STEER_CMD_TOPIC]
-
-    extracted_data = extract_mcap_data(
-        mcap_path,
-        topics,
-        start_time=start_time,
-        end_time=end_time,
-        field_extractors={
-            topics[0]: lambda msg: msg.output,
-            topics[1]: lambda msg: msg.command,
-        },
-    )
-
-    actual_timestamps, actual_values = extracted_data[topics[0]]
-    cmd_timestamps, cmd_values = extracted_data[topics[1]]
+    # Extract data from 3 possible topic pairs
+    timestamps, actual_values, cmd_values, used_topic  = extract_steering_data(mcap_path, start_time, end_time)
 
     # Convert to numpy arrays
-    actual_timestamps = np.array(actual_timestamps)
+    actual_timestamps = np.array(timestamps)
     actual_values = np.array(actual_values)
-    cmd_timestamps = np.array(cmd_timestamps)
     cmd_values = np.array(cmd_values)
 
-    # Align the time series
-    common_timestamps, aligned_cmd_values, aligned_actual_values = align_time_series(
-        cmd_timestamps, cmd_values, actual_timestamps, actual_values
-    )
-
     # Calculate differences between commanded and actual steering wheel values
-    error_values = np.abs(aligned_cmd_values - aligned_actual_values)
+    error_values = np.abs(cmd_values - actual_values)
 
     # Calculate statistics
     stats = calculate_error_statistics(error_values, start_time, end_time)
@@ -1061,7 +1121,7 @@ def run_steering_wheel_analysis(
 
     # Also plot original data as dots to show sampling
     plt.plot(
-        cmd_timestamps,
+        timestamps,
         cmd_values,
         "b.",
         markersize=2,
@@ -1077,7 +1137,7 @@ def run_steering_wheel_analysis(
         label="Actual Samples",
     )
 
-    plt.title("Steering Wheel Value Comparison")
+    plt.title(f"Steering Wheel Value Comparison\nUsing topic: {used_topic}")
     plt.xlabel(TIME_SECONDS_LABEL_STRING)
     plt.ylabel("Steering Wheel Value")
     plt.grid(True, alpha=0.3)
@@ -1086,7 +1146,7 @@ def run_steering_wheel_analysis(
     # Plot error over time
     plt.subplot(2, 1, 2)
     plt.plot(
-        common_timestamps,
+        timestamps,
         error_values,
         ".",
         markersize=2,
@@ -1098,7 +1158,7 @@ def run_steering_wheel_analysis(
         y=error_threshold_to_pass, color="g", linestyle="--", label="Error Threshold"
     )
     plt.fill_between(
-        common_timestamps,
+        timestamps,
         stats["median"] - stats["std_dev"],
         stats["median"] + stats["std_dev"],
         alpha=0.2,
@@ -1126,10 +1186,8 @@ def run_steering_wheel_analysis(
     if save_data_dir:
         np.savez(
             save_data_dir / "steering_wheel_data.npz",
-            common_timestamps=common_timestamps,
-            cmd_timestamps=cmd_timestamps,
+            timestamps=timestamps,
             cmd_values=cmd_values,
-            actual_timestamps=actual_timestamps,
             actual_values=actual_values,
             error_values=error_values,
             stats=stats,
@@ -1142,7 +1200,7 @@ def run_steering_wheel_analysis(
     else:
         plt.show()
 
-    return (is_passed, stats, plt.gcf(), error_values, common_timestamps)
+    return (is_passed, stats, plt.gcf(), error_values, timestamps)
 
 
 def get_planner_trajectory_intervals(

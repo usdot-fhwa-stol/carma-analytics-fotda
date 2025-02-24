@@ -39,7 +39,7 @@ def print_stats(stats: dict, title: str, decimal_places: int = 4) -> None:
     for key, value in stats.items():
         if value is None:
             continue
-        if isinstance(value, (int, bool)):
+        if isinstance(value, (int, bool, str)):
             print(f"{key}: {value}")
         else:
             print(f"{key}: {value:.{decimal_places}f}")
