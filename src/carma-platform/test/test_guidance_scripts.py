@@ -455,14 +455,12 @@ def test_run_steering_wheel_analysis(mock_mcap_path):
 
         # Mock timestamps and steering values
         timestamps = np.array([0, 1, 2, 3, 4])
-        cmd_values = np.array([0.5, 1.0, 1.5, 1.0, 0.5])
-        actual_values = np.array([0.48, 1.02, 1.47, 1.03, 0.51])
+        values = [(0.5, 0.48), (1.0, 1.02), (1.5, 1.47), (1.0, 1.03), (0.5, 0.51)]
 
         mock_extract.return_value = {
             "/hardware_interface/as/pacmod/parsed_tx/steer_rpt": (
                 timestamps,
-                actual_values,
-                cmd_values
+                values
             ),
         }
 
@@ -496,14 +494,12 @@ def test_run_steering_wheel_analysis_fails_threshold(mock_mcap_path):
 
         # Mock data with large steering errors
         timestamps = np.array([0, 1, 2])
-        cmd_values = np.array([0.5, 1.0, 1.5])
-        actual_values = np.array([0.7, 1.2, 1.7])  # Large differences
+        values = [(0.5, 0.7), (1.0, 1.2), (1.5, 1.7)]
 
         mock_extract.return_value = {
             "/hardware_interface/as/pacmod/parsed_tx/steer_rpt": (
                 timestamps,
-                actual_values,
-                cmd_values
+                values
             )
         }
 
