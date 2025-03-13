@@ -411,7 +411,7 @@ def get_trace_path(trace_session_directory, trace_session, session_num, trace_se
 def initialize_ros2_tracing(trace_path):
     # Process data in tracing session
     # References data loading steps from tracetools_analysis 'callback_durations.ipny' example
-    #       Jupyter Notebook: https://github.com/ros-tracing/tracetools_analysis/blob/foxy/tracetools_analysis/analysis/callback_duration.ipynb
+    #       Jupyter Notebook: https://github.com/ros-tracing/tracetools_analysis/blob/humble/tracetools_analysis/analysis/callback_duration.ipynb
     events = load_file(trace_path)
     handler = Ros2Handler.process(events)
     data_util = Ros2DataModelUtil(handler.data)

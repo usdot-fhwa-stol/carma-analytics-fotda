@@ -13,13 +13,13 @@ This repository contains two main analysis scripts for the ROS2 Tracing Analysis
 
 Your workspace directory should contain the following on the same level:
 - `carma-analytics-fotda/`
-- `tracetools_analysis/` (foxy branch)
-- `ros2_tracing/` (foxy branch)
+- `tracetools_analysis/` (humble branch)
+- `ros2_tracing/` (humble branch)
 
 Clone the required repositories:
 ```bash
-git clone -b foxy https://github.com/usdot-fhwa-stol/tracetools_analysis
-git clone -b foxy https://github.com/ros2/ros2_tracing
+git clone -b humble https://github.com/usdot-fhwa-stol/tracetools_analysis
+git clone -b humble https://github.com/ros2/ros2_tracing
 ```
 
 ## Dependencies
