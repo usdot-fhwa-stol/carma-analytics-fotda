@@ -9,6 +9,7 @@ import json
 from utils import calculate_error_statistics, print_stats, align_time_series
 
 DEG_TO_RAD = 0.0174533
+MPH_TO_MPS = 0.44704
 STD_DEV_LABEL_STRING = "±1 Std Dev"
 TIME_SECONDS_LABEL_STRING = "Time (seconds)"
 # ROS Topics Constants
@@ -1376,16 +1377,31 @@ def run_guidance_speed_analysis(
     plt.grid(True, alpha=0.3)
     plt.legend()
 
-    # Save or show
-    if save_plot_dir:
-        plt.savefig(save_plot_dir / "turn_speed_comparison.png")
-        print(f"Turn speed comparison plot saved to: {save_plot_dir}")
-    else:
-        plt.show()
+
+    if save_stats_dir:
+        stats_full_path = save_stats_dir / "guidance_speed_analysis.json"
+        with open(stats_full_path, "w") as f:
+            json.dump(speed_limit_error_stats, f, indent=2)
+        print(f"Stats saved to: {save_stats_dir}")
+
+    if save_data_dir:
+        np.savez(
+            save_data_dir / "guidance_speed_analysis_data.npz",
+            timestamps=timestamps,
+            cmd_values=long_cmd_velocities,
+            actual_values=long_velocities,
+            error_values=speed_limit_error,
+            stats=speed_limit_error_stats,
+        )
+        print(f"\nData saved to: {save_data_dir}")
 
     if save_plot_dir:
         plt.savefig(save_plot_dir / "guidance_speed_analysis.png")
         print(f"\nPlot saved to: {save_plot_dir}")
+    else:
+        plt.show()
+
+    return (is_passed, speed_limit_error_stats, plt.gcf(), speed_limit_error, timestamps)
 
 
 # More guidance specific analysis scripts to come ....
