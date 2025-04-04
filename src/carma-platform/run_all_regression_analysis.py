@@ -9,7 +9,9 @@ from guidance_scripts import (
     run_guidance_steering_analysis,
     run_steering_wheel_analysis,
     get_planner_trajectory_intervals,
-    run_guidance_speed_analysis
+    run_guidance_speed_analysis,
+    run_turn_speed_analysis,
+    run_turn_acceleration_analysis,
 )
 from run_all_analysis import run_all_analysis
 import argparse
@@ -35,6 +37,15 @@ STEERING_ANGLE_ERROR_THREHOLD_RADIAN = 0.1
 STEERING_WHEEL_ANGLE_ERROR_THRESHOLD_RADIAN = 0.1
 # 6. Speed analysis
 SPEED_THRESHOLD_TO_PASS_MPH = 2.0
+# 7. Turn Threshold for Steering Angle
+TURN_THRESHOLD = 0.2 #rad
+# 8. Wheelbase
+WHEELBASE = 2.75
+# 9. Lateral Acceleration Limit
+LATERAL_ACCELERATION_LIMIT = 2.5
+# 10. Excess Speed Threshold on Turns
+EXCESS_TURN_SPEED_THRESHOLD = 0.1
+
 
 
 def analyze_mcap_file_for_regression_analysis(
@@ -55,11 +66,13 @@ def analyze_mcap_file_for_regression_analysis(
     all_analysis_stats = []
     for start_time, end_time in intervals:
         analysis_stats = {}
-        # 1.A Speed analysis
         try:
-            speed_analysis_results = run_guidance_speed_analysis(
+            turn_speed_analysis_results = run_turn_speed_analysis(
                 mcap_path,
-                SPEED_THRESHOLD_TO_PASS_MPH,
+                TURN_THRESHOLD,
+                WHEELBASE,
+                LATERAL_ACCELERATION_LIMIT,
+                EXCESS_TURN_SPEED_THRESHOLD,
                 start_time,
                 end_time,
                 stats_dir,
@@ -68,9 +81,27 @@ def analyze_mcap_file_for_regression_analysis(
             )
         except Exception as e:
             print(
-                f"Error analyzing {mcap_path} for metric run_guidance_speed_analysis: {e}"
+                f"Error analyzing {mcap_path} for metric run_turn_speed_analysis: {e}"
             )
-            analysis_stats["run_guidance_speed_analysis"] = None
+            analysis_stats["run_turn_speed_analysis"] = None
+
+        try:
+            turn_acc_analysis_results = run_turn_acceleration_analysis(
+                mcap_path,
+                LATERAL_ACCELERATION_LIMIT,
+                TURN_THRESHOLD,
+                WHEELBASE,
+                start_time,
+                end_time,
+                stats_dir,
+                data_dir,
+                plots_dir,
+            )
+        except Exception as e:
+            print(
+                f"Error analyzing {mcap_path} for metric run_turn_speed_analysis: {e}"
+            )
+            analysis_stats["run_turn_speed_analysis"] = None
 
         all_analysis_stats.append(analysis_stats)
 
