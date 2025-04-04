@@ -1460,6 +1460,9 @@ def run_turn_acceleration_analysis(
 
     # Identify turns
     turn_indices = np.where(np.abs(steering_angles) > turn_threshold)[0]
+    if turn_indices.size == 0:
+        print("Warning: No Turn events found above threshold. Skipping analysis.")
+        return
     turn_times = np.array(timestamps_cmd)[turn_indices]
     turn_speeds = speeds[turn_indices]
     turn_angles = steering_angles[turn_indices]
@@ -1580,6 +1583,11 @@ def run_turn_speed_analysis(
     # Find indices of high steering angles (turns)
     high_steering_indices = np.where(np.abs(steering_angles_aligned) > turn_threshold)[0]
 
+    if high_steering_indices.size == 0:
+        print("Warning: No Turn events found above threshold. Skipping analysis.")
+        return
+
+
     # Extract data for those moments
     steer_times = timestamps_steer_aligned[high_steering_indices]
     steer_angles_during_turns = steering_angles_aligned[high_steering_indices]
@@ -1591,6 +1599,7 @@ def run_turn_speed_analysis(
     ])
 
     speed_excess = vehicle_speeds_during_turns - turn_speed_refs
+
 
     speed_excess_stats = calculate_error_statistics(speed_excess, start_time, end_time)
     is_passed = abs(float(speed_excess_stats["median"])) < execc_turn_speed_threshold
