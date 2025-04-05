@@ -67,6 +67,21 @@ def analyze_mcap_file_for_regression_analysis(
     for start_time, end_time in intervals:
         analysis_stats = {}
         try:
+            guidance_speed_analysis_results = run_guidance_speed_analysis(
+                mcap_path,
+                SPEED_THRESHOLD_TO_PASS_MPH,
+                start_time,
+                end_time,
+                stats_dir,
+                data_dir,
+                plots_dir,
+            )
+        except Exception as e:
+            print(
+                f"Error analyzing {mcap_path} for metric run_guidance_speed_analysis: {e}"
+            )
+            analysis_stats["run_guidance_speed_analysis"] = None
+        try:
             turn_speed_analysis_results = run_turn_speed_analysis(
                 mcap_path,
                 TURN_THRESHOLD,

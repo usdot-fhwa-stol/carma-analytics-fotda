@@ -1333,15 +1333,10 @@ def run_guidance_speed_analysis(
 
     timestamps_cmd_vel, long_cmd_velocities = extracted_data[topics[2]]
 
-    timestamps_steering, steering_angles = extracted_data[topics[2]]
-    steering_angles = np.array([a[0] for a in steering_angles])
-
     # Align timeseries
     timestamps, long_velocities, speed_limits = align_time_series(timestamps_vel, long_velocities, timestamps_speed_limit, speed_limits)
-    # timestamps, long_velocities, long_cmd_velocities = align_time_series(timestamps_vel, long_velocities, timestamps_cmd_vel, long_cmd_velocities)
 
     # Calculate statistics
-    # stats = calculate_error_statistics(long_velocities, start_time, end_time)
     speed_limit_error = np.abs(long_velocities - speed_limits)
     speed_limit_error_stats = calculate_error_statistics(speed_limit_error, start_time, end_time)
 
@@ -1487,7 +1482,8 @@ def run_turn_acceleration_analysis(
 
     ax1 = fig.add_subplot(2, 1, 1)
     ax1.plot(turn_times, lateral_accels, 'b-', label="Lateral Acceleration")
-    ax1.axhline(y=turn_deceleration_threshold_to_pass, color='r', linestyle='--', label="Threshold")
+    ax1.axhline(y=turn_deceleration_threshold_to_pass, color='g', linestyle='--', label="Threshold")
+    ax1.axhline(y=turn_acc_stats["median"], color="r", linestyle="--", label="Median")
     ax1.set_title("Lateral Acceleration During Turns")
     ax1.set_ylabel("Acceleration (m/s²)")
     ax1.grid(True, alpha=0.3)
@@ -1509,7 +1505,7 @@ def run_turn_acceleration_analysis(
         plt.show()
 
     if save_stats_dir:
-        stats_full_path = save_stats_dir / "turn_reference_speed_analysis.json"
+        stats_full_path = save_stats_dir / "turn_lateral_acceleration_analysis.json"
         with open(stats_full_path, "w") as f:
             json.dump(turn_acc_stats, f, indent=2)
         print(f"Stats saved to: {save_stats_dir}")
@@ -1631,7 +1627,9 @@ def run_turn_speed_analysis(
 
     # Top subplot: Actual and reference speeds
     ax1.plot(steer_times, vehicle_speeds_during_turns, 'b-', label="Actual Speed")
-    ax1.plot(steer_times, turn_speed_refs, 'r--', label="Reference Turn Speed")
+    ax1.plot(steer_times, turn_speed_refs, 'g--', label="Reference Turn Speed")
+
+
     ax1.fill_between(
         steer_times,
         turn_speed_refs,
@@ -1650,6 +1648,7 @@ def run_turn_speed_analysis(
     # Bottom subplot: Speed Excess (Actual - Reference)
     ax2.plot(steer_times, speed_excess, 'm-', label="Speed Excess (Actual - Reference)")
     ax2.axhline(y=0.0, color='gray', linestyle='--', linewidth=1)
+    ax2.axhline(y=speed_excess_stats["median"], color="r", linestyle="--", label="Median")
     ax2.set_title("Speed Excess During Turns")
     ax2.set_xlabel(TIME_SECONDS_LABEL_STRING)
     ax2.set_ylabel("Speed Excess (m/s)")
@@ -1658,14 +1657,14 @@ def run_turn_speed_analysis(
 
     # Save or show
     if save_plot_dir and isinstance(save_plot_dir, (str, Path)):
-        save_plot_path = Path(save_plot_dir) / "turn_reference_speed_analysis.png"
+        save_plot_path = Path(save_plot_dir) / "turn_speed_analysis.png"
         fig.savefig(save_plot_path)
         print(f"Turn speed comparison plot saved to: {save_plot_path}")
     else:
         plt.show()
 
     if save_stats_dir:
-        stats_full_path = save_stats_dir / "turn_reference_speed_analysis.json"
+        stats_full_path = save_stats_dir / "turn_speed_analysis.json"
         with open(stats_full_path, "w") as f:
             json.dump(speed_excess_stats, f, indent=2)
         print(f"Stats saved to: {save_stats_dir}")
