@@ -77,6 +77,7 @@ def get_engage_time(mcap_path):
 def run_crosstrack_analysis(
     mcap_path,
     error_threshold_to_pass_meter=2.0,
+    threshold_percentile=None,
     start_time=None,
     end_time=None,
     save_stats_dir=None,
@@ -88,6 +89,8 @@ def run_crosstrack_analysis(
 
     Args:
         mcap_path: Path to MCAP file
+        error_threshold_to_pass_meter: Threshold crosstrack error in meters for passing the analysis
+        threshold_percentile: Threshold percentile for passing the analysis
         start_time: Time to start the analysis
         end_time: Time to end the analysis
         save_stats_dir: Directory to save analysis stats
@@ -112,7 +115,10 @@ def run_crosstrack_analysis(
     stats = calculate_error_statistics(cross_tracks, start_time, end_time)
 
     # Pass or no pass
-    is_passed = float(stats["median"]) < error_threshold_to_pass_meter
+    if threshold_percentile == None:
+        is_passed = float(stats["median"]) < error_threshold_to_pass_meter
+    elif threshold_percentile > 0:
+        is_passed = np.percentile(cross_tracks, threshold_percentile) < error_threshold_to_pass_meter
 
     # Create plot
     plt.figure(figsize=(12, 6))
@@ -1360,6 +1366,14 @@ def run_guidance_speed_analysis(
         label="Speed limit error",
     )
 
+    plt.fill_between(
+        timestamps,
+        speed_limit_error_stats["median"] - speed_limit_error_stats["std_dev"],
+        speed_limit_error_stats["median"] + speed_limit_error_stats["std_dev"],
+        alpha=0.2,
+        color="r",
+        label=STD_DEV_LABEL_STRING,
+    )
 
     plt.axhline(y=speed_limit_error_stats["median"], color="r", linestyle="--", label="Median")
     plt.axhline(
@@ -1399,7 +1413,6 @@ def run_guidance_speed_analysis(
     return (is_passed, speed_limit_error_stats, plt.gcf(), speed_limit_error, timestamps)
 
 
-# More guidance specific analysis scripts to come ....
 def compute_turn_reference_speed(steering_angle_rad, wheelbase_m=2.7, a_max=2.5):
     if abs(steering_angle_rad) < 1e-3:
         return float('inf')  # straight line, no turn limit
@@ -1509,6 +1522,8 @@ def run_turn_acceleration_analysis(
         with open(stats_full_path, "w") as f:
             json.dump(turn_acc_stats, f, indent=2)
         print(f"Stats saved to: {save_stats_dir}")
+
+    return (is_passed, turn_acc_stats, plt.gcf(), lateral_accels, timestamps_cmd)
 
 def run_turn_speed_analysis(
     mcap_path,
@@ -1668,3 +1683,7 @@ def run_turn_speed_analysis(
         with open(stats_full_path, "w") as f:
             json.dump(speed_excess_stats, f, indent=2)
         print(f"Stats saved to: {save_stats_dir}")
+
+    return (is_passed, speed_excess_stats, plt.gcf(), speed_excess, steer_times)
+
+# More guidance specific analysis scripts to come ....

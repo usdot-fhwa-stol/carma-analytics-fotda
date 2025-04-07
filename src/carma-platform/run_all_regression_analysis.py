@@ -3,12 +3,7 @@ from typing import Dict
 from guidance_scripts import (
     get_engage_time,
     run_crosstrack_analysis,
-    run_turn_accuracy_analysis,
     run_acceleration_comfort_analysis,
-    run_lateral_analysis,
-    run_guidance_steering_analysis,
-    run_steering_wheel_analysis,
-    get_planner_trajectory_intervals,
     run_guidance_speed_analysis,
     run_turn_speed_analysis,
     run_turn_acceleration_analysis,
@@ -16,35 +11,21 @@ from guidance_scripts import (
 from run_all_analysis import run_all_analysis
 import argparse
 import argcomplete
-from environment_scripts import (
-    extract_lanelet2_map_from_mcap,
-    filter_map_points_for_trajectory,
-    plot_2d_map_and_pose,
-)
+
 
 # VARIOUS THRESHOLDS FOR THE METRICS
 # 1. Cross_track analysis
-CROSS_TRACK_ERROR_THRESHOLD_METER = 2.0
-# 2. Turn accuracy analysis
-TURN_ACCURACY_ERROR_THRESHOLD_METER = 2.0
-# 3. Acceleration comfort analysis
+CROSS_TRACK_ERROR_THRESHOLD_METER = 3.0
+CROSS_TRACK_ERROR_THRESHOLD_PERCENTILE = None
+# 2. Acceleration comfort analysis
 COMFORT_ACCELERATION_THRESHOLD_MS2 = 3.0
-# 4. Lateral acceleration jerk analysis
-ACC_THRESHOLD_TO_PASS_MS2 = 2.0
-JERK_THRESHOLD_TO_PASS_MS3 = 3.0
-# 5. Steering angle and steering wheel analysis
-STEERING_ANGLE_ERROR_THREHOLD_RADIAN = 0.1
-STEERING_WHEEL_ANGLE_ERROR_THRESHOLD_RADIAN = 0.1
-# 6. Speed analysis
-SPEED_THRESHOLD_TO_PASS_MPH = 2.0
-# 7. Turn Threshold for Steering Angle
+# 3. Guidance Speed analysis
+SPEED_LIMIT_ERROR_THRESHOLD_TO_PASS_MPH = 2.0
+# 4. Turn Speed and acceleration analysis
 TURN_THRESHOLD = 0.2 #rad
-# 8. Wheelbase
-WHEELBASE = 2.75
-# 9. Lateral Acceleration Limit
-LATERAL_ACCELERATION_LIMIT = 2.5
-# 10. Excess Speed Threshold on Turns
-EXCESS_TURN_SPEED_THRESHOLD = 0.1
+WHEELBASE = 2.75 # meters
+LATERAL_ACCELERATION_LIMIT = 2.5 # m/s^2
+EXCESS_TURN_SPEED_THRESHOLD = 0.1 # rad/s
 
 
 
@@ -66,23 +47,66 @@ def analyze_mcap_file_for_regression_analysis(
     all_analysis_stats = []
     for start_time, end_time in intervals:
         analysis_stats = {}
+
+        # 1. Cross_track analysis
         try:
-            guidance_speed_analysis_results = run_guidance_speed_analysis(
+            is_passed, _, _, _, _ = run_crosstrack_analysis(
                 mcap_path,
-                SPEED_THRESHOLD_TO_PASS_MPH,
+                CROSS_TRACK_ERROR_THRESHOLD_METER,
+                CROSS_TRACK_ERROR_THRESHOLD_PERCENTILE,
                 start_time,
                 end_time,
                 stats_dir,
                 data_dir,
                 plots_dir,
             )
+            analysis_stats["run_crosstrack_analysis"] = is_passed
+        except Exception as e:
+            print(
+                f"Error analyzing {mcap_path} for metric run_crosstrack_analysis: {e}"
+            )
+            analysis_stats["run_crosstrack_analysis"] = None
+
+
+        # 2. Longitudinal acceleration analysis
+        try:
+            is_passed, _, _, _, _, _, _, _ = run_acceleration_comfort_analysis(
+                mcap_path,
+                COMFORT_ACCELERATION_THRESHOLD_MS2,
+                start_time,
+                end_time,
+                stats_dir,
+                data_dir,
+                plots_dir,
+            )
+            analysis_stats["run_acceleration_comfort_analysis"] = is_passed
+        except Exception as e:
+            print(
+                f"Error analyzing {mcap_path} for metric run_acceleration_comfort_analysis: {e}"
+            )
+            analysis_stats["run_acceleration_comfort_analysis"] = None
+
+        # 3. Guidance speed analysis
+        try:
+            is_passed, _, _, _, _  = run_guidance_speed_analysis(
+                mcap_path,
+                SPEED_LIMIT_ERROR_THRESHOLD_TO_PASS_MPH,
+                start_time,
+                end_time,
+                stats_dir,
+                data_dir,
+                plots_dir,
+            )
+            analysis_stats["run_guidance_speed_analysis"] = is_passed
         except Exception as e:
             print(
                 f"Error analyzing {mcap_path} for metric run_guidance_speed_analysis: {e}"
             )
             analysis_stats["run_guidance_speed_analysis"] = None
+
+        # 4. Turn speed analysis
         try:
-            turn_speed_analysis_results = run_turn_speed_analysis(
+            is_passed, _, _, _, _ = run_turn_speed_analysis(
                 mcap_path,
                 TURN_THRESHOLD,
                 WHEELBASE,
@@ -94,14 +118,16 @@ def analyze_mcap_file_for_regression_analysis(
                 data_dir,
                 plots_dir,
             )
+            analysis_stats["run_turn_speed_analysis"] = is_passed
         except Exception as e:
             print(
                 f"Error analyzing {mcap_path} for metric run_turn_speed_analysis: {e}"
             )
             analysis_stats["run_turn_speed_analysis"] = None
 
+        # 5. Turn acceleration analysis
         try:
-            turn_acc_analysis_results = run_turn_acceleration_analysis(
+            is_passed, _, _, _, _ = run_turn_acceleration_analysis(
                 mcap_path,
                 LATERAL_ACCELERATION_LIMIT,
                 TURN_THRESHOLD,
@@ -112,11 +138,12 @@ def analyze_mcap_file_for_regression_analysis(
                 data_dir,
                 plots_dir,
             )
+            analysis_stats["run_turn_acceleration_analysis"] = is_passed
         except Exception as e:
             print(
-                f"Error analyzing {mcap_path} for metric run_turn_speed_analysis: {e}"
+                f"Error analyzing {mcap_path} for metric run_turn_acceleration_analysis: {e}"
             )
-            analysis_stats["run_turn_speed_analysis"] = None
+            analysis_stats["run_turn_acceleration_analysis"] = None
 
         all_analysis_stats.append(analysis_stats)
 
@@ -125,7 +152,7 @@ def analyze_mcap_file_for_regression_analysis(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Run all control analysis on multiple MCAP files in a given directory"
+        description="Run all regression analysis on multiple MCAP files in a given directory"
     )
     parser.add_argument(
         "--input-dir",
