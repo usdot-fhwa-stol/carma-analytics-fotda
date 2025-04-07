@@ -312,6 +312,9 @@ def parse_kafka_log_dir(kafka_log_dir:str, csv_dir:str, simulation:bool=False):
             print(f'WARNING: {csv_dir} already exists. Contents will be overwritten.')
         csv_dir_path.mkdir(exist_ok=True)
         for kafka_topic_log in kafka_log_dir_path.glob('*.log'):
+            if kafka_topic_log.stat().st_size == 0:
+                print(f'WARNING: Found file {kafka_topic_log} is empty. Skipping file ...')
+                continue
             if KafkaLogMessageType.TimeSync.value in kafka_topic_log.name :
                 print(f'Found TimeSync Kafka topic log {kafka_topic_log}. Parsing log to csv ...')
                 parse_timesync_to_csv(kafka_topic_log, csv_dir_path/f'{KafkaLogMessageType.TimeSync.value}.csv')
