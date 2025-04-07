@@ -3,12 +3,12 @@ from typing import Dict
 from guidance_scripts import (
     get_engage_time,
     run_crosstrack_analysis,
-    # run_turn_accuracy_analysis,
-    # run_acceleration_comfort_analysis,
-    # run_lateral_analysis,
-    # run_guidance_steering_analysis,
-    # run_steering_wheel_analysis,
-    # get_planner_trajectory_intervals,
+    run_turn_accuracy_analysis,
+    run_acceleration_comfort_analysis,
+    run_lateral_analysis,
+    run_guidance_steering_analysis,
+    run_steering_wheel_analysis,
+    get_planner_trajectory_intervals,
 )
 from run_all_analysis import run_all_analysis
 import argparse

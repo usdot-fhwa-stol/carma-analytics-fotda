@@ -1335,8 +1335,6 @@ def run_guidance_speed_analysis(
     long_velocities = np.array([v[0] for v in velocity_data])
 
     timestamps_speed_limit, speed_limits = extracted_data[topics[1]]
-
-
     timestamps_cmd_vel, long_cmd_velocities = extracted_data[topics[2]]
 
     # Align timeseries
