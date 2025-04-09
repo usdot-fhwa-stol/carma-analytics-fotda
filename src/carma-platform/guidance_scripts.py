@@ -1357,28 +1357,22 @@ def run_guidance_speed_analysis(
 
     plt.plot(
         timestamps,
-        speed_limit_error,
+        long_velocities,
         "b.",
         markersize=2,
         alpha=0.3,
-        label="Speed limit error",
+        label="Speed",
     )
 
-    plt.fill_between(
+    plt.plot(
         timestamps,
-        speed_limit_error_stats["median"] - speed_limit_error_stats["std_dev"],
-        speed_limit_error_stats["median"] + speed_limit_error_stats["std_dev"],
-        alpha=0.2,
-        color="r",
-        label=STD_DEV_LABEL_STRING,
+        speed_limits,
+        "r.",
+        alpha=0.3,
+        label="Speed Limit"
     )
 
-    plt.axhline(y=speed_limit_error_stats["median"], color="r", linestyle="--", label="Median")
-    plt.axhline(
-        y=error_threshold_to_pass_mps, color="g", linestyle="--", label="Error Threshold"
-    )
-
-    plt.title(f"Speed limit error Comparison")
+    plt.title(f"Vehicle Speed and Speed Limit")
     plt.xlabel(TIME_SECONDS_LABEL_STRING)
     plt.ylabel("Speed (mps)")
     plt.grid(True, alpha=0.3)
