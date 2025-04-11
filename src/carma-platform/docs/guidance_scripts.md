@@ -248,7 +248,7 @@ Returns a list of tuples `[(start_time1, end_time1), (start_time2, end_time2), .
 
 ### run_speed_limit_change_response_analysis
 Analyze vehicle's response to speed limit changes in the map.
-Passes if for each new speed limit change, the vehicle is able to get into a steady state within acceptable tolerance percentage of the new speed limit due to geometry of the road and within configurable parameter of duration. Also requires that speed command should be applied within threshold after the speed limit changes. For example: True if after new speed limit change, vehicle's commanded speed is 20% of target within 3 seconds and starts commanding different speed within 0.1s
+Passes if for each new speed limit change, the vehicle is able to get into a steady state within acceptable tolerance percentage of the new speed limit (can't be exact due to geometry of the road) and within configurable parameter of duration. Also requires that speed command should be applied within threshold after the speed limit changes. For example: True if after new speed limit change, vehicle's commanded speed is 20% of target within 3 seconds and starts commanding different speed within 0.1s
 
 Uses topic:
 /hardware_interface/vehicle/twist, /guidance/route_state, /guidance/control_cmd

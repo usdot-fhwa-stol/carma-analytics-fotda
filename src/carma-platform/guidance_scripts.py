@@ -1290,7 +1290,7 @@ def run_speed_limit_change_response_analysis(
     speed_tolerance_pct=0.2,      # 20% tolerance for speed match
     start_time=None,
     end_time=None,
-    save_stats_dir="/workspaces/carma_ws/src/analysis-data/",
+    save_stats_dir=None,
     save_data_dir=None,
     save_plot_dir=None
 ):
@@ -1298,8 +1298,8 @@ def run_speed_limit_change_response_analysis(
     Analyze vehicle's response to speed limit changes in the map.
     Passes if for each new speed limit change, the vehicle is able
     to get into a steady state within acceptable tolerance percentage
-    of the new speed limit due to geometry of the road and within
-    configurable parameter of duration. Also requires that speed
+    of the new speed limit (can't be exact due to geometry of the road)
+    and within configurable parameter of duration. Also requires that speed
     command should be applied within threshold after the speed limit
     changes. For example: True if after new speed limit change,
     vehicle's commanded speed is 20% of target within 3 seconds
