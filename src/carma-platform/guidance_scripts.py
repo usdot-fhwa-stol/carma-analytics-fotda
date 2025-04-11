@@ -1343,12 +1343,12 @@ def align_multiple_time_series(timestamp_lists, data_lists):
 
 def run_speed_limit_change_response_analysis(
     mcap_path,
-    response_time_threshold=0.1,  # seconds
+    response_time_threshold=0.2,  # seconds
     steady_state_duration=3.0,    # seconds
     speed_tolerance_pct=0.2,      # 20% tolerance for speed match
     start_time=None,
     end_time=None,
-    save_stats_dir=None,
+    save_stats_dir="/workspaces/carma_ws/src/analysis-data/",
     save_data_dir=None,
     save_plot_dir=None
 ):
