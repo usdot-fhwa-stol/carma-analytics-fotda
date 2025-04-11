@@ -1312,11 +1312,32 @@ def align_multiple_time_series(timestamp_lists, data_lists):
     aligned_data = []
     for i, (ts, data) in enumerate(zip(timestamp_lists, data_lists)):
         if len(ts) > 1:  # Need at least 2 points for interpolation
-            interpolated = np.interp(common_timestamps, ts, data)
-            aligned_data.append(interpolated)
+            # Check if data is multi-dimensional
+            if np.ndim(data) > 1 or isinstance(data[0], (list, tuple)):
+                # Convert to numpy array if it's not already
+                data_array = np.array(data)
+
+                # Handle data with multiple components (e.g., list of tuples)
+                if data_array.ndim > 1:
+                    # Interpolate each column separately
+                    interpolated_data = np.zeros((len(common_timestamps), data_array.shape[1]))
+                    for j in range(data_array.shape[1]):
+                        interpolated_data[:, j] = np.interp(common_timestamps, ts, data_array[:, j])
+                    aligned_data.append(interpolated_data)
+                else:
+                    # Simple 1D interpolation
+                    aligned_data.append(np.interp(common_timestamps, ts, data_array))
+            else:
+                # Simple 1D interpolation
+                aligned_data.append(np.interp(common_timestamps, ts, data))
         else:
             # Handle empty or single-point series
-            aligned_data.append(np.zeros_like(common_timestamps))
+            if np.ndim(data) > 1 and len(data) > 0:
+                # Create zeros with the same shape as the data points
+                sample_shape = np.array(data[0]).shape
+                aligned_data.append(np.zeros((len(common_timestamps),) + sample_shape))
+            else:
+                aligned_data.append(np.zeros_like(common_timestamps))
 
     return common_timestamps, aligned_data
 
@@ -1327,9 +1348,9 @@ def run_speed_limit_change_response_analysis(
     speed_tolerance_pct=0.2,      # 20% tolerance for speed match
     start_time=None,
     end_time=None,
-    save_stats_dir=None,
-    save_data_dir=None,
-    save_plot_dir=None,
+    save_stats_dir="/workspaces/carma_ws/src/analysis-data/rosbag2_2025-04-11_032029/stats/",
+    save_data_dir="/workspaces/carma_ws/src/analysis-data/rosbag2_2025-04-11_032029/data/",
+    save_plot_dir="/workspaces/carma_ws/src/analysis-data/rosbag2_2025-04-11_032029/plots/"
 ):
     """
     Analyze vehicle's response to speed limit changes in the map.
@@ -1368,46 +1389,58 @@ def run_speed_limit_change_response_analysis(
         end_time=end_time,
         field_extractors={
             topics[0]: lambda msg: (
-                msg.twist.linear.x,  # longitudinal velocity
+                msg.twist.linear.x  # longitudinal velocity
             ),
             topics[1]: lambda msg: (
                 msg.speed_limit     # Actual speed limit in m/s
             ),
             topics[2]: lambda msg: (
-                msg.cmd.linear_velocity, # Commanded speed in m/s
-                msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9  # timestamp
+                msg.cmd.linear_velocity # Commanded speed in m/s
+                #msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9  # timestamp
             )
         },
     )
 
     # Extract time series data
     timestamps_vel, velocity_data = extracted_data[topics[0]]
-    long_velocities = np.array([v[0] for v in velocity_data])
+    long_velocities = velocity_data
 
     timestamps_speed_limit, speed_limit_data = extracted_data[topics[1]]
-    speed_limits = np.array([sl[0] for sl in speed_limit_data])
+    speed_limits =  speed_limit_data
 
     timestamps_cmd, cmd_data = extracted_data[topics[2]]
-    cmd_velocities = np.array([cmd[0] for cmd in cmd_data])
+    cmd_velocities = cmd_data
 
-    # Align time series data for consistent comparison
-    timestamps, aligned_data = align_multiple_time_series(
-        [timestamps_vel, timestamps_speed_limit, timestamps_cmd],
-        [long_velocities, speed_limits, cmd_velocities]
+    # Align time series data for consistent comparison using existing function twice
+    first_aligned_timestamps, first_aligned_velocities, aligned_speed_limits = align_time_series(
+        timestamps_vel, long_velocities,
+        timestamps_speed_limit, speed_limits
     )
 
-    long_velocities, speed_limits, cmd_velocities = aligned_data
+    # Second alignment to get all three series aligned
+    timestamps, aligned_cmd_velocities, aligned_velocities = align_time_series(
+        timestamps_cmd, cmd_velocities,
+        first_aligned_timestamps, first_aligned_velocities
+    )
+
+    # Now get aligned speed limits with the same timestamps
+    aligned_speed_limits = np.interp(timestamps, first_aligned_timestamps, aligned_speed_limits)
+
+    # Reassign to variables used later in the function
+    long_velocities = aligned_velocities
+    speed_limits = aligned_speed_limits
+    cmd_velocities = aligned_cmd_velocities
+
+    #long_velocities, speed_limits, cmd_velocities = aligned_data
 
     # Detect speed limit changes
-    speed_limit_changes = detect_speed_limit_changes(timestamps, speed_limits)
+    speed_limit_changes = detect_speed_limit_changes(timestamps_speed_limit, speed_limit_data)
 
     # Analyze response to speed changes
-    response_times, transition_periods, steady_state_periods = analyze_speed_responses(
-        timestamps,
-        speed_limits,
-        long_velocities,
+    response_times, steady_state_periods = analyze_speed_responses(
+        timestamps_cmd,
+        cmd_data,
         speed_limit_changes,
-        response_time_threshold,
         steady_state_duration,
         speed_tolerance_pct
     )
@@ -1471,19 +1504,31 @@ def run_speed_limit_change_response_analysis(
     ax2.plot(timestamps, speed_error, 'r-', linewidth=1.5)
     ax2.axhline(y=0, color='k', linestyle='-', alpha=0.3)
 
-    # Highlight tolerance bounds
+
+    # Highlight tolerance bounds - only add to legend once
+    tolerance_added_to_legend = False
     for event in speed_limit_changes:
         event_time, old_limit, new_limit = event
         # Draw tolerance bands after the speed change
         upper_tolerance = new_limit * speed_tolerance_pct
         lower_tolerance = -new_limit * speed_tolerance_pct
-        ax2.axhline(y=upper_tolerance, color='g', linestyle='--', alpha=0.5)
-        ax2.axhline(y=lower_tolerance, color='g', linestyle='--', alpha=0.5)
+
+        if not tolerance_added_to_legend:
+            # First time, add to legend
+            ax2.axhline(y=upper_tolerance, color='g', linestyle='--', alpha=0.5,
+                      label=f'Tolerance (Â±{speed_tolerance_pct*100:.0f}%)')
+            ax2.axhline(y=lower_tolerance, color='g', linestyle='--', alpha=0.5)
+            tolerance_added_to_legend = True
+        else:
+            # Subsequent times, don't add to legend
+            ax2.axhline(y=upper_tolerance, color='g', linestyle='--', alpha=0.5)
+            ax2.axhline(y=lower_tolerance, color='g', linestyle='--', alpha=0.5)
 
     ax2.set_title("Speed Error (Vehicle Speed - Speed Limit)")
     ax2.set_xlabel(TIME_SECONDS_LABEL_STRING)
     ax2.set_ylabel("Error (m/s)")
     ax2.grid(True, alpha=0.3)
+    ax2.legend()
 
     plt.tight_layout()
 
@@ -1544,6 +1589,9 @@ def detect_speed_limit_changes(timestamps, speed_limits, min_change=0.5):
 
     for i in range(1, len(speed_limits)):
         current_limit = speed_limits[i]
+        if prev_limit < 0.01:
+            prev_limit = current_limit
+            continue
         if abs(current_limit - prev_limit) >= min_change:
             changes.append((timestamps[i], prev_limit, current_limit))
             prev_limit = current_limit
@@ -1551,28 +1599,24 @@ def detect_speed_limit_changes(timestamps, speed_limits, min_change=0.5):
     return changes
 
 
-def analyze_speed_responses(timestamps, speed_limits, velocities, speed_limit_changes,
-                           response_time_threshold, steady_state_duration, speed_tolerance_pct):
+def analyze_speed_responses(timestamps, velocities, speed_limit_changes,
+                           steady_state_duration, speed_tolerance_pct):
     """
     Analyze vehicle's response to speed limit changes.
 
     Args:
         timestamps: Array of timestamps
-        speed_limits: Array of speed limits
         velocities: Array of vehicle velocities
         speed_limit_changes: List of detected speed limit changes
-        response_time_threshold: Maximum acceptable response time
         steady_state_duration: Duration required at new speed for steady state
         speed_tolerance_pct: Tolerance percentage for speed matching
 
     Returns:
         Tuple containing:
         - Array of response times for each speed change
-        - List of transition periods [(start_time, end_time, from_speed, to_speed), ...]
         - List of steady state periods [(start_time, end_time, speed), ...]
     """
     response_times = np.array([])
-    transition_periods = []
     steady_state_periods = []
 
     for i, change in enumerate(speed_limit_changes):
@@ -1595,14 +1639,6 @@ def analyze_speed_responses(timestamps, speed_limits, velocities, speed_limit_ch
         if response_idx > change_idx:
             response_time = timestamps[response_idx] - timestamps[change_idx]
             response_times = np.append(response_times, response_time)
-
-            # Record transition period
-            transition_periods.append((
-                timestamps[change_idx],
-                timestamps[response_idx],
-                old_limit,
-                new_limit
-            ))
 
             # Analyze steady state (3 seconds at new speed limit within tolerance)
             steady_state_start = None
@@ -1638,7 +1674,7 @@ def analyze_speed_responses(timestamps, speed_limits, velocities, speed_limit_ch
                         new_limit
                     ))
 
-    return response_times, transition_periods, steady_state_periods
+    return response_times, steady_state_periods
 
 def run_guidance_speed_analysis(
     mcap_path,
@@ -2042,7 +2078,7 @@ def main():
     Main function to run the analysis scripts.
     """
     # Example usage of the functions
-    mcap_path = "/workspaces/carma/src/analysis-data/rosbag2-workzone-basic-simulator/rosbag2_2025-04-09_015404_0.mcap"
+    mcap_path = "/workspaces/carma_ws/src/analysis-data/rosbag2_2025-04-11_032029/rosbag2_2025-04-11_032029_0.mcap"
     run_speed_limit_change_response_analysis(mcap_path)
 
 if __name__ == "__main__":
