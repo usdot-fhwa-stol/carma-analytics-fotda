@@ -1616,9 +1616,11 @@ def analyze_speed_responses(timestamps, velocities, speed_limit_changes,
         - Array of response times for each speed change
         - List of steady state periods [(start_time, end_time, speed), ...]
     """
+    response_time_idxs = np.array([])
     response_times = np.array([])
     steady_state_periods = []
 
+    # Get the response times and indexes for each speed limit change
     for i, change in enumerate(speed_limit_changes):
         change_time, old_limit, new_limit = change
 
@@ -1630,49 +1632,55 @@ def analyze_speed_responses(timestamps, velocities, speed_limit_changes,
         lower_bound = new_limit * (1 - speed_tolerance_pct)
 
         # Calculate response time: time to first enter the tolerance band
-        response_idx = change_idx
+        response_time_idx = change_idx
         for j in range(change_idx, len(timestamps)):
             if lower_bound <= velocities[j] <= upper_bound:
-                response_idx = j
-                break
+                response_time_idx = j
+                break # from inner loop
 
-        if response_idx > change_idx:
-            response_time = timestamps[response_idx] - timestamps[change_idx]
-            response_times = np.append(response_times, response_time)
+        # make sure response is after change
+        while response_time_idx <= change_idx:
+            response_time_idx += 1
 
-            # Analyze steady state (3 seconds at new speed limit within tolerance)
-            steady_state_start = None
-            consecutive_in_band = 0
-            last_in_band_idx = None
+        response_time = timestamps[response_time_idx] - timestamps[change_idx]
+        response_times = np.append(response_times, response_time)
+        response_time_idxs = np.append(response_time_idxs, response_time_idx)
 
-            for k in range(response_idx, len(timestamps)):
-                if lower_bound <= velocities[k] <= upper_bound:
-                    if steady_state_start is None:
-                        steady_state_start = timestamps[k]
-                    last_in_band_idx = k
+    for i, response_time_idx in enumerate(response_time_idxs):
+        # Analyze steady state (3 seconds at new speed limit within tolerance)
+        steady_state_start = None
+        consecutive_in_band = 0
+        last_in_band_idx = None
 
-                    # Check if we've had enough consecutive time in the band
-                    if timestamps[k] - steady_state_start >= steady_state_duration:
-                        steady_state_periods.append((
-                            steady_state_start,
-                            timestamps[k],
-                            new_limit
-                        ))
-                        break
-                else:
-                    # Reset if we go out of band
-                    steady_state_start = None
+        # Steady state check only until the next speed change
+        for k in range(response_time_idx, min(i, len(timestamps))):
+            if lower_bound <= velocities[k] <= upper_bound:
+                if steady_state_start is None:
+                    steady_state_start = timestamps[k]
+                last_in_band_idx = k
 
-            # If we exit the loop without finding a steady state period but had points in band
-            if steady_state_start is not None and last_in_band_idx is not None and len(steady_state_periods) == i:
-                # Check if the duration was close enough to the requirement
-                duration = timestamps[last_in_band_idx] - steady_state_start
-                if duration >= steady_state_duration * 0.8:  # Allow some flexibility
+                # Check if we've had enough consecutive time in the band
+                if timestamps[k] - steady_state_start >= steady_state_duration:
                     steady_state_periods.append((
                         steady_state_start,
-                        timestamps[last_in_band_idx],
+                        timestamps[k],
                         new_limit
                     ))
+                    break
+            else:
+                # Reset if we go out of band
+                steady_state_start = None
+
+        # If we exit the loop without finding a steady state period but had points in band
+        if steady_state_start is not None and last_in_band_idx is not None and len(steady_state_periods) == i:
+            # Check if the duration was close enough to the requirement
+            duration = timestamps[last_in_band_idx] - steady_state_start
+            if duration >= steady_state_duration * 0.8:  # Allow some flexibility
+                steady_state_periods.append((
+                    steady_state_start,
+                    timestamps[last_in_band_idx],
+                    new_limit
+                ))
 
     return response_times, steady_state_periods
 
