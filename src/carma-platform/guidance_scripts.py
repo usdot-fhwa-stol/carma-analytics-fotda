@@ -1283,64 +1283,6 @@ def get_planner_trajectory_intervals(
 
     return intervals
 
-def align_multiple_time_series(timestamp_lists, data_lists):
-    """
-    Align multiple time series to a common time base.
-
-    Args:
-        timestamp_lists: List of timestamp arrays
-        data_lists: List of data arrays corresponding to timestamp_lists
-
-    Returns:
-        Tuple containing:
-        - Common timestamp array
-        - List of interpolated data arrays
-    """
-    # Find the overall time range
-    min_time = min(ts[0] for ts in timestamp_lists if len(ts) > 0)
-    max_time = max(ts[-1] for ts in timestamp_lists if len(ts) > 0)
-
-    # Find the most dense time series to use as reference
-    max_density_idx = np.argmax([len(ts) for ts in timestamp_lists])
-    reference_timestamps = timestamp_lists[max_density_idx]
-
-    # Filter reference timestamps to be within the common range
-    mask = (reference_timestamps >= min_time) & (reference_timestamps <= max_time)
-    common_timestamps = reference_timestamps[mask]
-
-    # Interpolate all data series to this common timestamp base
-    aligned_data = []
-    for i, (ts, data) in enumerate(zip(timestamp_lists, data_lists)):
-        if len(ts) > 1:  # Need at least 2 points for interpolation
-            # Check if data is multi-dimensional
-            if np.ndim(data) > 1 or isinstance(data[0], (list, tuple)):
-                # Convert to numpy array if it's not already
-                data_array = np.array(data)
-
-                # Handle data with multiple components (e.g., list of tuples)
-                if data_array.ndim > 1:
-                    # Interpolate each column separately
-                    interpolated_data = np.zeros((len(common_timestamps), data_array.shape[1]))
-                    for j in range(data_array.shape[1]):
-                        interpolated_data[:, j] = np.interp(common_timestamps, ts, data_array[:, j])
-                    aligned_data.append(interpolated_data)
-                else:
-                    # Simple 1D interpolation
-                    aligned_data.append(np.interp(common_timestamps, ts, data_array))
-            else:
-                # Simple 1D interpolation
-                aligned_data.append(np.interp(common_timestamps, ts, data))
-        else:
-            # Handle empty or single-point series
-            if np.ndim(data) > 1 and len(data) > 0:
-                # Create zeros with the same shape as the data points
-                sample_shape = np.array(data[0]).shape
-                aligned_data.append(np.zeros((len(common_timestamps),) + sample_shape))
-            else:
-                aligned_data.append(np.zeros_like(common_timestamps))
-
-    return common_timestamps, aligned_data
-
 def run_speed_limit_change_response_analysis(
     mcap_path,
     response_time_threshold=0.2,  # seconds
