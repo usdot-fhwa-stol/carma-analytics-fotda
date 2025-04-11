@@ -1609,14 +1609,12 @@ def analyze_speed_responses(timestamps, velocities, speed_limit_changes,
                            steady_state_duration, speed_tolerance_pct):
     """
     Analyze vehicle's response to speed limit changes.
-
     Args:
         timestamps: Array of timestamps
         velocities: Array of vehicle velocities
         speed_limit_changes: List of detected speed limit changes
         steady_state_duration: Duration required at new speed for steady state
-        speed_tolerance_pct: Tolerance percentage for speed matching
-
+        speed_tolerance_pct: Tolerance percentage for speed matching (used only for steady state)
     Returns:
         Tuple containing:
         - Array of response times for each speed change
@@ -1633,42 +1631,47 @@ def analyze_speed_responses(timestamps, velocities, speed_limit_changes,
         # Find the index of the change in the timestamps array
         change_idx = np.argmin(np.abs(timestamps - change_time))
 
-        # Define tolerance band for the new speed limit
-        upper_bound = new_limit * (1 + speed_tolerance_pct)
-        lower_bound = new_limit * (1 - speed_tolerance_pct)
+        # Define threshold for response detection (0.1 difference)
+        # 3m/s^2 change in 0.033s (30Hz) is 0.1 m/s
+        response_threshold = 0.1
 
-        # Calculate response time: time to first enter the tolerance band
+        # Calculate response time: time when speed differs by at least 0.1 from original
         response_time_idx = change_idx
-        for j in range(change_idx, len(timestamps)):
-            if lower_bound <= velocities[j] <= upper_bound:
+        initial_velocity = velocities[change_idx]
+
+        for j in range(change_idx + 1, len(timestamps)):
+            # Check if velocity has changed by at least 0.1 from the initial value
+            if abs(velocities[j] - initial_velocity) >= response_threshold:
                 response_time_idx = j
-                break # from inner loop
+                break  # from inner loop
 
-        # make sure response is after change
-        while response_time_idx <= change_idx:
-            response_time_idx += 1
-
+        # Calculate response time
         response_time = timestamps[response_time_idx] - timestamps[change_idx]
         response_times = np.append(response_times, response_time)
         response_time_idxs.append(response_time_idx)
 
+    # Analyze steady states for each response
     for i, response_time_idx in enumerate(response_time_idxs):
-        # Analyze steady state (3 seconds at new speed limit within tolerance)
-        steady_state_start = None
-        consecutive_in_band = 0
-        last_in_band_idx = None
+        # Get current speed limit
+        _, _, new_limit = speed_limit_changes[i]
 
+        # Define tolerance band for the new speed limit (for steady state)
+        upper_bound = new_limit * (1 + speed_tolerance_pct)
+        lower_bound = new_limit * (1 - speed_tolerance_pct)
+
+        # Analyze steady state (duration at new speed limit within tolerance)
+        steady_state_start = None
         next_event_time_idx = len(timestamps)
+
         if (i + 1 < len(response_time_idxs)):
             # Check until the next speed change
             next_event_time_idx = response_time_idxs[i + 1]
+
         # Steady state check only until the next speed change
-        print( f"Steady state check from {response_time_idx} to {next_event_time_idx}")
         for k in range(response_time_idx, next_event_time_idx):
             if lower_bound <= velocities[k] <= upper_bound:
                 if steady_state_start is None:
                     steady_state_start = timestamps[k]
-                last_in_band_idx = k
 
                 # Check if we've had enough consecutive time in the band
                 if timestamps[k] - steady_state_start >= steady_state_duration:
