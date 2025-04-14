@@ -9,6 +9,7 @@ import json
 from utils import calculate_error_statistics, print_stats, align_time_series
 
 DEG_TO_RAD = 0.0174533
+MPH_TO_MPS = 0.44704
 STD_DEV_LABEL_STRING = "±1 Std Dev"
 TIME_SECONDS_LABEL_STRING = "Time (seconds)"
 # ROS Topics Constants
@@ -76,6 +77,7 @@ def get_engage_time(mcap_path):
 def run_crosstrack_analysis(
     mcap_path,
     error_threshold_to_pass_meter=2.0,
+    threshold_percentile=None,
     start_time=None,
     end_time=None,
     save_stats_dir=None,
@@ -87,6 +89,8 @@ def run_crosstrack_analysis(
 
     Args:
         mcap_path: Path to MCAP file
+        error_threshold_to_pass_meter: Threshold crosstrack error in meters for passing the analysis
+        threshold_percentile: Threshold percentile for passing the analysis
         start_time: Time to start the analysis
         end_time: Time to end the analysis
         save_stats_dir: Directory to save analysis stats
@@ -111,7 +115,10 @@ def run_crosstrack_analysis(
     stats = calculate_error_statistics(cross_tracks, start_time, end_time)
 
     # Pass or no pass
-    is_passed = float(stats["median"]) < error_threshold_to_pass_meter
+    if threshold_percentile == None:
+        is_passed = float(stats["median"]) < error_threshold_to_pass_meter
+    elif threshold_percentile > 0:
+        is_passed = np.percentile(cross_tracks, threshold_percentile) < error_threshold_to_pass_meter
 
     # Create plot
     plt.figure(figsize=(12, 6))
@@ -1051,7 +1058,7 @@ def extract_steering_data(mcap_path, start_time=None, end_time=None):
     # Try each report topic until we find one with data
     for topic_info in report_topics:
         report_topic = topic_info['report_topic']
-        
+
         try:
             current_extracted_data = extract_mcap_data(
                 mcap_path,
@@ -1071,7 +1078,7 @@ def extract_steering_data(mcap_path, start_time=None, end_time=None):
         except Exception as e:
             print(f"Warning: Could not extract data for topic {report_topic}: {str(e)}")
             continue
-    
+
     raise ValueError("No valid data found in any of the report topics")
 
 def run_steering_wheel_analysis(
@@ -1276,5 +1283,399 @@ def get_planner_trajectory_intervals(
 
     return intervals
 
+def run_guidance_speed_analysis(
+    mcap_path,
+    error_threshold_to_pass_mph=0.5,
+    start_time=None,
+    end_time=None,
+    save_stats_dir=None,
+    save_data_dir=None,
+    save_plot_dir=None,
+):
+
+    """
+    Extract time intervals when a specific planner was active based on trajectory plans.
+    Uses header stamp time and first point of each plan for decision making.
+
+    Args:
+        mcap_path: Path to MCAP file
+        start_time: Optional start time to begin analysis
+        end_time: Optional end time to end analysis
+
+    Returns:
+        List of tuples [(start_time1, end_time1), (start_time2, end_time2), ...] representing
+        time intervals when the specified planner was active
+
+    Deps:
+        Topics: [/hardware_interface/vehicle/twist]
+        Msgs: geometry_msgs/Twist
+    """
+
+    topics = [HARDWARE_VEHICLE_TWIST_TOPIC, GUIDANCE_ROUTE_STATE_TOPIC, GUIDANCE_CONTROL_CMD_TOPIC]
+
+    extracted_data = extract_mcap_data(
+        mcap_path,
+        topics,
+        start_time=start_time,
+        end_time=end_time,
+        field_extractors={
+            topics[0]: lambda msg: (
+                msg.twist.linear.x,  # longitudinal velocity
+            ),
+            topics[1]: lambda msg: (
+                msg.speed_limit     # Actual speed limit in m/s
+            ),
+            topics[2]: lambda msg: (
+                msg.cmd.linear_velocity # Commanded speed limit in m/s
+            )
+        },
+    )
+
+    timestamps_vel, velocity_data = extracted_data[topics[0]]
+    long_velocities = np.array([v[0] for v in velocity_data])
+
+    timestamps_speed_limit, speed_limits = extracted_data[topics[1]]
+    timestamps_cmd_vel, long_cmd_velocities = extracted_data[topics[2]]
+
+    # Align timeseries
+    timestamps, long_velocities, speed_limits = align_time_series(timestamps_vel, long_velocities, timestamps_speed_limit, speed_limits)
+
+    # Calculate statistics
+    speed_limit_error = np.abs(long_velocities - speed_limits)
+    speed_limit_error_stats = calculate_error_statistics(speed_limit_error, start_time, end_time)
+
+    # Pass or no pass
+    error_threshold_to_pass_mps = error_threshold_to_pass_mph * MPH_TO_MPS
+    is_passed = float(speed_limit_error_stats["median"]) < ( error_threshold_to_pass_mps )
+
+
+    # Create visualization
+    plt.figure(figsize=(15, 10))
+
+    # Plot speed error values
+    plt.subplot(2, 1, 1)
+
+    plt.plot(
+        timestamps,
+        long_velocities,
+        "b.",
+        markersize=2,
+        alpha=0.3,
+        label="Speed",
+    )
+
+    plt.plot(
+        timestamps,
+        speed_limits,
+        "r.",
+        alpha=0.3,
+        label="Speed Limit"
+    )
+
+    plt.title(f"Vehicle Speed and Speed Limit")
+    plt.xlabel(TIME_SECONDS_LABEL_STRING)
+    plt.ylabel("Speed (mps)")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+
+
+    if save_stats_dir:
+        stats_full_path = save_stats_dir / "guidance_speed_analysis.json"
+        with open(stats_full_path, "w") as f:
+            json.dump(speed_limit_error_stats, f, indent=2)
+        print(f"Stats saved to: {save_stats_dir}")
+
+    if save_data_dir:
+        np.savez(
+            save_data_dir / "guidance_speed_analysis_data.npz",
+            timestamps=timestamps,
+            cmd_values=long_cmd_velocities,
+            actual_values=long_velocities,
+            error_values=speed_limit_error,
+            stats=speed_limit_error_stats,
+        )
+        print(f"\nData saved to: {save_data_dir}")
+
+    if save_plot_dir:
+        plt.savefig(save_plot_dir / "guidance_speed_analysis.png")
+        print(f"\nPlot saved to: {save_plot_dir}")
+    else:
+        plt.show()
+
+    return (is_passed, speed_limit_error_stats, plt.gcf(), speed_limit_error, timestamps)
+
+
+def compute_turn_reference_speed(steering_angle_rad, wheelbase_m=2.7, a_max=2.5):
+    if abs(steering_angle_rad) < 1e-3:
+        return float('inf')  # straight line, no turn limit
+    radius = wheelbase_m / np.tan(steering_angle_rad)
+    return np.sqrt(a_max * abs(radius))
+
+def compute_turn_lateral_acceleration(steering_angle_rad, vehicle_speed_mps, wheelbase_m):
+    if abs(steering_angle_rad) < 1e-3:
+        return 0.0  # no turning, no lateral acceleration
+    radius = wheelbase_m / np.tan(steering_angle_rad)
+    a_lat = (vehicle_speed_mps ** 2) / abs(radius)
+    return a_lat
+
+def run_turn_acceleration_analysis(
+    mcap_path,
+    turn_deceleration_threshold_to_pass=3.0,
+    turn_threshold=0.2,  # radians
+    wheelbase_m=2.7,     # meters
+    start_time=None,
+    end_time=None,
+    save_stats_dir=None,
+    save_data_dir=None,
+    save_plot_dir=None,
+):
+    """
+    Main function to analyze turn lateral acceleration.
+
+    Args:
+        mcap_path: Path to MCAP file
+        turn_deceleration_threshold_to_pass: Max allowed lateral acceleration (m/s^2)
+        turn_threshold: Steering angle threshold to consider as a turn (rad)
+        wheelbase_m: Vehicle wheelbase in meters
+    """
+
+    topics = [GUIDANCE_CONTROL_CMD_TOPIC]
+    extracted_data = extract_mcap_data(
+        mcap_path,
+        topics,
+        start_time,
+        end_time,
+        field_extractors={
+            topics[0]: lambda msg: (
+                msg.cmd.linear_velocity,  # m/s
+                msg.cmd.steering_angle             # rad
+            ),
+        },
+    )
+
+    # Extract data
+    timestamps_cmd, cmd_data = extracted_data[topics[0]]
+    speeds = np.array([d[0] for d in cmd_data])
+    steering_angles = np.array([d[1] for d in cmd_data])
+
+    # Identify turns
+    turn_indices = np.where(np.abs(steering_angles) > turn_threshold)[0]
+    if turn_indices.size == 0:
+        print("Warning: No Turn events found above threshold. Skipping analysis.")
+        return
+    turn_times = np.array(timestamps_cmd)[turn_indices]
+    turn_speeds = speeds[turn_indices]
+    turn_angles = steering_angles[turn_indices]
+
+    # Compute lateral acceleration
+    lateral_accels = np.array([
+    compute_turn_lateral_acceleration(angle, speed, wheelbase_m)
+    for angle, speed in zip(turn_angles, turn_speeds)])
+    lateral_accels = np.abs(lateral_accels)  # consider magnitude only
+
+    # Compare with threshold
+    acc_violations = lateral_accels > turn_deceleration_threshold_to_pass
+
+    turn_acc_stats = calculate_error_statistics(lateral_accels, start_time, end_time)
+    is_passed = float(turn_acc_stats["median"]) < turn_deceleration_threshold_to_pass
+
+    print(f"\nFound {len(turn_indices)} turn samples above threshold angle ({turn_threshold} rad).")
+    print(f"{np.sum(acc_violations)} exceeded {turn_deceleration_threshold_to_pass} m/s² lateral accel.")
+
+    # Plot
+    fig = plt.figure(figsize=(15, 8))
+
+    ax1 = fig.add_subplot(2, 1, 1)
+    ax1.plot(turn_times, lateral_accels, 'b-', label="Lateral Acceleration")
+    ax1.axhline(y=turn_deceleration_threshold_to_pass, color='g', linestyle='--', label="Threshold")
+    ax1.axhline(y=turn_acc_stats["median"], color="r", linestyle="--", label="Median")
+    ax1.set_title("Lateral Acceleration During Turns")
+    ax1.set_ylabel("Acceleration (m/s²)")
+    ax1.grid(True, alpha=0.3)
+    ax1.legend()
+
+    ax2 = fig.add_subplot(2, 1, 2)
+    ax2.plot(turn_times, turn_angles, 'g-', label="Steering Angle (rad)")
+    ax2.axhline(y=turn_threshold, color='gray', linestyle='--', label="Turn Threshold")
+    ax2.axhline(y=-turn_threshold, color='gray', linestyle='--')
+    ax2.set_xlabel(TIME_SECONDS_LABEL_STRING)
+    ax2.set_ylabel("Steering Angle (rad)")
+    ax2.grid(True, alpha=0.3)
+    ax2.legend()
+
+    if save_plot_dir:
+        fig.savefig(save_plot_dir / "turn_lateral_acceleration_analysis.png")
+        print(f"Turn lateral acceleration plot saved to: {save_plot_dir}")
+    else:
+        plt.show()
+
+    if save_stats_dir:
+        stats_full_path = save_stats_dir / "turn_lateral_acceleration_analysis.json"
+        with open(stats_full_path, "w") as f:
+            json.dump(turn_acc_stats, f, indent=2)
+        print(f"Stats saved to: {save_stats_dir}")
+
+    return (is_passed, turn_acc_stats, plt.gcf(), lateral_accels, timestamps_cmd)
+
+def run_turn_speed_analysis(
+    mcap_path,
+    turn_threshold = 0.2,
+    wheelbase = 2.75,
+    lateral_acc = 2.5,
+    execc_turn_speed_threshold = 0.1,
+    start_time=None,
+    end_time=None,
+    save_stats_dir=None,
+    save_data_dir=None,
+    save_plot_dir=None,
+):
+
+    """
+    Extract time intervals when a specific planner was active based on trajectory plans.
+    Uses header stamp time and first point of each plan for decision making.
+
+    Args:
+        mcap_path: Path to MCAP file
+        start_time: Optional start time to begin analysis
+        end_time: Optional end time to end analysis
+
+    Returns:
+        List of tuples [(start_time1, end_time1), (start_time2, end_time2), ...] representing
+        time intervals when the specified planner was active
+
+    Deps:
+        Topics: [/hardware_interface/vehicle/twist]
+        Msgs: geometry_msgs/Twist
+    """
+    topics = [HARDWARE_VEHICLE_TWIST_TOPIC, GUIDANCE_CONTROL_CMD_TOPIC, GUIDANCE_ROUTE_STATE_TOPIC]
+
+    extracted_data = extract_mcap_data(
+        mcap_path,
+        topics,
+        start_time=start_time,
+        end_time=end_time,
+        field_extractors={
+            topics[0]: lambda msg: (
+                msg.twist.linear.x,  # longitudinal velocity
+            ),
+            topics[1]: lambda msg: (
+                msg.cmd.linear_velocity,
+                msg.cmd.steering_angle,
+            ),
+            topics[2]: lambda msg: (
+                msg.speed_limit,  # longitudinal velocity
+            ),
+        },
+    )
+
+    timestamps_vel, velocity_data = extracted_data[topics[0]]
+    long_velocities = np.array([v[0] for v in velocity_data])
+
+    timestamps_ctrl_cmd, ctrl_cmd_data = extracted_data[topics[1]]
+    long_cmd_velocities = np.array([d[0] for d in ctrl_cmd_data])
+    steering_angles = np.array([d[1] for d in ctrl_cmd_data])
+
+    timestamps_speed_limit, speed_limits = extracted_data[topics[2]]
+    # Align steering with speed
+    timestamps_steer_aligned, steering_angles_aligned, velocity_for_steer = align_time_series(
+        timestamps_ctrl_cmd, steering_angles, timestamps_vel, long_velocities
+    )
+
+    # Compute desired speed when steering is high
+
+    # Find indices of high steering angles (turns)
+    high_steering_indices = np.where(np.abs(steering_angles_aligned) > turn_threshold)[0]
+
+    if high_steering_indices.size == 0:
+        print("Warning: No Turn events found above threshold. Skipping analysis.")
+        return
+
+
+    # Extract data for those moments
+    steer_times = timestamps_steer_aligned[high_steering_indices]
+    steer_angles_during_turns = steering_angles_aligned[high_steering_indices]
+    vehicle_speeds_during_turns = velocity_for_steer[high_steering_indices]
+    # Compute reference speeds based on turn radius and compare
+    turn_speed_refs = np.array([
+        compute_turn_reference_speed(angle, wheelbase, lateral_acc)
+        for angle in steer_angles_during_turns
+    ])
+
+    speed_excess = vehicle_speeds_during_turns - turn_speed_refs
+
+
+    speed_excess_stats = calculate_error_statistics(speed_excess, start_time, end_time)
+    is_passed = abs(float(speed_excess_stats["median"])) < execc_turn_speed_threshold
+
+
+    # --- Visualization: Actual vs Reference Speed During Turns ---
+
+    # Create figure and axes for 3 subplots
+    fig, (ax0, ax1, ax2) = plt.subplots(3, 1, figsize=(15, 12), sharex=True)
+
+    timestamps_speed_limit = np.array(timestamps_speed_limit)
+    speed_limits = np.array(speed_limits)
+    steer_times = np.array(steer_times)
+
+    # Create a mask where timestamps_speed_limit values fall within the range of steer_times
+    mask = (timestamps_speed_limit >= steer_times[0]) & (timestamps_speed_limit <= steer_times[-1])
+
+    # Slice to get matching values
+    speed_limits_trimmed = speed_limits[mask]
+    timestamps_trimmed = timestamps_speed_limit[mask]
+
+    # Then plot using the trimmed timestamps
+    ax0.plot(steer_times, vehicle_speeds_during_turns, 'g-', label="Vehicle Speed")
+    ax0.plot(timestamps_trimmed, speed_limits_trimmed, 'k--', label="Speed Limit")
+    ax0.set_title("Vehicle Speed vs Speed Limit During Turn")
+    ax0.set_ylabel("Speed (m/s)")
+    ax0.grid(True, alpha=0.3)
+    ax0.legend()
+
+    # Top subplot: Actual and reference speeds
+    ax1.plot(steer_times, vehicle_speeds_during_turns, 'b-', label="Actual Speed")
+    ax1.plot(steer_times, turn_speed_refs, 'g--', label="Reference Turn Speed")
+
+
+    ax1.fill_between(
+        steer_times,
+        turn_speed_refs,
+        vehicle_speeds_during_turns,
+        where=(vehicle_speeds_during_turns > turn_speed_refs),
+        color='orange',
+        alpha=0.3,
+        label="Overspeed"
+    )
+    ax1.set_title("Actual vs Reference Speed During Turns")
+    ax1.set_xlabel(TIME_SECONDS_LABEL_STRING)
+    ax1.set_ylabel("Speed (m/s)")
+    ax1.grid(True, alpha=0.3)
+    ax1.legend()
+
+    # Bottom subplot: Speed Excess (Actual - Reference)
+    ax2.plot(steer_times, speed_excess, 'm-', label="Speed Excess (Actual - Reference)")
+    ax2.axhline(y=0.0, color='gray', linestyle='--', linewidth=1)
+    ax2.axhline(y=speed_excess_stats["median"], color="r", linestyle="--", label="Median")
+    ax2.set_title("Speed Excess During Turns")
+    ax2.set_xlabel(TIME_SECONDS_LABEL_STRING)
+    ax2.set_ylabel("Speed Excess (m/s)")
+    ax2.grid(True, alpha=0.3)
+    ax2.legend()
+
+    # Save or show
+    if save_plot_dir and isinstance(save_plot_dir, (str, Path)):
+        save_plot_path = Path(save_plot_dir) / "turn_speed_analysis.png"
+        fig.savefig(save_plot_path)
+        print(f"Turn speed comparison plot saved to: {save_plot_path}")
+    else:
+        plt.show()
+
+    if save_stats_dir:
+        stats_full_path = save_stats_dir / "turn_speed_analysis.json"
+        with open(stats_full_path, "w") as f:
+            json.dump(speed_excess_stats, f, indent=2)
+        print(f"Stats saved to: {save_stats_dir}")
+
+    return (is_passed, speed_excess_stats, plt.gcf(), speed_excess, steer_times)
 
 # More guidance specific analysis scripts to come ....
