@@ -1443,7 +1443,8 @@ def run_speed_limit_change_response_analysis(
     for period in steady_state_indication_periods:
         start_time, end_time, speed = period
         if not steady_state_period_added:
-            ax1.axvspan(start_time, end_time, alpha=0.2, color='g', label='Steady State Periods')
+            ax1.axvspan(start_time, end_time, alpha=0.2, color='g', label='Steady State ' \
+                'Indication Periods')
             steady_state_period_added = True
         else:
             ax1.axvspan(start_time, end_time, alpha=0.2, color='g')
