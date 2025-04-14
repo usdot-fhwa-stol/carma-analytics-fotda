@@ -1304,7 +1304,8 @@ def run_speed_limit_change_response_analysis(
     changes. For example: True if after new speed limit change,
     vehicle's commanded speed is within 20% of target for at least 3 consecutive seconds
     and starts commanding different speed within 0.1s
-
+    NOTE: This script should be used for straightaways and speed limit change segments
+          that would last at least steady_state_confirmation_time for best characterization
     Args:
         mcap_path: Path to MCAP file
         response_time_threshold: Maximum acceptable response time to speed changes (seconds)
