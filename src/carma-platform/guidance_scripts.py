@@ -1388,8 +1388,9 @@ def run_speed_limit_change_response_analysis(
 
     # Analyze response to speed changes only use raw cmd data for accuracy
     response_times, steady_state_confirmation_periods = analyze_speed_responses(
-        timestamps_cmd,
-        cmd_data,
+        timestamps,
+        aligned_cmd_velocities,
+        aligned_velocities,
         speed_limit_changes,
         steady_state_confirmation_time,
         speed_tolerance_pct
@@ -1567,13 +1568,14 @@ def detect_speed_limit_changes(timestamps, speed_limits, min_change=0.5):
     return changes
 
 
-def analyze_speed_responses(timestamps, velocities, speed_limit_changes,
+def analyze_speed_responses(timestamps, cmd_velocities, velocities, speed_limit_changes,
                            steady_state_confirmation_time, speed_tolerance_pct,
                            min_speed_change_detection_threshold=0.067):
     """
     Analyze vehicle's response to speed limit changes.
     Args:
         timestamps: Array of timestamps
+        cmd_velocities: Array of commanded vehicle velocities
         velocities: Array of vehicle velocities
         speed_limit_changes: List of detected speed limit changes
         steady_state_confirmation_time: Duration required at new speed for steady state
@@ -1601,12 +1603,12 @@ def analyze_speed_responses(timestamps, velocities, speed_limit_changes,
         # Calculate response time: time when speed differs by at least
         # min_speed_change_detection_threshold from original
         response_time_idx = change_idx
-        initial_velocity = velocities[change_idx]
+        init_cmd_velocity = cmd_velocities[change_idx]
 
         for j in range(change_idx + 1, len(timestamps)):
             # Check if velocity has changed by at least min_speed_change_detection_threshold
             # from the initial value
-            if abs(velocities[j] - initial_velocity) >= min_speed_change_detection_threshold:
+            if abs(cmd_velocities[j] - init_cmd_velocity) >= min_speed_change_detection_threshold:
                 response_time_idx = j
                 break  # from inner loop
 
@@ -1616,6 +1618,7 @@ def analyze_speed_responses(timestamps, velocities, speed_limit_changes,
         response_time_idxs.append(response_time_idx)
 
     # Analyze steady states for each response
+    # Here we assume velocities and cmd_velocities are aligned
     for i, response_time_idx in enumerate(response_time_idxs):
         # Get current speed limit
         _, _, new_limit = speed_limit_changes[i]
