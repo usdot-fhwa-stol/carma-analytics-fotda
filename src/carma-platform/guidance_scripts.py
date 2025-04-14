@@ -1457,8 +1457,8 @@ def run_speed_limit_change_response_analysis(
     # Plot speed difference between vehicle speed and speed limit
     ax2 = plt.subplot(2, 1, 2, sharex=ax1)
     speed_diff = long_velocities - speed_limits
-    ax2.plot(timestamps, speed_diff, 'r-', linewidth=1.5)
-    ax2.axhline(y=0, color='k', linestyle='-', alpha=0.3, label='Speed vs Speed Limit Difference')
+    ax2.plot(timestamps, speed_diff, 'r-', linewidth=1.5, label='Speed vs Speed Limit Difference')
+    ax2.axhline(y=0, color='k', linestyle='-', alpha=0.3)
 
     tolerance_added_to_legend = False
 
@@ -2057,8 +2057,7 @@ def main():
     Main function to run the analysis scripts.
     """
     # Example usage of the functions
-    # Replace with actual MCAP file path
-    mcap_path = "/workspaces/carma_ws/src/analysis-data/rosbag2_2025-04-11_032029/rosbag2_2025-04-11_032029_0.mcap"
+    mcap_path = "/path/to/your/mcap_file.mcap"
     run_speed_limit_change_response_analysis(mcap_path)
 
 if __name__ == "__main__":
