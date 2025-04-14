@@ -250,7 +250,7 @@ Returns a list of tuples `[(start_time1, end_time1), (start_time2, end_time2), .
 Analyze vehicle's response to speed limit changes in the map.
 Passes if for each new speed limit change, the vehicle is able to get into a steady state within acceptable tolerance percentage of the new speed limit (can't be exact due to geometry of the road) and within configurable parameter of duration. Also requires that speed command should be applied within threshold after the speed limit changes. For example: True if after new speed limit change, vehicle's commanded speed is within 20% of target for at least 3 consecutive seconds and starts commanding different speed within 0.1s
 NOTE: This script should be used for straightaways and speed limit change segments
-      that would last at least steady_state_confirmation_time for best characterization
+      that would last at least steady_state_indication_time for best characterization
 
 Uses topic:
 /hardware_interface/vehicle/twist, /guidance/route_state, /guidance/control_cmd
