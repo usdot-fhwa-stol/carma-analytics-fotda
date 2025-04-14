@@ -1286,7 +1286,7 @@ def get_planner_trajectory_intervals(
 def run_speed_limit_change_response_analysis(
     mcap_path,
     response_time_threshold=0.2,  # seconds
-    steady_state_duration=3.0,    # seconds
+    steady_state_confirmation_time=3.0,    # seconds
     speed_tolerance_pct=0.2,      # 20% tolerance for speed match
     start_time=None,
     end_time=None,
@@ -1302,13 +1302,14 @@ def run_speed_limit_change_response_analysis(
     and within configurable parameter of duration. Also requires that speed
     command should be applied within threshold after the speed limit
     changes. For example: True if after new speed limit change,
-    vehicle's commanded speed is 20% of target within 3 seconds
+    vehicle's commanded speed is within 20% of target for at least 3 consecutive seconds
     and starts commanding different speed within 0.1s
 
     Args:
         mcap_path: Path to MCAP file
         response_time_threshold: Maximum acceptable response time to speed changes (seconds)
-        steady_state_duration: Duration required at new speed to consider steady state (seconds)
+        steady_state_confirmation_time: Minimum duration required within speed tolerance to consider
+            steady state achieved
         speed_tolerance_pct: Tolerance percentage for speed matching (to account for road geometry)
         start_time: Optional start time to begin analysis
         end_time: Optional end time to end analysis
@@ -1339,7 +1340,7 @@ def run_speed_limit_change_response_analysis(
         end_time=end_time,
         field_extractors={
             topics[0]: lambda msg: (
-                msg.twist.linear.x  # longitudinal velocity
+                msg.twist.linear.x  # longitudinal velocity in m/s
             ),
             topics[1]: lambda msg: (
                 msg.speed_limit     # Actual speed limit in m/s
@@ -1385,11 +1386,11 @@ def run_speed_limit_change_response_analysis(
     speed_limit_changes = detect_speed_limit_changes(timestamps_speed_limit, speed_limit_data)
 
     # Analyze response to speed changes only use raw cmd data for accuracy
-    response_times, steady_state_periods = analyze_speed_responses(
+    response_times, steady_state_confirmation_periods = analyze_speed_responses(
         timestamps_cmd,
         cmd_data,
         speed_limit_changes,
-        steady_state_duration,
+        steady_state_confirmation_time,
         speed_tolerance_pct
     )
 
@@ -1404,14 +1405,14 @@ def run_speed_limit_change_response_analysis(
             "values": response_times.tolist() if len(response_times) > 0 else []
         },
         "steady_state": {
-            "total_periods": len(steady_state_periods),
-            "periods": steady_state_periods
+            "total_periods": len(steady_state_confirmation_periods),
+            "periods": steady_state_confirmation_periods
         }
     }
 
     # Determine pass/fail for each criterion
     response_time_pass = all(rt <= response_time_threshold for rt in response_times) if len(response_times) > 0 else False
-    steady_state_pass = len(steady_state_periods) >= len(speed_limit_changes)
+    steady_state_pass = len(steady_state_confirmation_periods) >= len(speed_limit_changes)
 
     pass_results = {
         "response_time": response_time_pass,
@@ -1436,9 +1437,14 @@ def run_speed_limit_change_response_analysis(
                 rotation=90, verticalalignment='bottom')
 
     # Highlight steady state periods
-    for period in steady_state_periods:
+    steady_state_period_added = False
+    for period in steady_state_confirmation_periods:
         start_time, end_time, speed = period
-        ax1.axvspan(start_time, end_time, alpha=0.2, color='g')
+        if not steady_state_period_added:
+            ax1.axvspan(start_time, end_time, alpha=0.2, color='g', label='Steady State Periods')
+            steady_state_period_added = True
+        else:
+            ax1.axvspan(start_time, end_time, alpha=0.2, color='g')
 
     ax1.set_title("Vehicle Speed Response to Speed Limit Changes")
     ax1.set_xlabel(TIME_SECONDS_LABEL_STRING)
@@ -1446,35 +1452,48 @@ def run_speed_limit_change_response_analysis(
     ax1.grid(True, alpha=0.3)
     ax1.legend()
 
-    # Plot speed error (difference between vehicle speed and speed limit)
+    # Plot speed difference between vehicle speed and speed limit
     ax2 = plt.subplot(2, 1, 2, sharex=ax1)
-    speed_error = long_velocities - speed_limits
-    ax2.plot(timestamps, speed_error, 'r-', linewidth=1.5)
-    ax2.axhline(y=0, color='k', linestyle='-', alpha=0.3)
+    speed_diff = long_velocities - speed_limits
+    ax2.plot(timestamps, speed_diff, 'r-', linewidth=1.5)
+    ax2.axhline(y=0, color='k', linestyle='-', alpha=0.3, label='Speed vs Speed Limit Difference')
 
-
-    # Highlight tolerance bounds - only add to legend once
     tolerance_added_to_legend = False
-    for event in speed_limit_changes:
+
+    for i, event in enumerate(speed_limit_changes):
         event_time, old_limit, new_limit = event
-        # Draw tolerance bands after the speed change
+
+        # Calculate tolerance bands for this speed limit
         upper_tolerance = new_limit * speed_tolerance_pct
         lower_tolerance = -new_limit * speed_tolerance_pct
 
+        # Determine the end time for this segment
+        if i < len(speed_limit_changes) - 1:
+            # End at the next speed limit change
+            end_time = speed_limit_changes[i+1][0]
+        else:
+            # For the last change, go to the end of the data
+            end_time = timestamps[-1]
+
+        # Draw tolerance bands only for this time segment
         if not tolerance_added_to_legend:
             # First time, add to legend
-            ax2.axhline(y=upper_tolerance, color='g', linestyle='--', alpha=0.5,
-                      label=f'Tolerance (Â±{speed_tolerance_pct*100:.0f}%)')
-            ax2.axhline(y=lower_tolerance, color='g', linestyle='--', alpha=0.5)
+            ax2.hlines(y=upper_tolerance, xmin=event_time, xmax=end_time,
+                    color='g', linestyle='--', alpha=0.5,
+                    label=f'Tolerance (±{speed_tolerance_pct*100:.0f}%)')
+            ax2.hlines(y=lower_tolerance, xmin=event_time, xmax=end_time,
+                    color='g', linestyle='--', alpha=0.5)
             tolerance_added_to_legend = True
         else:
             # Subsequent times, don't add to legend
-            ax2.axhline(y=upper_tolerance, color='g', linestyle='--', alpha=0.5)
-            ax2.axhline(y=lower_tolerance, color='g', linestyle='--', alpha=0.5)
+            ax2.hlines(y=upper_tolerance, xmin=event_time, xmax=end_time,
+                    color='g', linestyle='--', alpha=0.5)
+            ax2.hlines(y=lower_tolerance, xmin=event_time, xmax=end_time,
+                    color='g', linestyle='--', alpha=0.5)
 
-    ax2.set_title("Speed Error (Vehicle Speed - Speed Limit)")
+    ax2.set_title("Speed Difference (Vehicle Speed - Speed Limit)")
     ax2.set_xlabel(TIME_SECONDS_LABEL_STRING)
-    ax2.set_ylabel("Error (m/s)")
+    ax2.set_ylabel("Difference (m/s)")
     ax2.grid(True, alpha=0.3)
     ax2.legend()
 
@@ -1504,7 +1523,7 @@ def run_speed_limit_change_response_analysis(
             cmd_velocities=cmd_velocities,
             speed_limit_changes=speed_limit_changes,
             response_times=response_times,
-            steady_state_periods=steady_state_periods
+            steady_state_confirmation_periods=steady_state_confirmation_periods
         )
         print(f"Data saved to: {data_path}")
 
@@ -1548,23 +1567,28 @@ def detect_speed_limit_changes(timestamps, speed_limits, min_change=0.5):
 
 
 def analyze_speed_responses(timestamps, velocities, speed_limit_changes,
-                           steady_state_duration, speed_tolerance_pct):
+                           steady_state_confirmation_time, speed_tolerance_pct,
+                           min_speed_change_detection_threshold=0.067):
     """
     Analyze vehicle's response to speed limit changes.
     Args:
         timestamps: Array of timestamps
         velocities: Array of vehicle velocities
         speed_limit_changes: List of detected speed limit changes
-        steady_state_duration: Duration required at new speed for steady state
+        steady_state_confirmation_time: Duration required at new speed for steady state
         speed_tolerance_pct: Tolerance percentage for speed matching (used only for steady state)
+        min_speed_change_detection_threshold: Minimum speed change required to register as a valid
+            response to a speed limit change (default is 0.067 m/s for 2m/s^2 change in 0.033s
+            (30Hz) is 0.067 m/s)
     Returns:
         Tuple containing:
         - Array of response times for each speed change
-        - List of steady state periods [(start_time, end_time, speed), ...]
+        - List of first X seconds (based on steady_state_confirmation_time) of steady state
+            [(start_time, end_time, speed_limit), ...]
     """
     response_time_idxs = []
     response_times = np.array([])
-    steady_state_periods = []
+    steady_state_confirmation_periods = []
 
     # Get the response times and indexes for each speed limit change
     for i, change in enumerate(speed_limit_changes):
@@ -1573,17 +1597,15 @@ def analyze_speed_responses(timestamps, velocities, speed_limit_changes,
         # Find the index of the change in the timestamps array
         change_idx = np.argmin(np.abs(timestamps - change_time))
 
-        # Define threshold for response detection (0.1 difference)
-        # 3m/s^2 change in 0.033s (30Hz) is 0.1 m/s
-        response_threshold = 0.1
-
-        # Calculate response time: time when speed differs by at least 0.1 from original
+        # Calculate response time: time when speed differs by at least
+        # min_speed_change_detection_threshold from original
         response_time_idx = change_idx
         initial_velocity = velocities[change_idx]
 
         for j in range(change_idx + 1, len(timestamps)):
-            # Check if velocity has changed by at least 0.1 from the initial value
-            if abs(velocities[j] - initial_velocity) >= response_threshold:
+            # Check if velocity has changed by at least min_speed_change_detection_threshold
+            # from the initial value
+            if abs(velocities[j] - initial_velocity) >= min_speed_change_detection_threshold:
                 response_time_idx = j
                 break  # from inner loop
 
@@ -1616,8 +1638,8 @@ def analyze_speed_responses(timestamps, velocities, speed_limit_changes,
                     steady_state_start = timestamps[k]
 
                 # Check if we've had enough consecutive time in the band
-                if timestamps[k] - steady_state_start >= steady_state_duration:
-                    steady_state_periods.append((
+                if timestamps[k] - steady_state_start >= steady_state_confirmation_time:
+                    steady_state_confirmation_periods.append((
                         steady_state_start,
                         timestamps[k],
                         new_limit
@@ -1627,7 +1649,7 @@ def analyze_speed_responses(timestamps, velocities, speed_limit_changes,
                 # Reset if we go out of band
                 steady_state_start = None
 
-    return response_times, steady_state_periods
+    return response_times, steady_state_confirmation_periods
 
 def run_guidance_speed_analysis(
     mcap_path,
@@ -2031,6 +2053,7 @@ def main():
     Main function to run the analysis scripts.
     """
     # Example usage of the functions
+    # Replace with actual MCAP file path
     mcap_path = "/workspaces/carma_ws/src/analysis-data/rosbag2_2025-04-11_032029/rosbag2_2025-04-11_032029_0.mcap"
     run_speed_limit_change_response_analysis(mcap_path)
 
