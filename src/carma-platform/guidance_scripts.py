@@ -1287,12 +1287,12 @@ def run_speed_limit_change_response_analysis(
     mcap_path,
     response_time_threshold=0.2,  # seconds
     steady_state_indication_time=3.0,    # seconds
-    speed_tolerance_pct=0.2,      # 20% tolerance for speed match
+    speed_tolerance_pct=0.05,      # 20% tolerance for speed match
     start_time=None,
     end_time=None,
-    save_stats_dir=None,
+    save_stats_dir="/workspaces/carma_ws/src/analysis-data",
     save_data_dir=None,
-    save_plot_dir=None
+    save_plot_dir="/workspaces/carma_ws/src/analysis-data"
 ):
     """
     Analyze vehicle's response to speed limit changes in the map.
@@ -1424,27 +1424,25 @@ def run_speed_limit_change_response_analysis(
         "overall": response_time_pass and steady_state_pass
     }
 
-    # Create visualization
     fig = plt.figure(figsize=(15, 10))
-
     # Plot vehicle speed, speed limit, and commanded speed
     ax1 = plt.subplot(2, 1, 1)
     ax1.plot(timestamps, long_velocities, 'b-', linewidth=2, label='Vehicle Speed')
-    ax1.plot(timestamps, speed_limits, 'r-', marker='o', markevery=20, markersize=5,
-             linewidth=2, label='Speed Limit')
-    ax1.plot(timestamps, cmd_velocities, 'g-', marker='^', linewidth=1, alpha=0.7,
-             markevery=20, markersize=5, label='Commanded Speed')
-
+    ax1.plot(timestamps, speed_limits, 'r--', alpha=0.5,
+            linewidth=2, label='Speed Limit')
+    ax1.plot(timestamps, cmd_velocities, 'g-.', alpha=0.5,
+            label='Commanded Speed')
     # Highlight speed change events
     for event in speed_limit_changes:
         event_time, old_limit, new_limit = event
+        # Add vertical line to mark the event
+        ax1.axvline(x=event_time, color='k', linestyle=':', alpha=0.7)
         # Add text indicating the time point on x-axis
         ax1.text(event_time, min(long_velocities) - 1, f"{event_time:.1f}s",
                 rotation=90, verticalalignment='top')
         # Add text indicating the speed limit on y-axis
         ax1.text(event_time - 0.5, new_limit, f"{new_limit:.1f} m/s",
                 horizontalalignment='right', verticalalignment='center')
-
     # Highlight steady state periods
     steady_state_period_added = False
     for period in steady_state_indication_periods:
@@ -1455,19 +1453,23 @@ def run_speed_limit_change_response_analysis(
             steady_state_period_added = True
         else:
             ax1.axvspan(start_time, end_time, alpha=0.2, color='g')
-
     ax1.set_title("Speed Limit vs. Commanded Speed vs. Actual Speed")
     ax1.set_xlabel(TIME_SECONDS_LABEL_STRING)
     ax1.set_ylabel("Speed (m/s)")
     ax1.grid(True, alpha=0.3)
     ax1.legend()
-
     # Plot speed difference between vehicle speed and speed limit
     ax2 = plt.subplot(2, 1, 2, sharex=ax1)
     speed_diff = long_velocities - speed_limits
     ax2.plot(timestamps, speed_diff, 'r-', linewidth=1.5,
-             label='Speed Difference (Vehicle Speed - Speed Limit)')
+            label='Speed Difference (Vehicle Speed - Speed Limit)')
     ax2.axhline(y=0, color='k', linestyle='-', alpha=0.3)
+    # Also show vertical lines for speed change events in the bottom plot
+    for event in speed_limit_changes:
+        event_time, _, _ = event
+        ax2.axvline(x=event_time, color='k', linestyle=':', alpha=0.7)
+        ax2.text(event_time, min(speed_diff) - 0.5, f"{event_time:.1f}s",
+                rotation=90, verticalalignment='top')
 
     tolerance_added_to_legend = False
 
@@ -2066,7 +2068,7 @@ def main():
     Main function to run the analysis scripts.
     """
     # Example usage of the functions
-    mcap_path = "/path/to/your/mcap_file.mcap"
+    mcap_path = "/workspaces/carma_ws/src/analysis-data/rosbag2_2025-04-11_032029/rosbag2_2025-04-11_032029_0.mcap"
     run_speed_limit_change_response_analysis(mcap_path)
 
 if __name__ == "__main__":
