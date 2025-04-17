@@ -1413,7 +1413,9 @@ def run_speed_limit_change_response_analysis(
     }
 
     # Determine pass/fail for each criterion
-    response_time_pass = all(rt <= response_time_threshold for rt in response_times) if len(response_times) > 0 else False
+    response_time_pass = all(
+        rt <= response_time_threshold for rt in response_times
+        ) if len(response_times) > 0 else False
     steady_state_pass = len(steady_state_indication_periods) >= len(speed_limit_changes)
 
     pass_results = {
@@ -1428,28 +1430,33 @@ def run_speed_limit_change_response_analysis(
     # Plot vehicle speed, speed limit, and commanded speed
     ax1 = plt.subplot(2, 1, 1)
     ax1.plot(timestamps, long_velocities, 'b-', linewidth=2, label='Vehicle Speed')
-    ax1.plot(timestamps, speed_limits, 'r-', linewidth=2, label='Speed Limit')
-    ax1.plot(timestamps, cmd_velocities, 'g-', linewidth=1, alpha=0.7, label='Commanded Speed')
+    ax1.plot(timestamps, speed_limits, 'r-', marker='o', markevery=20, markersize=5,
+             linewidth=2, label='Speed Limit')
+    ax1.plot(timestamps, cmd_velocities, 'g-', marker='^', linewidth=1, alpha=0.7,
+             markevery=20, markersize=5, label='Commanded Speed')
 
     # Highlight speed change events
     for event in speed_limit_changes:
         event_time, old_limit, new_limit = event
-        ax1.axvline(x=event_time, color='k', linestyle='--', alpha=0.5)
-        ax1.text(event_time, max(old_limit, new_limit) + 1, f"{new_limit:.1f} m/s",
-                rotation=90, verticalalignment='bottom')
+        # Add text indicating the time point on x-axis
+        ax1.text(event_time, min(long_velocities) - 1, f"{event_time:.1f}s",
+                rotation=90, verticalalignment='top')
+        # Add text indicating the speed limit on y-axis
+        ax1.text(event_time - 0.5, new_limit, f"{new_limit:.1f} m/s",
+                horizontalalignment='right', verticalalignment='center')
 
     # Highlight steady state periods
     steady_state_period_added = False
     for period in steady_state_indication_periods:
         start_time, end_time, speed = period
         if not steady_state_period_added:
-            ax1.axvspan(start_time, end_time, alpha=0.2, color='g', label='Steady State ' \
-                'Indication Periods')
+            ax1.axvspan(start_time, end_time, alpha=0.2, color='g',
+                        label='Steady State Indication Periods')
             steady_state_period_added = True
         else:
             ax1.axvspan(start_time, end_time, alpha=0.2, color='g')
 
-    ax1.set_title("Vehicle Speed Response to Speed Limit Changes")
+    ax1.set_title("Speed Limit vs. Commanded Speed vs. Actual Speed")
     ax1.set_xlabel(TIME_SECONDS_LABEL_STRING)
     ax1.set_ylabel("Speed (m/s)")
     ax1.grid(True, alpha=0.3)
@@ -1458,7 +1465,8 @@ def run_speed_limit_change_response_analysis(
     # Plot speed difference between vehicle speed and speed limit
     ax2 = plt.subplot(2, 1, 2, sharex=ax1)
     speed_diff = long_velocities - speed_limits
-    ax2.plot(timestamps, speed_diff, 'r-', linewidth=1.5, label='Speed vs Speed Limit Difference')
+    ax2.plot(timestamps, speed_diff, 'r-', linewidth=1.5,
+             label='Speed Difference (Vehicle Speed - Speed Limit)')
     ax2.axhline(y=0, color='k', linestyle='-', alpha=0.3)
 
     tolerance_added_to_legend = False
@@ -1494,7 +1502,7 @@ def run_speed_limit_change_response_analysis(
             ax2.hlines(y=lower_tolerance, xmin=event_time, xmax=end_time,
                     color='g', linestyle='--', alpha=0.5)
 
-    ax2.set_title("Speed Difference (Vehicle Speed - Speed Limit)")
+    ax2.set_title("Speed Difference")
     ax2.set_xlabel(TIME_SECONDS_LABEL_STRING)
     ax2.set_ylabel("Difference (m/s)")
     ax2.grid(True, alpha=0.3)
