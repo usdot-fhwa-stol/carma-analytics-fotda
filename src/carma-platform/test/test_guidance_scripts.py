@@ -540,3 +540,176 @@ def test_get_planner_trajectory_intervals(mock_mcap_path):
             mock_mcap_path, "guidance/plugins/inlanecruising_plugin"
         )
         assert intervals == [(0.0, 3.0), (5.0, 7.0), (9.0, 9.1)]
+
+
+def test_detect_speed_limit_changes():
+    """Test detection of speed limit changes with threshold"""
+    # Test data
+    timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+    speed_limits = np.array([10.0, 10.0, 15.0, 15.0, 9.0, 9.0])
+    min_change = 0.5
+
+    # Expected changes at t=2 and t=4
+    changes = detect_speed_limit_changes(timestamps, speed_limits, min_change)
+
+    assert len(changes) == 2
+    assert changes[0][0] == 2.0  # First change timestamp
+    assert changes[0][1] == 10.0  # Old limit
+    assert changes[0][2] == 15.0  # New limit
+    assert changes[1][0] == 4.0  # Second change timestamp
+    assert changes[1][1] == 15.0  # Old limit
+    assert changes[1][2] == 9.0   # New limit
+
+    """Test that changes below threshold are ignored"""
+    timestamps = np.array([0.0, 1.0, 2.0, 3.0])
+    speed_limits = np.array([10.0, 10.3, 10.4, 10.4])  # Small changes
+    min_change = 0.5
+
+    changes = detect_speed_limit_changes(timestamps, speed_limits, min_change)
+
+    assert len(changes) == 0  # No changes should be detected
+
+    """Test handling of zero values in speed limits"""
+    timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+    speed_limits = np.array([0.0, 0.0, 5.0, 5.0, 5.0])  # Start with zeros
+    min_change = 0.5
+
+    changes = detect_speed_limit_changes(timestamps, speed_limits, min_change)
+
+    assert len(changes) == 1
+    assert changes[0][0] == 2.0
+    assert changes[0][1] == 0.0
+    assert changes[0][2] == 5.0
+
+def test_analyze_speed_responses():
+    """Test basic response time calculation"""
+    timestamps = np.array([0.0, 0.1, 0.2, 0.3, 0.4])
+    cmd_velocities = np.array([10.0, 10.0, 10.1, 10.5, 10.5])  # Command changes at t=0.2
+    velocities = np.array([10.0, 10.0, 10.0, 10.2, 10.4])  # Vehicle starts responding at t=0.3
+    speed_limit_changes = [(0.1, 8.0, 11.0)]  # Speed limit changes at t=0.1
+    steady_state_time = 0.1
+    tolerance_pct = 0.05
+
+    response_times, steady_state_periods = analyze_speed_responses(
+        timestamps, cmd_velocities, velocities, speed_limit_changes,
+        steady_state_time, tolerance_pct
+    )
+
+    assert len(response_times) == 1
+    assert response_times[0] == pytest.approx(0.1, abs=1e-3)  # Response time from 0.1 to 0.2
+
+    """Test handling of multiple speed limit changes"""
+    timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0])
+    cmd_velocities = np.array([10.0, 10.0, 15.0, 15.0, 15.0, 8.0, 8.0, 8.0])  # Commands at t=2 and t=5
+    velocities = np.array([10.0, 10.0, 10.0, 12.5, 15.0, 15.0, 10.0, 8.0])  # Vehicle responds gradually
+    speed_limit_changes = [(1.0, 10.0, 15.0), (5.0, 15.0, 8.0)]
+    steady_state_time = 1.0
+    tolerance_pct = 0.05
+
+    response_times, steady_state_periods = analyze_speed_responses(
+        timestamps, cmd_velocities, velocities, speed_limit_changes,
+        steady_state_time, tolerance_pct
+    )
+
+    assert len(response_times) == 2
+    assert response_times[0] == pytest.approx(1.0, abs=1e-3)  # Response time for first change
+    assert response_times[1] == pytest.approx(0.0, abs=1e-3)  # Response time for second change
+
+    assert len(steady_state_periods) == 2
+    # First steady state (at 15 m/s) from t=4 to t=5
+    assert steady_state_periods[0][0] == pytest.approx(4.0, abs=1e-3)
+    assert steady_state_periods[0][1] == pytest.approx(5.0, abs=1e-3)
+    assert steady_state_periods[0][2] == pytest.approx(15.0, abs=1e-3)
+
+    # Second steady state (at 8 m/s) from t=6 to t=7
+    assert steady_state_periods[1][0] == pytest.approx(6.0, abs=1e-3)
+    assert steady_state_periods[1][1] == pytest.approx(7.0, abs=1e-3)
+    assert steady_state_periods[1][2] == pytest.approx(8.0, abs=1e-3)
+
+
+@patch('matplotlib.pyplot.figure')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_run_speed_limit_change_response_analysis_basic(mock_json_dump, mock_savez, mock_figure):
+    """Test the main analysis function with basic mocked data"""
+    with patch('speed_analysis.extract_mcap_data') as mock_extract:
+        # Create simple test data
+        timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+        velocities = np.array([10.0, 10.0, 12.0, 14.0, 15.0])
+        speed_limits = np.array([10.0, 15.0, 15.0, 15.0, 15.0])
+        cmd_velocities = np.array([10.0, 15.0, 15.0, 15.0, 15.0])
+
+        # Setup mock return for extract_mcap_data
+        mock_extract.return_value = {
+            '/hardware_interface/vehicle/twist': (timestamps, velocities),
+            '/guidance/route_state': (timestamps, speed_limits),
+            '/guidance/control_cmd': (timestamps, cmd_velocities)
+        }
+
+        # Mock align_time_series to return unchanged data
+        with patch('speed_analysis.align_time_series') as mock_align:
+            mock_align.side_effect = lambda t1, d1, t2, d2: (t1, d2, d1)
+
+            # Create mock figure
+            mock_fig = MagicMock()
+            mock_figure.return_value = mock_fig
+
+            # Run the analysis function
+            result = run_speed_limit_change_response_analysis(
+                mcap_path="test.mcap",
+                response_time_threshold=0.2,
+                steady_state_indication_time=1.0,
+                speed_tolerance_pct=0.05,
+                save_stats_dir=None,
+                save_data_dir=None,
+                save_plot_dir=None
+            )
+
+            # Check basic structure of results
+            assert len(result) == 5
+            passed, stats, fig, changes, response_times = result
+
+            # Verify the function was called correctly
+            mock_extract.assert_called_once()
+
+            # Check that results have the right types
+            assert isinstance(passed, bool)
+            assert isinstance(stats, dict)
+            assert fig == mock_fig
+            assert isinstance(changes, list)
+            assert isinstance(response_times, np.ndarray)
+
+
+@patch('matplotlib.pyplot.figure')
+def test_run_speed_limit_change_response_analysis_fail_case(mock_figure):
+    """Test the analysis function with data that should fail the thresholds"""
+    with patch('speed_analysis.extract_mcap_data') as mock_extract:
+        with patch('speed_analysis.align_time_series') as mock_align:
+            # Create test data with slow response times
+            timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+            velocities = np.array([10.0, 10.0, 10.0, 10.0, 11.0])  # Very slow to respond
+            speed_limits = np.array([10.0, 15.0, 15.0, 15.0, 15.0])  # Change at t=1
+            cmd_velocities = np.array([10.0, 10.0, 10.0, 15.0, 15.0])  # Command delayed until t=3
+
+            mock_extract.return_value = {
+                '/hardware_interface/vehicle/twist': (timestamps, velocities),
+                '/guidance/route_state': (timestamps, speed_limits),
+                '/guidance/control_cmd': (timestamps, cmd_velocities)
+            }
+
+            # Mock align_time_series
+            mock_align.side_effect = lambda t1, d1, t2, d2: (t1, d2, d1)
+
+            # Mock figure
+            mock_figure.return_value = MagicMock()
+
+            # Run with strict thresholds
+            passed, stats, _, _, _ = run_speed_limit_change_response_analysis(
+                mcap_path="test.mcap",
+                response_time_threshold=0.1,  # Strict threshold
+                steady_state_indication_time=0.5,
+                speed_tolerance_pct=0.05
+            )
+
+            # Test should fail
+            assert passed == False
