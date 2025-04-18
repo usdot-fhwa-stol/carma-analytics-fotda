@@ -632,7 +632,7 @@ def test_analyze_speed_responses():
 @patch('json.dump')
 def test_run_speed_limit_change_response_analysis_basic(mock_json_dump, mock_savez, mock_figure):
     """Test the main analysis function with basic mocked data"""
-    with patch('speed_analysis.extract_mcap_data') as mock_extract:
+    with patch('parse_ros2_bags.extract_mcap_data') as mock_extract:
         # Create simple test data
         timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
         velocities = np.array([10.0, 10.0, 12.0, 14.0, 15.0])
@@ -647,7 +647,7 @@ def test_run_speed_limit_change_response_analysis_basic(mock_json_dump, mock_sav
         }
 
         # Mock align_time_series to return unchanged data
-        with patch('speed_analysis.align_time_series') as mock_align:
+        with patch('guidance_scripts.align_time_series') as mock_align:
             mock_align.side_effect = lambda t1, d1, t2, d2: (t1, d2, d1)
 
             # Create mock figure
@@ -683,8 +683,8 @@ def test_run_speed_limit_change_response_analysis_basic(mock_json_dump, mock_sav
 @patch('matplotlib.pyplot.figure')
 def test_run_speed_limit_change_response_analysis_fail_case(mock_figure):
     """Test the analysis function with data that should fail the thresholds"""
-    with patch('speed_analysis.extract_mcap_data') as mock_extract:
-        with patch('speed_analysis.align_time_series') as mock_align:
+    with patch('parse_ros2_bags.extract_mcap_data') as mock_extract:
+        with patch('guidance_scripts.align_time_series') as mock_align:
             # Create test data with slow response times
             timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
             velocities = np.array([10.0, 10.0, 10.0, 10.0, 11.0])  # Very slow to respond
