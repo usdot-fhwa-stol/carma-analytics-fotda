@@ -1290,9 +1290,9 @@ def run_speed_limit_change_response_analysis(
     speed_tolerance_pct=0.05,      # 5% tolerance for speed match
     start_time=None,
     end_time=None,
-    save_stats_dir="/workspaces/carma_ws/src/analysis-data",
+    save_stats_dir=None,
     save_data_dir=None,
-    save_plot_dir="/workspaces/carma_ws/src/analysis-data"
+    save_plot_dir=None
 ):
     """
     Analyze vehicle's response to speed limit changes in the map.
@@ -2068,7 +2068,7 @@ def main():
     Main function to run the analysis scripts.
     """
     # Example usage of the functions
-    mcap_path = "/workspaces/carma_ws/src/analysis-data/rosbag2_2025-04-11_032029/rosbag2_2025-04-11_032029_0.mcap"
+    mcap_path = "/path/to/your/mcap_file.mcap"
     run_speed_limit_change_response_analysis(mcap_path)
 
 if __name__ == "__main__":
