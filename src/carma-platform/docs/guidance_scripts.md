@@ -248,7 +248,7 @@ Returns a list of tuples `[(start_time1, end_time1), (start_time2, end_time2), .
 
 ### run_speed_limit_change_response_analysis
 Analyze vehicle's response to speed limit changes in the map.
-Passes if for each new speed limit change, the vehicle is able to get into a steady state within acceptable tolerance percentage of the new speed limit (can't be exact due to geometry of the road) and within configurable parameter of duration. Also requires that speed command should be applied within threshold after the speed limit changes. For example: True if after new speed limit change, vehicle's commanded speed is within 20% of target for at least 3 consecutive seconds and starts commanding different speed within 0.1s
+Passes if for each new speed limit change, the vehicle is able to get into a steady state within acceptable tolerance percentage of the new speed limit (can't be exact due to geometry of the road) and within configurable parameter of duration. Also requires that speed command should be applied within threshold after the speed limit changes. For example: True if after new speed limit change, vehicle's commanded speed is within 5% of target for at least 3 consecutive seconds and starts commanding different speed within 0.1s
 NOTE: This script should be used for straightaways and speed limit change segments
       that would last at least steady_state_indication_time for best characterization
 
@@ -260,7 +260,7 @@ Uses topic:
 - `mcap_path`: Path to MCAP file
 - `response_time_threshold` (seconds): Maximum acceptable response time to speed changes (default: 0.2s)
 - `steady_state_duration` (seconds): Duration required at new speed to consider steady state (default: 3.0s)
-- `speed_tolerance_pct`: Tolerance percentage for speed matching (to account for road geometry, default: 0.2 or 20%)
+- `speed_tolerance_pct`: Tolerance percentage for speed matching (to account for road geometry, default: 0.05 or 5%)
 - `start_time`: Optional start time to begin analysis
 - `end_time`: Optional end time to end analysis
 - `save_stats_dir`: Directory to save extracted statistics (optional)

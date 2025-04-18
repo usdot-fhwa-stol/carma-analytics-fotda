@@ -30,7 +30,7 @@ EXCESS_TURN_SPEED_THRESHOLD = 0.1 # m/s
 # 6. Speed limit change response analysis
 RESPONSE_TIME_THRESHOLD = 0.2 # seconds
 STEADY_STATE_DURATION = 3.0 # seconds
-SPEED_TOLERANCE_PCT = 0.2 # 20% tolerance
+SPEED_TOLERANCE_PCT = 0.05 # 5% tolerance
 
 
 def analyze_mcap_file_for_regression_analysis(

@@ -1287,7 +1287,7 @@ def run_speed_limit_change_response_analysis(
     mcap_path,
     response_time_threshold=0.2,  # seconds
     steady_state_indication_time=3.0,    # seconds
-    speed_tolerance_pct=0.05,      # 20% tolerance for speed match
+    speed_tolerance_pct=0.05,      # 5% tolerance for speed match
     start_time=None,
     end_time=None,
     save_stats_dir="/workspaces/carma_ws/src/analysis-data",
@@ -1302,7 +1302,7 @@ def run_speed_limit_change_response_analysis(
     and within configurable parameter of duration. Also requires that speed
     command should be applied within threshold after the speed limit
     changes. For example: True if after new speed limit change,
-    vehicle's commanded speed is within 20% of target for at least 3 consecutive seconds
+    vehicle's commanded speed is within 5% of target for at least 3 consecutive seconds
     and starts commanding different speed within 0.1s
     NOTE: This script should be used for straightaways and speed limit change segments
           that would last at least steady_state_indication_time for best characterization
