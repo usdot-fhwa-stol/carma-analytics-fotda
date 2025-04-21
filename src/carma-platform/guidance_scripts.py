@@ -1787,7 +1787,6 @@ def run_guidance_speed_analysis(
 
     return (is_passed, speed_limit_error_stats, plt.gcf(), speed_limit_error, timestamps)
 
-
 def compute_turn_reference_speed(steering_angle_rad, wheelbase_m=2.7, a_max=2.5):
     if abs(steering_angle_rad) < 1e-3:
         return float('inf')  # straight line, no turn limit

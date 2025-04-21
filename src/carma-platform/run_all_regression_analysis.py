@@ -4,7 +4,6 @@ from guidance_scripts import (
     get_engage_time,
     run_crosstrack_analysis,
     run_acceleration_comfort_analysis,
-    run_guidance_speed_analysis,
     run_turn_speed_analysis,
     run_turn_acceleration_analysis,
     run_speed_limit_change_response_analysis
@@ -13,6 +12,9 @@ from run_all_analysis import run_all_analysis
 import argparse
 import argcomplete
 
+## Start and end time for the analysis - defaults to guidance engage and disengage
+START_TIME_IN_EPOCH_S = None # epoch time in seconds
+END_TIME_IN_EPOCH_S = None  # Epoch time in seconds
 
 # VARIOUS THRESHOLDS FOR THE METRICS
 # 1. Cross_track analysis
@@ -27,7 +29,7 @@ TURN_THRESHOLD = 0.2 #rad
 WHEELBASE = 2.75 # meters
 LATERAL_ACCELERATION_LIMIT = 2.5 # m/s^2
 EXCESS_TURN_SPEED_THRESHOLD = 0.1 # m/s
-# 6. Speed limit change response analysis
+# 5. Speed limit change response analysis
 RESPONSE_TIME_THRESHOLD = 0.2 # seconds
 STEADY_STATE_DURATION = 3.0 # seconds
 SPEED_TOLERANCE_PCT = 0.05 # 5% tolerance
@@ -38,11 +40,15 @@ def analyze_mcap_file_for_regression_analysis(
 ) -> list:
     """Extract single MCAP file and run all control analysis on it"""
     # 0. General steps needed for all
-    try:
-        engage_time, disengage_time = get_engage_time(mcap_path)
-    except Exception as e:
-        print(f"Error getting engage time for mcap {mcap_path}: {e}")
-        return None
+    if not START_TIME_IN_EPOCH_S or not END_TIME_IN_EPOCH_S:
+        try:
+            engage_time, disengage_time = get_engage_time(mcap_path)
+        except Exception as e:
+            print(f"Error getting engage time for mcap {mcap_path}: {e}")
+            return None
+    else:
+        engage_time = START_TIME_IN_EPOCH_S
+        disengage_time = END_TIME_IN_EPOCH_S
 
     # Run all the tests for engage to disengage
     # and specifically for lane change durations:
@@ -90,25 +96,7 @@ def analyze_mcap_file_for_regression_analysis(
             )
             analysis_stats["run_acceleration_comfort_analysis"] = None
 
-        # 3. Guidance speed analysis
-        try:
-            is_passed, _, _, _, _  = run_guidance_speed_analysis(
-                mcap_path,
-                SPEED_LIMIT_ERROR_THRESHOLD_TO_PASS_MPH,
-                start_time,
-                end_time,
-                stats_dir,
-                data_dir,
-                plots_dir,
-            )
-            analysis_stats["run_guidance_speed_analysis"] = is_passed
-        except Exception as e:
-            print(
-                f"Error analyzing {mcap_path} for metric run_guidance_speed_analysis: {e}"
-            )
-            analysis_stats["run_guidance_speed_analysis"] = None
-
-        # 4. Turn speed analysis
+        # 3. Turn speed analysis
         try:
             is_passed, _, _, _, _ = run_turn_speed_analysis(
                 mcap_path,
@@ -129,7 +117,7 @@ def analyze_mcap_file_for_regression_analysis(
             )
             analysis_stats["run_turn_speed_analysis"] = None
 
-        # 5. Turn acceleration analysis
+        # 4. Turn acceleration analysis
         try:
             is_passed, _, _, _, _ = run_turn_acceleration_analysis(
                 mcap_path,
@@ -149,7 +137,7 @@ def analyze_mcap_file_for_regression_analysis(
             )
             analysis_stats["run_turn_acceleration_analysis"] = None
 
-        # 6. Speed limit change response analysis
+        # 5. Speed limit change response analysis
         try:
             is_passed, _, _, _, _ = run_speed_limit_change_response_analysis(
                 mcap_path,
