@@ -6,11 +6,15 @@ from guidance_scripts import (
     run_acceleration_comfort_analysis,
     run_turn_speed_analysis,
     run_turn_acceleration_analysis,
+    run_speed_limit_change_response_analysis
 )
 from run_all_analysis import run_all_analysis
 import argparse
 import argcomplete
 
+## Start and end time for the analysis - defaults to guidance engage and disengage
+START_TIME_IN_EPOCH_S = None # epoch time in seconds
+END_TIME_IN_EPOCH_S = None  # Epoch time in seconds
 
 # VARIOUS THRESHOLDS FOR THE METRICS
 # 1. Cross_track analysis
@@ -25,11 +29,10 @@ TURN_THRESHOLD = 0.2 #rad
 WHEELBASE = 2.75 # meters
 LATERAL_ACCELERATION_LIMIT = 2.5 # m/s^2
 EXCESS_TURN_SPEED_THRESHOLD = 0.1 # m/s
-
-## Start and end time for the analysis - defaults to guidance engage and disengage
-START_TIME_IN_EPOCH_S = None # epoch time in seconds
-END_TIME_IN_EPOCH_S = None  # Epoch time in seconds
-
+# 5. Speed limit change response analysis
+RESPONSE_TIME_THRESHOLD = 0.2 # seconds
+STEADY_STATE_DURATION = 3.0 # seconds
+SPEED_TOLERANCE_PCT = 0.05 # 5% tolerance
 
 
 def analyze_mcap_file_for_regression_analysis(
@@ -133,6 +136,26 @@ def analyze_mcap_file_for_regression_analysis(
                 f"Error analyzing {mcap_path} for metric run_turn_acceleration_analysis: {e}"
             )
             analysis_stats["run_turn_acceleration_analysis"] = None
+
+        # 5. Speed limit change response analysis
+        try:
+            is_passed, _, _, _, _ = run_speed_limit_change_response_analysis(
+                mcap_path,
+                RESPONSE_TIME_THRESHOLD,
+                STEADY_STATE_DURATION,
+                SPEED_TOLERANCE_PCT,
+                start_time,
+                end_time,
+                stats_dir,
+                data_dir,
+                plots_dir,
+            )
+            analysis_stats["run_speed_limit_change_response_analysis"] = is_passed
+        except Exception as e:
+            print(
+                f"Error analyzing {mcap_path} for metric run_speed_limit_change_response_analysis: {e}"
+            )
+            analysis_stats["run_speed_limit_change_response_analysis"] = None
 
         all_analysis_stats.append(analysis_stats)
 
