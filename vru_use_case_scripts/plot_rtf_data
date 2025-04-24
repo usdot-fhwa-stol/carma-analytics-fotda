@@ -51,18 +51,19 @@ if not csv_source:
 try:
     df = pd.read_csv(
         csv_source,
-        dtype={"sim_time_ns": int, "rtf": float},
+        parse_dates=['system_time_dt'],
+        dtype={ "sim_time_ns": int, "rtf": float},
     )
 except ValueError:
     print("plot_rtf_data: malformed csv data")
     sys.exit(1)
 
-if list(df.columns) != ["sim_time_ns", "rtf"]:
+if list(df.columns) != ["system_time_dt", "sim_time_ns", "rtf"]:
     print("plot_rtf_data: missing or incorrect csv header")
     sys.exit(1)
 
 _, ax = plt.subplots()
-
+print(f"Plotting RTF data from {df['system_time_dt'].iloc[0]} - {df['system_time_dt'].iloc[-1]}")
 ax.plot(df["sim_time_ns"] / 1e9, df["rtf"], label="Instantaneous")
 ax.axhline(y=df["rtf"].mean(), linestyle="dotted", color="k", label="Mean")
 
