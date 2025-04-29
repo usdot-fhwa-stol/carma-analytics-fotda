@@ -117,7 +117,7 @@ def plot_crosstrack_error(bag_dir, route_topic, show_plots=True):
 
     if show_plots:
         plt.plot(distances_along_route, route_deviations, label="Crosstrack Error")
-        plt.plot(distances_along_route, np.zeros(len(route_deviations)), label="Route")
+        plt.plot(distances_along_route, np.zeros(len(route_deviations)), '--', color='#CF3E00', label="Route")
         plt.xlabel("Downtrack (m)")
         plt.ylabel("Crosstrack Error (m)")
         plt.title("Crosstrack Error vs. Downtrack")

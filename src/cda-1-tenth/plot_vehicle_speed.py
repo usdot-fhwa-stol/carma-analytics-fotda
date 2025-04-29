@@ -54,8 +54,8 @@ def plot_vehicle_speed(bag_dir, show_plots=True):
     velocity_time_seconds = [(date - velocity_datetimes[0]).total_seconds() for date in velocity_datetimes]
     if show_plots:
         plt.plot(velocity_time_seconds, target_velocities, '-', label="Target Velocity")
-        plt.plot(velocity_time_seconds, velocities, '--', label="Measured Velocity")
-        plt.plot(velocity_time_seconds, len(velocity_time_seconds) * [0.5 * np.max(target_velocities)], "--r", label="Slowdown Threshold")
+        plt.plot(velocity_time_seconds, velocities, '--', color='#CF3E00', label="Measured Velocity")
+        plt.plot(velocity_time_seconds, len(velocity_time_seconds) * [0.5 * np.max(target_velocities)], ":r", label="Slowdown Threshold")
         plt.xlabel("Time (s)")
         plt.ylabel("Speed (m/s)")
         plt.legend()

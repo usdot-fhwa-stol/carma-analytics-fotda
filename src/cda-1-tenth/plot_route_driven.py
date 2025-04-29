@@ -38,10 +38,15 @@ def plot_colorline(x, y, c):
     # Plot a line color coded by vehicle speed
     col = cm.coolwarm_r((c-np.min(c))/(np.max(c)-np.min(c)))
     ax = plt.gca()
+    max_speed = np.argmax(c)
     for i in np.arange(len(x)-1):
-        ax.plot([x[i],x[i+1]], [y[i],y[i+1]], c=col[i], linewidth=2.0)
+        if i == max_speed:
+            ax.plot([x[i],x[i+1]], [y[i],y[i+1]], c=col[i], linewidth=2.0, label="Estimated Path Driven")
+        else:
+            ax.plot([x[i],x[i+1]], [y[i],y[i+1]], c=col[i], linewidth=2.0)
     im = ax.scatter(x, y, c=c, s=0, cmap=cm.coolwarm_r)
     cb = plt.colorbar(im)
+    cb.set_label('Speed (m/s)')
     cb.ax.yaxis.set_label_coords(5.0, 0.0)
     cb.ax.set_ylabel('Speed (m/s)', rotation=270)
     return im
@@ -97,10 +102,15 @@ def plot_route_driven(bag_dir, show_localization=False, show_speed=False):
             y_max = np.max([route_graph.markers[i].pose.position.x, y_max])
             nx_graph.add_node(route_graph.markers[i].id, pos=(-route_graph.markers[i].pose.position.y, route_graph.markers[i].pose.position.x))
     route_graph_coordinates = np.array(route_graph_coordinates)
+    label_initialized = False
     for i in range(len(route_graph.markers)):
         # Create edges connecting the graph nodes
         if route_graph.markers[i].type == 5:
-            plt.plot([-route_graph.markers[i].points[0].y, -route_graph.markers[i].points[1].y], [route_graph.markers[i].points[0].x, route_graph.markers[i].points[1].x], 'r')
+            if not label_initialized:
+                plt.plot([-route_graph.markers[i].points[0].y, -route_graph.markers[i].points[1].y], [route_graph.markers[i].points[0].x, route_graph.markers[i].points[1].x], 'r', label="Route")
+                label_initialized = True
+            else:
+                plt.plot([-route_graph.markers[i].points[0].y, -route_graph.markers[i].points[1].y], [route_graph.markers[i].points[0].x, route_graph.markers[i].points[1].x], 'r')
             _, start_index = find_closest_point(route_graph_coordinates[:, 1:], [-route_graph.markers[i].points[0].y, route_graph.markers[i].points[0].x], trim_ends=False)
             _, end_index = find_closest_point(route_graph_coordinates[:, 1:], [-route_graph.markers[i].points[1].y, route_graph.markers[i].points[1].x], trim_ends=False)
             nx_graph.add_edge(route_graph_coordinates[start_index, 0], route_graph_coordinates[end_index, 0])
@@ -127,7 +137,7 @@ def plot_route_driven(bag_dir, show_localization=False, show_speed=False):
                 plt.scatter(odometry[idx,0], odometry[idx,1], s=20, c='red', zorder=10)
             plt.text(odometry[idx,0] + 0.1, odometry[idx,1] + 0.1, "{:.2f}".format(speed))
     else:
-        plt.plot(route_graph_coordinates[1:,1], route_graph_coordinates[1:,2], 'ro', label="Route")
+        plt.plot(route_graph_coordinates[1:,1], route_graph_coordinates[1:,2], 'ro')
         plt.plot(odometry[:,0], odometry[:,1], 'b', label="Estimated Path Driven")
         for coordinate, downtrack in zip(map_coords_to_downtrack.keys(), map_coords_to_downtrack.values()):
             plt.text(coordinate[0] + 0.1, coordinate[1] + 0.1, "{:.1f}".format(downtrack))
