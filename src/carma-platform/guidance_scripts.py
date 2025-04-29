@@ -1866,7 +1866,6 @@ def run_turn_acceleration_analysis(
 
     # Plot
     fig = plt.figure(figsize=(15, 8))
-    axes = axes.flatten()
 
     ax1 = fig.add_subplot(2, 1, 1)
     ax1.plot(turn_times, lateral_accels, 'b-', label="Lateral Acceleration")
