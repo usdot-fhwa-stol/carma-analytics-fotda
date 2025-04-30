@@ -4,7 +4,7 @@ The two vehicle scenario contained in the script corresponds to the two vehicle 
 
 The three vehicle scenario contained in the script covers the three vehicle platooning configuration used for validation testing.
 
-Instructions:
+**Instructions:**
 
 Step 1: Please confirm you have the necessary packages installed to run this script. To do so, run the script install_dependencies.sh in terminal by navigating to the directory with the script file and running the command below:
 
@@ -15,9 +15,9 @@ Step 2: If needed, decompress the bag files you will be using. To do so, run the
 sudo bash bag_decompress.sh
 
 --------------------------------------------------
-Attribution (alphabetical order):
+**Attribution (alphabetical order):**
 
-Andrew Fortier - R&D Engineer (Leidos)
-Andy Gaines - R&D Engineer (Leidos)
-Andy Lam - General Engineer (Volpe National Transportation Systems Center)
-Ankur Tyagi - Sr. Data Scientist (Leidos)
+- Andrew Fortier - R&D Engineer (Leidos)
+- Andy Gaines - R&D Engineer (Leidos)
+- Andy Lam - General Engineer (Volpe National Transportation Systems Center)
+- Ankur Tyagi - Sr. Data Scientist (Leidos)
