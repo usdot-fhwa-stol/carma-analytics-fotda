@@ -21,8 +21,9 @@ def get_service_time_csv_as_df(csv_source):
     try:
         df = pd.read_csv(
             csv_source,
-            dtype={ "real_time_ms": int, "carma_time_ms": int},
+            dtype={ "Real Time (ms) ": int, " Carma Time (ms)": int},
         )
+        df.rename(columns={"Real Time (ms)": "real_time_ms", " Carma Time (ms)": "carma_time_ms"}, inplace=True)
     except ValueError:
         print("plot_rtf_data: malformed csv data")
         sys.exit(1)
@@ -54,11 +55,13 @@ def get_csv_files(directory):
     # Create dictionary to store the CSV files as df
     csv_dict = {}
     for file in csv_filenames:
+        print("Adding", file, "to the list of CSV sources")
         # Add the file to the dictionary
         if "cdasim" in file.split("_"):
             csv_dict[file] = get_rtfcsv_as_df(os.path.join(directory, file))
         else:
             csv_dict[file] = get_service_time_csv_as_df(os.path.join(directory, file))
+
     return csv_dict
 
 
