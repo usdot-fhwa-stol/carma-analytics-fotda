@@ -21,15 +21,17 @@ Output the CSV data directly to a file:
 ```console
 cat vehicle_prgLog.log  | ./extract_srm_timestamp > vsp_srm_data.csv
 ```
-or 
+
+or
+
 ```console
 cat cda_town5_prsLog.log  | ./extract_srm_timestamp > mrp_srm_data.csv
 ```
 
-
 ## `plot_srm_latency`
 
-This script takes in CSV-formatted vsp and mrp SRM timestamps and plots simulation time latency 
+This script takes in CSV-formatted vsp and mrp SRM timestamps and plots simulation time latency
+
 ```
 usage: plot_rtf [-h] [--max-acceptable MAX_ACCEPTABLE] [--plots-dir PLOTS_DIR] [--mrp-data-file MRP_DATA_FILE] [--vsp-data-file VSP_DATA_FILE]
 
@@ -46,3 +48,10 @@ options:
   --vsp-data-file VSP_DATA_FILE
                         csv file containing vsp data
 ```
+
+## `plot_service_time_data`
+
+This script takes in CSV-formatted data for cdasim, vsp and mrp with simulation time and corresponding system time. It plots each simulation time update against the difference in system between between cdasim and the specific service. cdasim is taken as the base to compare against.
+
+```
+usage: plot_service_time_data <path to directory with service logs>
