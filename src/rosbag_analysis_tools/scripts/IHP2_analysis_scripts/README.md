@@ -13,3 +13,11 @@ sudo bash install_dependencies.sh
 Step 2: If needed, decompress the bag files you will be using. To do so, run the script bag_decompress.sh in terminal by navigating to the directory with the script file and running the command below (make sure the bag files are in the same directory as the script):
 
 sudo bash bag_decompress.sh
+
+--------------------------------------------------
+Attribution (alphabetical order):
+
+Andrew Fortier - R&D Engineer (Leidos)
+Andy Gaines - R&D Engineer (Leidos)
+Andy Lam - General Engineer (Volpe National Transportation Systems Center)
+Ankur Tyagi - Sr. Data Scientist (Leidos)
