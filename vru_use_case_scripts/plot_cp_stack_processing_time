@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+
+from argparse import ArgumentParser
+from pathlib import Path
+import pandas as pd
+import matplotlib.pyplot as plt
+
+COOPERATIVE_PERCEPTION_STACK_FREQUENCY_IN_HZ = 10.0
+SIM_TIME_TO_USE = "System Time (s)"
+
+def parse_df(file_path: Path):
+    df = pd.read_csv(file_path, header=0)
+
+    return df
+
+def filter_df_for_object_type(df: pd.DataFrame, object_type: str):
+    return df.loc[df["Object Type"] == object_type].reset_index(drop=True)
+
+def get_unique_object_ids(df: pd.DataFrame):
+    return list(set(df["Object ID"]))
+
+parser = ArgumentParser(
+    prog="plot_cp_stack_processing_time",
+    description="Extract the cdasim time (ms) it takes for CP stack to process an object",
+)
+
+parser.add_argument(
+    "--vehicle-detection-csv",
+    type=Path,
+    help="CSV file containing object detection entries with 'Received CDASim Time (ms)' and 'Object Type' from a rosbag file",
+    required=True,
+)
+
+parser.add_argument(
+    "--plots-dir",
+    type=Path,
+    default=Path("plots"),
+    help="Directory to store the generated plots",
+)
+
+parser.add_argument(
+    "--show-plot",
+    help="Show cooperatave perception stack processing time plot ",
+    action="store_true",
+    required=False
+)
+
+def plot_duration(df: pd.DataFrame, show_plot, plots_dir):
+    processing_mean = df["Duration Between Msgs (s)"].mean()
+    print(f"Mean CP stack processing simulation time: {processing_mean}")
+    # Plot duration over Message Time for each Object ID
+    fig, ax = plt.subplots()
+    ax.stem(
+        df[SIM_TIME_TO_USE],
+        df["Duration Between Msgs (s)"],
+        basefmt=" ",
+        markerfmt=" ",
+        use_line_collection=True,
+    )
+    operation_period = 1.0 / COOPERATIVE_PERCEPTION_STACK_FREQUENCY_IN_HZ
+    ax.set_xlim(left=0)  # Set x-axis to start at zero
+    ax.set_ylim(bottom=0, top=0.4)  # Set y-axis to start at zero
+    plt.axhline(y = operation_period * 2 , color="r", linestyle="--", label="Operation Cutoff") # Max can be only twice as the operation period
+    plt.axhline(
+        y= operation_period,
+        color="b",
+        linestyle="-.",
+        label="CP stack operation period",
+    )
+    ax.axhline(y=processing_mean, linestyle="dotted", color="k", label="Mean Processing Time")
+    plt.xlabel("System Time of the Object that is Missing (s) ", fontsize=16)
+    plt.ylabel("Duration in CDASim Time (s)", fontsize=16)
+    plt.title(f"Processing Duration for CP", fontsize=18)
+    plt.legend()
+    plt.savefig(plots_dir / "cp_stack_processing_time.png")
+    if (show_plot):
+        plt.show()
+
+
+def get_processing_time(df: pd.DataFrame):
+    df = df[[SIM_TIME_TO_USE]].drop_duplicates()
+
+    df.sort_values(by=[SIM_TIME_TO_USE], inplace=True)
+
+    print(df)
+    # Shift by -1 meaning move up so that each row
+    # indicates what timestamp the data started missing
+    # and how long did it last
+    df["Duration Between Msgs (s)"] = (
+        df[SIM_TIME_TO_USE].diff().shift(-1) #/ 1e3
+    )
+    print(df)
+    # Reset the index of the DataFrame
+    df.reset_index(drop=True, inplace=True)
+
+
+    return df
+
+
+cli_args = parser.parse_args()
+
+detections_df = parse_df(cli_args.vehicle_detection_csv)
+
+cli_args.plots_dir.mkdir(exist_ok=True, parents=True)
+
+durations_df = get_processing_time(detections_df)
+plot_duration(durations_df, cli_args.show_plot, cli_args.plots_dir)
