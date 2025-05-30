@@ -16,6 +16,7 @@ from guidance_scripts import (
     check_time_to_begin_deceleration,
     run_speed_limit_change_response_analysis,
     check_speed_before_workzone,
+    create_geofence_acceleration_plot,
     check_deceleration_for_geofence,
     run_acceleration_comfort_analysis,
     check_time_to_begin_acceleration,
@@ -96,6 +97,8 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
     avg_accelerations_times = []
     for (timepoint, avg_acceleration) in zip(avg_timepoints, avg_accelerations):
         avg_accelerations_times.append((timepoint, avg_acceleration))
+
+    create_geofence_acceleration_plot(accelerations_times, avg_accelerations_times, time_enter_geofence, time_exit_geofence, plots_dir)
     
     # Run all the tests from engage to disengage
     intervals = [(engage_time, disengage_time)]
