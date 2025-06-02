@@ -1,18 +1,24 @@
+import argparse
+import argcomplete
 from pathlib import Path
+from run_all_analysis import run_all_analysis
+from message_scripts import (
+    process_tomcat_logs,
+    check_cc_response_delay,
+    check_tcm_acknowledgements,
+    check_tcm_broadcast_count,
+    check_tcm_broadcast_rate,
+    check_tcm_response_time
+)
 from guidance_scripts import (
     get_engage_time,
     get_geofence_entrance_and_exit_times,
     get_route_original_speed,
-    process_tomcat_logs,
     check_in_geofence_speed_limits,
-    check_cc_response_delay,
     check_geofence_in_reroute,
-    check_tcm_acknowledgements,
     check_reroute_duration,
     check_lanechange_lateral_velocity,
     check_lanechange_duration,
-    check_tcm_broadcast_count,
-    check_tcm_broadcast_rate,
     check_time_to_begin_deceleration,
     run_speed_limit_change_response_analysis,
     check_speed_before_workzone,
@@ -21,11 +27,8 @@ from guidance_scripts import (
     run_acceleration_comfort_analysis,
     check_time_to_begin_acceleration,
     check_acceleration_after_geofence,
-    check_tcm_response_time
-    )
-from run_all_analysis import run_all_analysis
-import argparse
-import argcomplete
+)
+
 
 ############################################################################
 # Constant Values - adjust these as needed for your metrics/environment
@@ -98,6 +101,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
     for (timepoint, avg_acceleration) in zip(avg_timepoints, avg_accelerations):
         avg_accelerations_times.append((timepoint, avg_acceleration))
 
+    print("\nCreating Geofence Plots")
     create_geofence_acceleration_plot(accelerations_times, avg_accelerations_times, time_enter_geofence, time_exit_geofence, plots_dir)
     
     # Run all the tests from engage to disengage
