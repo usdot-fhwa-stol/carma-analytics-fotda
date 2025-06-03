@@ -2918,7 +2918,9 @@ def check_lanechange_lateral_velocity(
 
     is_successful = True
     for idx, (lanechange_start, lanechange_end) in enumerate(intervals):
-        lanechange_eval_buffer_s = 0.5  # Buffer before/after lane change to check lateral velocity
+        # Buffer before/after lane change to check lateral velocity to include small straight
+        # segments to use for the heading reference before lanechange
+        lanechange_eval_buffer_s = 0.5
         lane_change_velocities = get_lateral_velocities(
             mcap_path,
             start_time=lanechange_start - lanechange_eval_buffer_s,
