@@ -10,10 +10,13 @@ from guidance_scripts import (
     check_geofence_in_reroute,
     check_reroute_duration,
     check_lanechange_lateral_velocity,
-    check_lanechange_duration
+    check_lanechange_duration,
+    check_time_to_begin_deceleration,
+    check_speed_before_workzone,
+    check_deceleration_for_geofence
     )
-from utils import (
-    check_message_receipt,
+from message_scripts import (
+    check_message_broadcast_rate,
 )
 from run_all_analysis import run_all_analysis
 import argparse
@@ -24,7 +27,7 @@ import argcomplete
 ############################################################################
 INCOMING_MOBILITY_OPERATION_TOPIC = '/message/incoming_mobility_operation'
 TIM_LANECHANGE_DURATION = 5
-TIM_MAINTAIN_SPEED_RANGE = 0.89408 # 0.89408 m/s is 2 mph
+TIM_MAINTAIN_SPEED_RANGE_MS = 0.89408 # 0.89408 m/s is 2 mph
 TIM_TCM_ACKNOWLEDGEMENT_DELAY = 1
 TIM_UPDATE_ACTIVE_ROUTE = 3
 TIM_MIN_LAT_VELOCITY = 0.5
@@ -81,7 +84,8 @@ def analyze_mcap_file_for_tim_analysis(mcap_path: Path, output_dir: Path, stats_
     for (timepoint, avg_acceleration) in zip(avg_timepoints, avg_accelerations):
         avg_accelerations_times.append((timepoint, avg_acceleration))
 
-    create_geofence_acceleration_plot(accelerations_times, avg_accelerations_times, time_enter_geofence, time_exit_geofence, plots_dir)
+    create_geofence_acceleration_plot(accelerations_times,
+        avg_accelerations_times, time_enter_geofence, time_exit_geofence, plots_dir)
 
     # Run all the tests from engage to disengage
     intervals = [(engage_time, disengage_time)]
@@ -182,6 +186,77 @@ def analyze_mcap_file_for_tim_analysis(mcap_path: Path, output_dir: Path, stats_
             analysis_stats["fwz-14-check_lanechange_duration"] = None
         print(f"-----------------------------------------------------\n")
 
+        ############################################################################################
+        # FWZ-19: CM will broadcast the MOM at 10 Hz
+        ############################################################################################
+        print(f"Starting analysis for FWZ-19")
+        try:
+            is_passed, _, _, _, _ = check_message_broadcast_rate(
+                mcap_path, INCOMING_MOBILITY_OPERATION_TOPIC, 10,
+                start_time=engage_time,end_time=disengage_time, save_plot_dir=plots_dir,
+            )
+
+            analysis_stats["fwz-19-check_message_broadcast_rate"] = is_passed
+        except Exception as e:
+            print(
+                f"Error analyzing CMV data for MOM broadcast rate of ERV: {e}"
+            )
+            analysis_stats["fwz-19-check_message_broadcast_rate"] = None
+        print(f"-----------------------------------------------------\n")
+
+
+        ############################################################################################
+        # FWZ-22: Upon entering the geofenced area with an advisory speed limit, the vehicle will
+        # initiate the deceleration command to the advisory speed limit within less than 1.3 seconds
+        ############################################################################################
+        print(f"Starting analysis for FWZ-22")
+        try:
+            is_passed = check_time_to_begin_deceleration(
+                speed_limit_changes, response_times,
+                TIM_ADVISORY_SPEED_RESPONSE, stats_dir, data_dir)
+            analysis_stats["fwz-22-check_time_to_begin_deceleration"] = is_passed
+        except Exception as e:
+            print(
+                f"Error analyzing {mcap_path} for checking beginning of deceleration: {e}"
+            )
+            analysis_stats["fwz-22-check_time_to_begin_deceleration"] = None
+        print(f"-----------------------------------------------------\n")
+
+        ##########################################################################################################
+        # FWZ-23: The vehicle will decelerate and achieve the advisory speed limit prior to
+        # reaching the work zone.
+        ##########################################################################################################
+        print(f"Starting analysis for FWZ-23")
+        try:
+            workzone_lanelet_id=1302199
+            is_passed = check_speed_before_workzone(
+                mcap_path, start_time, end_time, workzone_lanelet_id,
+                TIM_ADVISORY_SPEED_LIMIT_MS, TIM_MAINTAIN_SPEED_RANGE_MS)
+            analysis_stats["fwz-23-check_speed_before_workzone"] = is_passed
+        except Exception as e:
+            print(
+                f"Error analyzing {mcap_path} for checking that advisory speed is reached prior to workzone: {e}"
+            )
+            analysis_stats["fwz-23-check_speed_before_workzone"] = None
+        print(f"-----------------------------------------------------\n")
+
+
+        ############################################################################################
+        # FWZ-24: Upon entering the geofenced area with an advisory speed limit, the actual
+        # trajectory to the reduced speed operations will include an acceleration section.
+        # The average deceleration over the entire section shall be no greater than 2 m/s^2.
+        #############################################################################################
+        print(f"Starting analysis for FWZ-24")
+        try:
+            is_passed = check_deceleration_for_geofence(
+                time_enter_geofence, accelerations_times, TIM_MAX_DECELERATION)
+            analysis_stats["fwz-24-check_deceleration_for_geofence"] = is_passed
+        except Exception as e:
+            print(
+                f"Error analyzing {mcap_path} for checking the deceleration in geofence: {e}"
+            )
+            analysis_stats["fwz-24-check_deceleration_for_geofence"] = None
+        print(f"-----------------------------------------------------\n")
         all_analysis_stats.append(analysis_stats)
 
 
