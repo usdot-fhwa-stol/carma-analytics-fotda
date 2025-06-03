@@ -172,12 +172,16 @@ def run_crosstrack_analysis(
     print_stats(stats, "Cross Track Error Statistics")
 
     if save_stats_dir:
+        save_stats_dir = Path(save_stats_dir)
+        save_stats_dir.mkdir(parents=True, exist_ok=True)
         stats_full_path = save_stats_dir / "cross_track_stats_result.json"
         with open(stats_full_path, "w") as f:
             json.dump(stats, f, indent=2)
         print(f"Stats saved to: {save_stats_dir}")
 
     if save_data_dir:
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
         np.savez(
             save_data_dir / "cross_track_extracted_numpy_data.npz",
             timestamps=timestamps,
@@ -187,6 +191,8 @@ def run_crosstrack_analysis(
         print(f"\nData saved to: {save_data_dir}")
 
     if save_plot_dir:
+        save_plot_dir = Path(save_plot_dir)
+        save_plot_dir.mkdir(parents=True, exist_ok=True)
         plt.savefig(save_plot_dir / "cross_track_error_over_time.png")
         print(f"\nPlot saved to: {save_plot_dir}")
     else:

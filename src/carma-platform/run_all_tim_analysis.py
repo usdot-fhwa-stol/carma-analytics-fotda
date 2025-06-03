@@ -331,7 +331,7 @@ def analyze_mcap_file_for_tim_analysis(
                         CROSS_TRACK_ERROR_THRESHOLD_PERCENTILE,
                         start_time,
                         end_time,
-                        stats_dir,
+                        stats_dir / f"crosstrack-error-during-straightaway-{start_time}-{end_time}",
                         data_dir,
                         plots_dir,
                     )
