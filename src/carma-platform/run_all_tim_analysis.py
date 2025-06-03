@@ -29,6 +29,8 @@ import argcomplete
 ############################################################################
 # Constant Values - adjust these as needed for your metrics/environment
 ############################################################################
+DEG_TO_RAD = 0.0174533
+MPH_TO_MPS = 0.44704
 INCOMING_MOBILITY_OPERATION_TOPIC = '/message/incoming_mobility_operation'
 TIM_LANECHANGE_DURATION = 5
 TIM_MAINTAIN_SPEED_RANGE_MS = 0.89408 # 0.89408 m/s is 2 mph

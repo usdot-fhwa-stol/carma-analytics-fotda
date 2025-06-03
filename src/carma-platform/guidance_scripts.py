@@ -2556,7 +2556,10 @@ def check_in_geofence_speed_limits(
     # Check that a TrafficControlMessage was published using the correct advisory speed limit
     has_communicated_advisory_speed_limit = False
     for tcm_v01 in tcm_v01s:
-        if (tcm_v01.params.detail.choice == 12) and (advisory_speed_limit - ms_threshold <= tcm_v01.params.detail.maxspeed <= advisory_speed_limit + ms_threshold):
+        if (tcm_v01.params.detail.choice == 12) and (
+            advisory_speed_limit - ms_threshold
+                <= tcm_v01.params.detail.maxspeed * MPH_TO_MPS
+                    <= advisory_speed_limit + ms_threshold):
             has_communicated_advisory_speed_limit = True
 
     # Check that lanelets travelled through within the geofence have the expected advisory speed limit applied
