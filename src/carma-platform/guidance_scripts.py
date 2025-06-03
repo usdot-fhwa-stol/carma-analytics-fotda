@@ -3378,6 +3378,75 @@ def check_speed_before_workzone(
 
     return is_successful
 
+def check_steady_state_after_geofence(
+    mcap_path,
+    time_begin_acceleration_after_geofence,
+    time_end_engagement,
+    original_speed_limit_ms,
+    min_time_at_steady_state=5.0,
+    threshold_speed_limit_offset=0.89408
+):
+    """
+    Verifies that vehicle maintains steady state for at least 5 seconds after exiting geofenced area
+
+    Args:
+        mcap_path: Path to MCAP file
+        time_begin_acceleration_after_geofence: Start time to look for steady state
+        time_end_engagement: End time of engagement
+        original_speed_limit_ms: Original speed limit in m/s
+        min_time_at_steady_state: Minimum time required at steady state in seconds (default: 5.0)
+        threshold_speed_limit_offset: Speed threshold offset in m/s for steady state detection (default: 0.89408 m/s = 2 mph)
+
+    Returns:
+        is_successful: Boolean - True if vehicle was at steady state for at least the minimum required time
+    """
+    # (m/s) Threshold offset of vehicle speed to speed limit to be considered at steady state
+    min_steady_state_speed = original_speed_limit_ms - threshold_speed_limit_offset
+    max_steady_state_speed = original_speed_limit_ms + threshold_speed_limit_offset
+
+    vehicle_twist_topics = [HARDWARE_VEHICLE_TWIST_TOPIC]
+
+    extracted_data = extract_mcap_data(
+        mcap_path,
+        vehicle_twist_topics,
+        start_time=time_begin_acceleration_after_geofence,
+        end_time=time_end_engagement,
+        field_extractors={HARDWARE_VEHICLE_TWIST_TOPIC: lambda msg: msg.twist}
+    )
+
+    timestamps, twists = extracted_data[vehicle_twist_topics[0]]
+
+    has_reached_steady_state = False
+    time_start_steady_state = 0.0
+    time_end_steady_state = 0.0
+
+    for timestamp, twist in zip(timestamps, twists):
+        current_speed = twist.linear.x
+
+        if (min_steady_state_speed <= current_speed <= max_steady_state_speed) and not has_reached_steady_state:
+            time_start_steady_state = timestamp
+            has_reached_steady_state = True
+
+        if not (min_steady_state_speed <= current_speed <= max_steady_state_speed) and has_reached_steady_state:
+            time_end_steady_state = timestamp
+            break
+        elif has_reached_steady_state:
+            time_end_steady_state = timestamp
+
+    if has_reached_steady_state:
+        time_at_steady_state = time_end_steady_state - time_start_steady_state
+    else:
+        time_at_steady_state = 0.0
+
+    is_successful = False
+    if time_at_steady_state >= min_time_at_steady_state:
+        print(f"FWZ-29 succeeded: Vehicle was at steady state for {time_at_steady_state} seconds after exiting the geofence (required: {min_time_at_steady_state} seconds)")
+        is_successful = True
+    else:
+        print(f"FWZ-29 failed: Vehicle was at steady state for {time_at_steady_state} seconds after exiting the geofence (required: {min_time_at_steady_state} seconds)")
+
+    return is_successful
+
 def create_geofence_acceleration_plot(accelerations, sec_accelerations, time_enter_geofence, time_exit_geofence, save_plots_dir=None):
 
     acc_times = []
@@ -3458,7 +3527,7 @@ def check_deceleration_for_geofence(time_enter_geofence, accelerations, max_dece
     if(abs(average_deceleration) > abs(max_deceleration)):
         print(f"FWZ-24 Failed: Average deceleration upon entering the geofence is {average_deceleration} m/s^2. This is greater than the maximum of {max_deceleration} m/s^2")
     else:
-        print(f"FWZ-24 Succeded: Average deceleration upon entering the geofence is {average_deceleration} m/s^2. This is within the maximum of {max_deceleration} m/s^2")
+        print(f"FWZ-24 Succeeded: Average deceleration upon entering the geofence is {average_deceleration} m/s^2. This is within the maximum of {max_deceleration} m/s^2")
         is_successful = True
 
     return is_successful
@@ -3560,8 +3629,8 @@ def check_acceleration_after_geofence(time_exit_geofence, accelerations, min_ave
             print(f"FWZ-26 Failed: Average acceleration at the {timestamp} 1-second interval is {accel} m/s^2. This is greater than the maximum of {max_section_acceleration} m/s^2")
             return False
 
-    print(f"FWZ-26 Succeded: Average acceleration upon exiting the geofence is {average_acceleration} m/s^2. This is greater than the minimum of {min_average_acceleration} m/s^2")
-    print(f"FWZ-26 Succeded: All 1-second averages are below the maximum of {max_section_acceleration} m/s^2.")
+    print(f"FWZ-26 Succeeded: Average acceleration upon exiting the geofence is {average_acceleration} m/s^2. This is greater than the minimum of {min_average_acceleration} m/s^2")
+    print(f"FWZ-26 Succeeded: All 1-second averages are below the maximum of {max_section_acceleration} m/s^2.")
 
     return is_successful
 
