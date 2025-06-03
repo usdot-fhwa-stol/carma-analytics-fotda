@@ -9,6 +9,8 @@ from guidance_scripts import (
     check_in_geofence_speed_limits,
     check_geofence_in_reroute,
     check_reroute_duration,
+    check_lanechange_lateral_velocity,
+    check_lanechange_duration
     )
 from utils import (
     check_message_receipt,
@@ -21,7 +23,7 @@ import argcomplete
 # Constant Values - adjust these as needed for your metrics/environment
 ############################################################################
 INCOMING_MOBILITY_OPERATION_TOPIC = '/message/incoming_mobility_operation'
-TIM_STEADY_STATE_TIME = 5
+TIM_LANECHANGE_DURATION = 5
 TIM_MAINTAIN_SPEED_RANGE = 0.89408 # 0.89408 m/s is 2 mph
 TIM_TCM_ACKNOWLEDGEMENT_DELAY = 1
 TIM_UPDATE_ACTIVE_ROUTE = 3
@@ -139,6 +141,45 @@ def analyze_mcap_file_for_tim_analysis(mcap_path: Path, output_dir: Path, stats_
                 f"Error analyzing {mcap_path} for checking reroute duration: {e}"
             )
             analysis_stats["fwz-11-check_reroute_duration"] = None
+        print(f"-----------------------------------------------------\n")
+
+        ############################################################################################
+        # FWZ-12:The vehicle changes lanes to follow the lane restrictions defined in the
+        # TCM while in the work zone.
+        ############################################################################################
+        print(f"-----------------------------------------------------")
+        print(f"Analysis for FWZ-12 is handled observationally")
+        print(f"-----------------------------------------------------\n")
+        ############################################################################################
+        # FWZ-13: The vehicle lateral velocity during a lane change remains between 0.5 m/s
+        # and 1.25 m/s
+        ############################################################################################
+        print(f"Starting analysis for FWZ-13")
+        try:
+            is_passed, _, _ = check_lanechange_lateral_velocity(
+                mcap_path, TIM_MIN_LAT_VELOCITY, TIM_MAX_LAT_VELOCITY,
+                stats_dir, data_dir, plots_dir)
+            analysis_stats["fwz-13-check_lanechange_lateral_velocity"] = is_passed
+        except Exception as e:
+            print(
+                f"Error analyzing {mcap_path} for checking lane change velocity: {e}"
+            )
+            analysis_stats["fwz-13-check_lanechange_lateral_velocity"] = None
+        print(f"-----------------------------------------------------\n")
+
+        ############################################################################################
+        # FWZ-14: Lane change happens within 5 seconds
+        ############################################################################################
+        print(f"Starting analysis for FWZ-14")
+        try:
+            is_passed, _ = check_lanechange_duration(
+                mcap_path, start_time, TIM_LANECHANGE_DURATION, stats_dir, data_dir)
+            analysis_stats["fwz-14-check_lanechange_duration"] = is_passed
+        except Exception as e:
+            print(
+                f"Error analyzing {mcap_path} for checking lane change duration: {e}"
+            )
+            analysis_stats["fwz-14-check_lanechange_duration"] = None
         print(f"-----------------------------------------------------\n")
 
         all_analysis_stats.append(analysis_stats)

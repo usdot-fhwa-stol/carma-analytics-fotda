@@ -2821,7 +2821,7 @@ def check_reroute_duration(
 
     return is_successful
 
-def get_lateral_velocities(mcap_path):
+def get_lateral_velocities(mcap_path, start_time=None, end_time=None):
     """
     Get lateral velocity of the vehicle with linear twist and pose orientation data
 
@@ -2839,6 +2839,8 @@ def get_lateral_velocities(mcap_path):
     extracted_data = extract_mcap_data(
         mcap_path,
         topics,
+        start_time=start_time,
+        end_time=end_time,
         field_extractors={
             LOCALIZATION_POSE_TOPIC: lambda msg: msg.pose.orientation,
             HARDWARE_VEHICLE_TWIST_TOPIC: lambda msg: msg.twist.linear
@@ -2847,6 +2849,20 @@ def get_lateral_velocities(mcap_path):
     orientation_timestamps, orientations = extracted_data[topics[0]]
     twist_timestamps, twists = extracted_data[topics[1]]
 
+    # Get reference heading (initial heading before lane change)
+    if not orientation_timestamps.any():
+        return []
+
+    # Find the reference orientation 1 index before the lanechnge starts
+    ref_idx = max(0, bisect_left(orientation_timestamps, start_time) - 1)
+    reference_orientation = orientations[ref_idx]  # First orientation as reference
+    print(f"Reference Orientation: {reference_orientation} at {orientation_timestamps[ref_idx]} seconds")
+    reference_quat = [reference_orientation.x, reference_orientation.y,
+                     reference_orientation.z, reference_orientation.w]
+    reference_rotation = r.from_quat(reference_quat)
+    reference_yaw = reference_rotation.as_euler('xyz')[2]  # Z-axis yaw
+
+    print(f"Reference Yaw: {reference_yaw} radians")
     # For every twist, find the orientation by nearest timestamp
     for twist_timestamp, twist in zip(twist_timestamps, twists):
         idx = bisect_left(orientation_timestamps, twist_timestamp)
@@ -2860,15 +2876,19 @@ def get_lateral_velocities(mcap_path):
             nearest_idx = idx - 1 if abs(twist_timestamp - before) < abs(twist_timestamp - after) else idx
 
         closest_orientation = orientations[nearest_idx]
-        velocity = [twist.x, twist.y, twist.z]
-        orientation = [closest_orientation.x, closest_orientation.y, closest_orientation.z, closest_orientation.w]
 
-        rotation = r.from_quat(orientation)
+        # Transform body velocity to world frame
+        body_velocity = [twist.x, twist.y, twist.z]
+        current_orientation = [closest_orientation.x, closest_orientation.y,
+                              closest_orientation.z, closest_orientation.w]
+        rotation = r.from_quat(current_orientation)
+        world_velocity = rotation.apply(body_velocity)
 
-        world_velocity = rotation.apply(velocity)
-
-        # Return just the lateral velocity component (vy = world_velocity[1])
-        lane_change_velocities.append((twist_timestamp, world_velocity[1]))
+        # Calculate lateral velocity relative to reference heading
+        # Project world velocity onto lateral axis of reference heading
+        lateral_velocity = (-world_velocity[0] * np.sin(reference_yaw) +
+                           world_velocity[1] * np.cos(reference_yaw))
+        lane_change_velocities.append((twist_timestamp, lateral_velocity))
 
     return lane_change_velocities
 
@@ -2891,9 +2911,6 @@ def check_lanechange_lateral_velocity(
     Returns:
         is_successful: Boolean - True if all lateral velocities during lange change are between min/max lateral velocity
     """
-
-    lane_change_velocities = get_lateral_velocities(mcap_path)
-
     # Get times that vehicle is changing lanes
     planner_plugin = "cooperative_lanechange"
     intervals = get_planner_trajectory_intervals(mcap_path, planner_plugin)
@@ -2901,6 +2918,11 @@ def check_lanechange_lateral_velocity(
 
     is_successful = True
     for idx, (lanechange_start, lanechange_end) in enumerate(intervals):
+        lanechange_eval_buffer_s = 0.5  # Buffer before/after lane change to check lateral velocity
+        lane_change_velocities = get_lateral_velocities(
+            mcap_path,
+            start_time=lanechange_start - lanechange_eval_buffer_s,
+            end_time=lanechange_end + lanechange_eval_buffer_s)
         lane_changes.append((lanechange_start, lanechange_end))
         for t, v in lane_change_velocities:
             if lanechange_start <= t <= lanechange_end:
