@@ -12,7 +12,7 @@ INCOMING_GEOFENCE_CONTROL_TOPIC = "/message/incoming_geofence_control"
 OUTGOING_GEOFENCE_REQUEST_TOPIC = "/message/outgoing_geofence_request"
 OUTGOING_MOBILITY_OPERATION_TOPIC = "/message/outgoing_mobility_operation"
 
-def process_tomcat_logs(
+def process_cc_logs_for_tcr_tcm_data(
     cc_data_path, 
     log_date,
     max_delay,
@@ -182,8 +182,9 @@ def process_tomcat_logs(
     plt.tight_layout()
 
     if save_plot_dir:
-        save_path = Path(save_plot_dir)
-        plt.savefig(save_path / "cc_TCM_analysis.png")
+        save_plot_dir = Path(save_plot_dir)
+        save_plot_dir.mkdir(parents=True, exist_ok=True)
+        plt.savefig(save_plot_dir / "cc_TCM_analysis.png")
         print(f"\nPlot saved to: {save_plot_dir}")
     else:
         plt.show()
@@ -199,6 +200,8 @@ def process_tomcat_logs(
     print_stats(rate_stats, "CC TCM Rate Statistics")
 
     if save_stats_dir:
+        save_stats_dir = Path(save_stats_dir)
+        save_stats_dir.mkdir(parents=True, exist_ok=True)
         stats_full_path = save_stats_dir / "cc_TCM_analysis.json"
         with open(stats_full_path, "w") as f:
             json.dump(delay_stats, f, indent=2)
@@ -207,9 +210,10 @@ def process_tomcat_logs(
 
     # Save data if requested
     if save_data_dir:
-        save_path = Path(save_data_dir)
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
         np.savez(
-            save_path / "cc_TCM_data.npz",
+            save_data_dir / "cc_TCM_data.npz",
             all_results=all_results,
             delay_stats=delay_stats,
             rate_stats=rate_stats,
@@ -260,15 +264,18 @@ def check_cc_response_delay(all_cc_data, expected_delay, save_stats_dir, save_da
     print_stats(stats, 'CC TCM Broadcast Delay Statistics')
 
     if save_stats_dir:
+        save_stats_dir = Path(save_stats_dir)
+        save_stats_dir.mkdir(parents=True, exist_ok=True)
         stats_full_path = save_stats_dir / "cc_tcm_broadcast_delay_analysis.json"
         with open(stats_full_path, "w") as f:
             json.dump(stats, f, indent=2)
         print(f"Stats saved to: {save_stats_dir}")
 
     if save_data_dir:
-        save_path = Path(save_data_dir)
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
         np.savez(
-            save_path / "cc_tcm_broadcast_delay_data.npz",
+            save_data_dir / "cc_tcm_broadcast_delay_data.npz",
             delays=delays,
             failed_delays=failed_delays,
             stats=stats,
@@ -277,7 +284,7 @@ def check_cc_response_delay(all_cc_data, expected_delay, save_stats_dir, save_da
 
     return is_successful
 
-def check_tcm_acknowledgements(
+def check_tcm_acknowledgement_delay(
     mcap_path, 
     max_delay, 
     save_stats_dir=None, 
@@ -367,8 +374,9 @@ def check_tcm_acknowledgements(
     plt.tight_layout()
 
     if save_plots_dir:
-        save_path = Path(save_plots_dir)
-        plt.savefig(save_path / "tcm_acknowledgement_analysis.png")
+        save_plots_dir = Path(save_plots_dir)
+        save_plots_dir.mkdir(parents=True, exist_ok=True)
+        plt.savefig(save_plots_dir / "tcm_acknowledgement_analysis.png")
         print(f"\nPlot saved to: {save_plots_dir}")
     else:
         plt.show()
@@ -379,15 +387,18 @@ def check_tcm_acknowledgements(
     print_stats(stats, "TCM Acknowledgement Delay Statistics")
 
     if save_stats_dir:
+        save_stats_dir = Path(save_stats_dir)
+        save_stats_dir.mkdir(parents=True, exist_ok=True)
         stats_full_path = save_stats_dir / "tcm_acknowledgement_analysis.json"
         with open(stats_full_path, "w") as f:
             json.dump(stats, f, indent=2)
         print(f"Stats saved to: {save_stats_dir}")
 
     if save_data_dir:
-        save_path = Path(save_data_dir)
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
         np.savez(
-            save_path / "tcm_acknowledgement_data.npz",
+            save_data_dir / "tcm_acknowledgement_data.npz",
             tcm_acknowledgements=tcm_acknowledgements,
             ack_delays=ack_delays,
             stats=stats,
@@ -450,15 +461,18 @@ def check_tcm_broadcast_count(all_cc_data, tcm_acknowledgements, expected_broadc
     print_stats(stats, "TCM Broadcast Count")
 
     if save_stats_dir:
+        save_stats_dir = Path(save_stats_dir)
+        save_stats_dir.mkdir(parents=True, exist_ok=True)
         stats_full_path = save_stats_dir / "tcm_broadcast_count_analysis.json"
         with open(stats_full_path, "w") as f:
             json.dump(stats, f, indent=2, default=str)
         print(f"Stats saved to: {save_stats_dir}")
 
     if save_data_dir:
-        save_path = Path(save_data_dir)
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
         np.savez(
-            save_path / "tcm_broadcast_count_data.npz",
+            save_data_dir / "tcm_broadcast_count_data.npz",
             tcm_counts=tcm_counts,
             stats=stats,
         )
@@ -521,15 +535,18 @@ def check_tcm_broadcast_rate(all_cc_data, tcm_acknowledgements, expected_rate, s
     print_stats(stats, "TCM Broadcast Rate")
 
     if save_stats_dir:
+        save_stats_dir = Path(save_stats_dir)
+        save_stats_dir.mkdir(parents=True, exist_ok=True)
         stats_full_path = save_stats_dir / "tcm_broadcast_rate_analysis.json"
         with open(stats_full_path, "w") as f:
             json.dump(stats, f, indent=2)
         print(f"Stats saved to: {save_stats_dir}")
 
     if save_data_dir:
-        save_path = Path(save_data_dir)
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
         np.savez(
-            save_path / "tcm_broadcast_rate_data.npz",
+            save_data_dir / "tcm_broadcast_rate_data.npz",
             tcm_rates=tcm_rates,
             stats=stats,
         )
@@ -597,9 +614,11 @@ def check_tcm_response_time(mcap_path, expected_tcr_to_tcm_duration, save_stats_
     ax.grid(True)
     ax.legend()
     plt.tight_layout()
+
     if save_plots_dir:
-        save_path = Path(save_plots_dir)
-        plt.savefig(save_path / "tcm_receipt_analysis.png")
+        save_plots_dir = Path(save_plots_dir)
+        save_plots_dir.mkdir(parents=True, exist_ok=True)
+        plt.savefig(save_plots_dir / "tcm_receipt_analysis.png")
         print(f"\nPlot saved to: {save_plots_dir}")
     else:
         plt.show()
@@ -610,15 +629,18 @@ def check_tcm_response_time(mcap_path, expected_tcr_to_tcm_duration, save_stats_
     print_stats(stats, "TCM Receipt Delay Statistics")
 
     if save_stats_dir:
+        save_stats_dir = Path(save_stats_dir)
+        save_stats_dir.mkdir(parents=True, exist_ok=True)
         stats_full_path = save_stats_dir / "tcm_receipt_analysis.json"
         with open(stats_full_path, "w") as f:
             json.dump(stats, f, indent=2)
         print(f"Stats saved to: {save_stats_dir}")
 
     if save_data_dir:
-        save_path = Path(save_data_dir)
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
         np.savez(
-            save_path / "tcm_receipt_data.npz",
+            save_data_dir / "tcm_receipt_data.npz",
             tcm_receipt_delay=tcm_receipt_delay,
             stats=stats,
         )

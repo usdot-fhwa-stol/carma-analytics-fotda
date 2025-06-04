@@ -3,9 +3,9 @@ import argcomplete
 from pathlib import Path
 from run_all_analysis import run_all_analysis
 from message_scripts import (
-    process_tomcat_logs,
+    process_cc_logs_for_tcr_tcm_data,
     check_cc_response_delay,
-    check_tcm_acknowledgements,
+    check_tcm_acknowledgement_delay,
     check_tcm_broadcast_count,
     check_tcm_broadcast_rate,
     check_tcm_response_time
@@ -14,7 +14,7 @@ from guidance_scripts import (
     get_engage_time,
     get_geofence_entrance_and_exit_times,
     get_route_original_speed,
-    check_in_geofence_speed_limits,
+    check_speed_limits_in_geofence,
     check_geofence_in_reroute,
     check_reroute_duration,
     check_lanechange_lateral_velocity,
@@ -36,22 +36,21 @@ from guidance_scripts import (
 CC_LOG_SOURCE_FOLDER = "/workspaces/carma-analytics-fotda/.devcontainer/cc_log"
 DATE_CC_LOGS_TAKEN = "2025-05-20" # Assumes all logs were taken the same day
 CLOSED_LANELETS = [] # List of closed lanelets used in this test
-CC_TCR_TO_TCM_SEND = 0.1
+CC_TCR_TO_TCM_SEC = 0.1 
 CC_MAX_BROADCAST_COUNT = 10
-CC_MAX_BROADCAST_RATE = 10
+CC_MAX_BROADCAST_RATE_HZ = 10 
 
-FREIGHT_STEADY_STATE_TIME = 5
-FREIGHT_MAINTAIN_SPEED_RANGE = 0.89408 # 0.89408 m/s is 2 mph
-FREIGHT_TCM_ACKNOWLEDGEMENT_DELAY = 1
-FREIGHT_UPDATE_ACTIVE_ROUTE = 3
-FREIGHT_MIN_LAT_VELOCITY = 0.5
-FREIGHT_MAX_LAT_VELOCITY = 1.25
-FREIGHT_ADVISORY_SPEED_RESPONSE = 1.3
-FREIGHT_SPEED_LIMIT_THRESHOLD = 0.05
-FREIGHT_MAX_DECELERATION = -2
-FREIGHT_MIN_AVERAGE_ACCELERATION = 1
-FREIGHT_MAX_SECTION_ACCELERATION = 2
-FREIGHT_TCR_SEND_TO_TCM_RECEIVE_DELAY = 1
+FREIGHT_STEADY_STATE_TIME_SEC = 5 
+FREIGHT_MAINTAIN_SPEED_RANGE_MS = 0.89408 # 0.89408 m/s is 2 mph
+FREIGHT_TCM_ACKNOWLEDGEMENT_DELAY_SEC = 1
+FREIGHT_UPDATE_ACTIVE_ROUTE_SEC = 3
+FREIGHT_MIN_LAT_VELOCITY_MS = 0.5
+FREIGHT_MAX_LAT_VELOCITY_MS = 1.25
+FREIGHT_ADVISORY_SPEED_RESPONSE_SEC = 1.3
+FREIGHT_MAX_DECELERATION_MS2 = -2
+FREIGHT_MIN_AVERAGE_ACCELERATION_MS2 = 1
+FREIGHT_MAX_SECTION_ACCELERATION_MS2 = 2
+FREIGHT_TCR_SEND_TO_TCM_RECEIVE_DELAY_SEC = 1
 FREIGHT_ADVISORY_SPEED_LIMIT_MS = 4.5
 
 
@@ -85,15 +84,15 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
 
     print("\nProcessing Carma Cloud Logs")
     # Process the CC Tomcat Logs
-    all_cc_data, _ = process_tomcat_logs(CC_LOG_SOURCE_FOLDER, DATE_CC_LOGS_TAKEN, CC_TCR_TO_TCM_SEND, CC_MAX_BROADCAST_RATE, stats_dir, data_dir, plots_dir)
+    all_cc_data, _ = process_cc_logs_for_tcr_tcm_data(CC_LOG_SOURCE_FOLDER, DATE_CC_LOGS_TAKEN, CC_TCR_TO_TCM_SEC, CC_MAX_BROADCAST_RATE_HZ, stats_dir, data_dir, plots_dir)
 
     print("\nRunning Speed Limit Analysis")
     # Run the speed limit analysis for the entire period of time
-    _, _, _, speed_limit_changes, response_times = run_speed_limit_change_response_analysis(mcap_path, steady_state_indication_time=FREIGHT_ADVISORY_SPEED_RESPONSE, save_stats_dir=stats_dir, save_data_dir=data_dir, save_plot_dir=plots_dir)
+    _, _, _, speed_limit_changes, response_times = run_speed_limit_change_response_analysis(mcap_path, steady_state_indication_time=FREIGHT_ADVISORY_SPEED_RESPONSE_SEC, save_stats_dir=stats_dir, save_data_dir=data_dir, save_plot_dir=plots_dir)
     
     print("\nRunning Acceleration Analysis")
     # Run the acceleration analysis for the entire period of time
-    _, _, _, _, accelerations, avg_accelerations, timepoints, avg_timepoints = run_acceleration_comfort_analysis(mcap_path, FREIGHT_MAX_DECELERATION, save_stats_dir=stats_dir, save_data_dir=data_dir, save_plot_dir=plots_dir)
+    _, _, _, _, accelerations, avg_accelerations, timepoints, avg_timepoints = run_acceleration_comfort_analysis(mcap_path, FREIGHT_MAX_DECELERATION_MS2, save_stats_dir=stats_dir, save_data_dir=data_dir, save_plot_dir=plots_dir)
     accelerations_times = []
     for (timepoint, acceleration) in zip(timepoints, accelerations):
         accelerations_times.append((timepoint, acceleration))
@@ -138,7 +137,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         ##########################################################################################################
         print(f"Starting analysis for FWZ-4")
         try:
-            is_passed = check_cc_response_delay(all_cc_data, CC_TCR_TO_TCM_SEND, stats_dir, data_dir)
+            is_passed = check_cc_response_delay(all_cc_data, CC_TCR_TO_TCM_SEC, stats_dir, data_dir)
             analysis_stats["check_cc_response_delay"] = is_passed
         except Exception as e:
             print(
@@ -153,7 +152,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         ##########################################################################################################
         print(f"Starting analysis for FWZ-7")
         try:
-            is_passed = check_in_geofence_speed_limits(mcap_path, time_enter_geofence, time_exit_geofence, FREIGHT_ADVISORY_SPEED_LIMIT_MS, data_dir)
+            is_passed = check_speed_limits_in_geofence(mcap_path, time_enter_geofence, time_exit_geofence, FREIGHT_ADVISORY_SPEED_LIMIT_MS, data_dir)
             analysis_stats["check_in_geofence_speed_limits"] = is_passed
         except Exception as e:
             print(
@@ -168,7 +167,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         ##########################################################################################################
         print(f"Starting analysis for FWZ-9")
         try:
-            is_passed, tcm_acknowledgements, _, _ = check_tcm_acknowledgements(mcap_path, FREIGHT_TCM_ACKNOWLEDGEMENT_DELAY, stats_dir, data_dir, plots_dir)
+            is_passed, tcm_acknowledgements, _, _ = check_tcm_acknowledgement_delay(mcap_path, FREIGHT_TCM_ACKNOWLEDGEMENT_DELAY_SEC, stats_dir, data_dir, plots_dir)
             analysis_stats["check_tcm_acknowledgement"] = is_passed
         except Exception as e:
             print(
@@ -183,7 +182,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         ##########################################################################################################
         print(f"Starting analysis for FWZ-11")
         try:
-            is_passed = check_reroute_duration(mcap_path, FREIGHT_UPDATE_ACTIVE_ROUTE, data_dir)
+            is_passed = check_reroute_duration(mcap_path, FREIGHT_UPDATE_ACTIVE_ROUTE_SEC, data_dir)
             analysis_stats["check_reroute_duration"] = is_passed
         except Exception as e:
             print(
@@ -204,7 +203,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         ##########################################################################################################
         print(f"Starting analysis for FWZ-13")
         try:
-            is_passed, _, _ = check_lanechange_lateral_velocity(mcap_path, FREIGHT_MIN_LAT_VELOCITY, FREIGHT_MAX_LAT_VELOCITY, stats_dir, data_dir, plots_dir)
+            is_passed, _, _ = check_lanechange_lateral_velocity(mcap_path, FREIGHT_MIN_LAT_VELOCITY_MS, FREIGHT_MAX_LAT_VELOCITY_MS, stats_dir, data_dir, plots_dir)
             analysis_stats["check_lanechange_lateral_velocity"] = is_passed
         except Exception as e:
             print(
@@ -219,7 +218,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         ##########################################################################################################
         print(f"Starting analysis for FWZ-14")
         try:
-            is_passed, _ = check_lanechange_duration(mcap_path, start_time, FREIGHT_STEADY_STATE_TIME, stats_dir, data_dir)
+            is_passed, _ = check_lanechange_duration(mcap_path, start_time, FREIGHT_STEADY_STATE_TIME_SEC, stats_dir, data_dir)
             analysis_stats["check_lanechange_duration"] = is_passed
         except Exception as e:
             print(
@@ -247,7 +246,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         ##########################################################################################################
         print(f"Starting analysis for FWZ-19")
         try:
-            is_passed = check_tcm_broadcast_rate(all_cc_data, tcm_acknowledgements, CC_MAX_BROADCAST_RATE, stats_dir, data_dir)
+            is_passed = check_tcm_broadcast_rate(all_cc_data, tcm_acknowledgements, CC_MAX_BROADCAST_RATE_HZ, stats_dir, data_dir)
             analysis_stats["check_tcm_broadcast_rate"] = is_passed
         except Exception as e:
             print(
@@ -261,7 +260,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         ##########################################################################################################
         print(f"Starting analysis for FWZ-22")
         try: 
-            is_passed = check_time_to_begin_deceleration(speed_limit_changes, response_times, FREIGHT_ADVISORY_SPEED_RESPONSE, stats_dir, data_dir)
+            is_passed = check_time_to_begin_deceleration(speed_limit_changes, response_times, FREIGHT_ADVISORY_SPEED_RESPONSE_SEC, stats_dir, data_dir)
             analysis_stats["check_time_to_begin_deceleration"] = is_passed
         except Exception as e:
             print(
@@ -276,7 +275,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         print(f"Starting analysis for FWZ-23")
         try:
             workzone_lanelet_id=0
-            is_passed = check_speed_before_workzone(mcap_path, start_time, end_time, workzone_lanelet_id, FREIGHT_ADVISORY_SPEED_LIMIT_MS, FREIGHT_MAINTAIN_SPEED_RANGE)
+            is_passed = check_speed_before_workzone(mcap_path, start_time, end_time, workzone_lanelet_id, FREIGHT_ADVISORY_SPEED_LIMIT_MS, FREIGHT_MAINTAIN_SPEED_RANGE_MS)
             analysis_stats["check_speed_before_workzone"] = is_passed
         except Exception as e:
             print(
@@ -292,7 +291,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         ##########################################################################################################
         print(f"Starting analysis for FWZ-24")
         try:
-            is_passed = check_deceleration_for_geofence(time_enter_geofence, accelerations_times, FREIGHT_MAX_DECELERATION)
+            is_passed = check_deceleration_for_geofence(time_enter_geofence, accelerations_times, FREIGHT_MAX_DECELERATION_MS2)
             analysis_stats["check_deceleration_for_geofence"] = is_passed
         except Exception as e:
             print(
@@ -307,7 +306,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         ##########################################################################################################
         print(f"Starting analysis for FWZ-25")
         try:
-            is_passed = check_time_to_begin_acceleration(speed_limit_changes, response_times, FREIGHT_ADVISORY_SPEED_RESPONSE, stats_dir, data_dir)
+            is_passed = check_time_to_begin_acceleration(speed_limit_changes, response_times, FREIGHT_ADVISORY_SPEED_RESPONSE_SEC, stats_dir, data_dir)
             analysis_stats["check_time_to_begin_acceleration"] = is_passed
         except Exception as e:
             print(
@@ -324,7 +323,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         ##########################################################################################################
         print(f"Starting analysis for FWZ-26")
         try:
-            is_passed = check_acceleration_after_geofence(time_exit_geofence, accelerations_times, FREIGHT_MIN_AVERAGE_ACCELERATION, avg_accelerations_times, FREIGHT_MAX_SECTION_ACCELERATION)
+            is_passed = check_acceleration_after_geofence(time_exit_geofence, accelerations_times, FREIGHT_MIN_AVERAGE_ACCELERATION_MS2, avg_accelerations_times, FREIGHT_MAX_SECTION_ACCELERATION_MS2)
             analysis_stats["check_acceleration_after_geofence"] = is_passed
         except Exception as e:
             print(
@@ -339,7 +338,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         ##########################################################################################################
         print(f"Starting analysis for FWZ-31")
         try:
-            is_passed = check_tcm_response_time(mcap_path, FREIGHT_TCR_SEND_TO_TCM_RECEIVE_DELAY, stats_dir, data_dir, plots_dir)
+            is_passed = check_tcm_response_time(mcap_path, FREIGHT_TCR_SEND_TO_TCM_RECEIVE_DELAY_SEC, stats_dir, data_dir, plots_dir)
             analysis_stats["check_tcm_response_time"] = is_passed
         except Exception as e:
             print(

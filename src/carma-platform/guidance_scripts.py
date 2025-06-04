@@ -2224,9 +2224,10 @@ def check_geofence_in_reroute(
 
     # Save shortest path data
     if save_data_dir:
-        save_path = Path(save_data_dir)
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
         np.savez(
-            save_path / "shortest_path_data.npz",
+            save_data_dir / "shortest_path_data.npz",
             closed_lanelets=closed_lanelets,
             shortest_path_lanelets=shortest_path_lanelets,
         )
@@ -2235,7 +2236,7 @@ def check_geofence_in_reroute(
     return initial_route_includes_closed_lane, map_is_updated_for_closed_lane
 
 
-def check_in_geofence_speed_limits(
+def check_speed_limits_in_geofence(
     mcap_path,
     time_enter_geofence,
     time_exit_geofence,
@@ -2257,7 +2258,7 @@ def check_in_geofence_speed_limits(
     geofence_topics = [INCOMING_GEOFENCE_CONTROL_TOPIC]
     route_state_topics = [GUIDANCE_ROUTE_STATE_TOPIC]
 
-    ms_threshold = 0.03
+    speed_tolerance_ms = 0.03
 
     if not time_enter_geofence or not time_exit_geofence:
         print("FWZ-7 Failed: Vehicle never entered geofence - can not determine if workzone speed limit was processed")
@@ -2270,12 +2271,12 @@ def check_in_geofence_speed_limits(
     )
     incoming_geofence_timestamps, tcm_v01s = extracted_geofence_data[geofence_topics[0]]
     
-    time_buffer = 2 # Buffer after entering geofence and before exiting geofence for which advisory speed limit is observed
+    time_buffer_sec = 2 # Buffer in seconds after entering geofence and before exiting geofence for which advisory speed limit is observed
     extracted_route_state_data = extract_mcap_data(
         mcap_path,
         route_state_topics,
-        start_time = (time_enter_geofence + time_buffer),
-        end_time = (time_exit_geofence - time_buffer),
+        start_time = (time_enter_geofence + time_buffer_sec),
+        end_time = (time_exit_geofence - time_buffer_sec),
         field_extractors={GUIDANCE_ROUTE_STATE_TOPIC: lambda msg: (
                 msg.speed_limit,
                 msg.lanelet_id
@@ -2287,7 +2288,7 @@ def check_in_geofence_speed_limits(
     # Check that a TrafficControlMessage was published using the correct advisory speed limit
     has_communicated_advisory_speed_limit = False
     for tcm_v01 in tcm_v01s:
-        if (tcm_v01.params.detail.choice == 12) and (advisory_speed_limit - ms_threshold <= tcm_v01.params.detail.maxspeed <= advisory_speed_limit + ms_threshold):
+        if (tcm_v01.params.detail.choice == 12) and (advisory_speed_limit - speed_tolerance_ms <= tcm_v01.params.detail.maxspeed <= advisory_speed_limit + speed_tolerance_ms):
             has_communicated_advisory_speed_limit = True
 
     # Check that lanelets travelled through within the geofence have the expected advisory speed limit applied
@@ -2297,7 +2298,7 @@ def check_in_geofence_speed_limits(
         speed_limit = state[0]
         lanelet_id = state[1]
         lanelet_speed_limits.append((lanelet_id, speed_limit))
-        if(abs(speed_limit-advisory_speed_limit) >= ms_threshold):
+        if(abs(speed_limit-advisory_speed_limit) >= speed_tolerance_ms):
             print(f"Lanelet ID {lanelet_id} has speed limit of {speed_limit} m/s.")
             print(f"Does not match advisory speed limit of {advisory_speed_limit} m/s.")
             has_correct_geofence_lanelet_speed_limits = False
@@ -2311,9 +2312,10 @@ def check_in_geofence_speed_limits(
         is_successful = False
 
     if save_data_dir:
-        save_path = Path(save_data_dir)
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
         np.savez(
-            save_path / "geofence_speed_limit_data.npz",
+            save_data_dir / "geofence_speed_limit_data.npz",
             advisory_speed_limit=advisory_speed_limit,
             lanelet_speed_limits=lanelet_speed_limits,
         )
@@ -2360,8 +2362,8 @@ def check_reroute_duration(
             # Note: Lane is considered restricted if it is not closed to passenger vehicles
             is_restricted_lane = True
             for value in tcm_v01.params.vclasses:
-                # vehcile_class 5 is passenger vehicles
-                if value.vehicle_class == 5:
+                # vehicle_class 5 is passenger vehicles, 0 is any vehicle
+                if value.vehicle_class == 5 or value.vehicle_class == 0:
                     is_restricted_lane = False
 
             # Set boolean flags for metric
@@ -2420,9 +2422,10 @@ def check_reroute_duration(
         is_successful = False
 
     if save_data_dir:
-        save_path = Path(save_data_dir)
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
         np.savez(
-            save_path / "reroute_duration_data.npz",
+            save_data_dir / "reroute_duration_data.npz",
             paths=paths,
             route_generation_times=route_generation_times,
             duration_reroute_after_closed_lane_tcm_received=duration_reroute_after_closed_lane_tcm_received,
@@ -2432,7 +2435,7 @@ def check_reroute_duration(
 
     return is_successful
 
-def get_lateral_velocities(mcap_path):
+def get_lateral_velocities(mcap_path, start_time=None, end_time=None):
     """
     Get lateral velocity of the vehicle with linear twist and pose orientation data
 
@@ -2450,6 +2453,8 @@ def get_lateral_velocities(mcap_path):
     extracted_data = extract_mcap_data(
         mcap_path,
         topics,
+        start_time=start_time,
+        end_time=end_time,
         field_extractors={
             LOCALIZATION_POSE_TOPIC: lambda msg: msg.pose.orientation,
             HARDWARE_VEHICLE_TWIST_TOPIC: lambda msg: msg.twist.linear
@@ -2458,6 +2463,20 @@ def get_lateral_velocities(mcap_path):
     orientation_timestamps, orientations = extracted_data[topics[0]]
     twist_timestamps, twists = extracted_data[topics[1]]
 
+    # Get reference heading (initial heading before lane change)
+    if not orientation_timestamps.any():
+        return []
+    
+    # Find the reference orientation 1 index before the lanechange starts
+    ref_idx = max(0, bisect_left(orientation_timestamps, start_time) -1)
+    reference_orientation = orientations[ref_idx] # First orientation as reference
+    print(f"Reference Orientation: {reference_orientation} at {orientation_timestamps[ref_idx]} seconds")
+    reference_quat = [reference_orientation.x, reference_orientation.y,
+                      reference_orientation.z, reference_orientation.w]
+    reference_rotation = r.from_quat(reference_quat)
+    reference_yaw = reference_rotation.as_euler('xyz')[2] # Z-axis yaw
+
+    print(f"Reference Yaw: {reference_yaw} radians")
     # For every twist, find the orientation by nearest timestamp
     for twist_timestamp, twist in zip(twist_timestamps, twists):
         idx = bisect_left(orientation_timestamps, twist_timestamp)
@@ -2471,15 +2490,18 @@ def get_lateral_velocities(mcap_path):
             nearest_idx = idx - 1 if abs(twist_timestamp - before) < abs(twist_timestamp - after) else idx
 
         closest_orientation = orientations[nearest_idx]
-        velocity = [twist.x, twist.y, twist.z]
-        orientation = [closest_orientation.x, closest_orientation.y, closest_orientation.z, closest_orientation.w]
-    
-        rotation = r.from_quat(orientation)
+        # Transform body velocity to world frame
+        body_velocity = [twist.x, twist.y, twist.z]
+        current_orientation = [closest_orientation.x, closest_orientation.y, 
+                                closest_orientation.z, closest_orientation.w]
+        rotation = r.from_quat(current_orientation)
+        world_velocity = rotation.apply(body_velocity)
 
-        world_velocity = rotation.apply(velocity)
-
-        # Return just the lateral velocity component (vy = world_velocity[1])
-        lane_change_velocities.append((twist_timestamp, world_velocity[1]))
+        # Calculate lateral velocity relative to reference heading
+        # Project world velocity onto lateral axis of reference heading
+        lateral_velocity = (-world_velocity[0] * np.sin(reference_yaw) +
+                            world_velocity[1] * np.cos(reference_yaw))
+        lane_change_velocities.append((twist_timestamp, lateral_velocity))
 
     return lane_change_velocities
 
@@ -2502,12 +2524,14 @@ def check_lanechange_lateral_velocity(
     Returns:
         is_successful: Boolean - True if all lateral velocities during lange change are between min/max lateral velocity
     """
-
-    lane_change_velocities = get_lateral_velocities(mcap_path)    
-    
     # Get times that vehicle is changing lanes
     planner_plugin = "cooperative_lanechange"
     intervals = get_planner_trajectory_intervals(mcap_path, planner_plugin)
+    start_time = intervals[0][0] if intervals else 0
+    # Get the lateral velocities starting at the first lane change
+    lane_change_velocities = get_lateral_velocities(mcap_path, start_time)    
+    print("Got lateral velocities")
+    
     lane_changes = []
 
     is_successful = True
@@ -2563,8 +2587,9 @@ def check_lanechange_lateral_velocity(
     plt.tight_layout()
 
     if save_plot_dir:
-        save_path = Path(save_plot_dir)
-        plt.savefig(save_path / "lateral_velocity_analysis.png")
+        save_plot_dir = Path(save_plot_dir)
+        save_plot_dir.mkdir(parents=True, exist_ok=True)
+        plt.savefig(save_plot_dir / "lateral_velocity_analysis.png")
         print(f"\nPlot saved to: {save_plot_dir}")
     else:
         plt.show()
@@ -2575,6 +2600,8 @@ def check_lanechange_lateral_velocity(
     print_stats(stats, "Lateral Velocity Statistics")
 
     if save_stats_dir:
+        save_stats_dir = Path(save_stats_dir)
+        save_stats_dir.mkdir(parents=True, exist_ok=True)
         stats_full_path = save_stats_dir / "lateral_velocity_analysis.json"
         with open(stats_full_path, "w") as f:
             json.dump(stats, f, indent=2)
@@ -2582,9 +2609,10 @@ def check_lanechange_lateral_velocity(
 
     # Save data if requested
     if save_data_dir:
-        save_path = Path(save_data_dir)
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
         np.savez(
-            save_path / "lateral_velocity_data.npz",
+            save_data_dir / "lateral_velocity_data.npz",
             lane_change_velocities=lane_change_velocities,
             intervals=intervals,
             stats=stats,
@@ -2633,15 +2661,18 @@ def check_lanechange_duration(
         print_stats(stats, "Lane Change Duration Statistics")
 
         if save_stats_dir:
+            save_stats_dir = Path(save_stats_dir)
+            save_stats_dir.mkdir(parents=True, exist_ok=True)
             stats_full_path = save_stats_dir / "lane_change_duration_analysis.json"
             with open(stats_full_path, "w") as f:
                 json.dump(stats, f, indent=2)
             print(f"Stats saved to: {save_stats_dir}")
 
         if save_data_dir:
-            save_path = Path(save_data_dir)
+            save_data_dir = Path(save_data_dir)
+            save_data_dir.mkdir(parents=True, exist_ok=True)
             np.savez(
-                save_path / "lane_change_duration_data.npz",
+                save_data_dir / "lane_change_duration_data.npz",
                 intervals=intervals,
                 durations=durations,
                 stats=stats,
@@ -2741,15 +2772,18 @@ def check_time_to_begin_deceleration(speed_limit_changes, response_times, respon
         print_stats(stats, 'Deceleration Command Response Time')
 
         if save_stats_dir:
+            save_stats_dir = Path(save_stats_dir)
+            save_stats_dir.mkdir(parents=True, exist_ok=True)
             stats_full_path = save_stats_dir / "deceleration_response_analysis.json"
             with open(stats_full_path, "w") as f:
                 json.dump(stats, f, indent=2)
             print(f"Stats saved to: {save_stats_dir}")
 
         if save_data_dir:
-            save_path = Path(save_data_dir)
+            save_data_dir = Path(save_data_dir)
+            save_data_dir.mkdir(parents=True, exist_ok=True)
             np.savez(
-                save_path / "deceleration_response_data.npz",
+                save_data_dir / "deceleration_response_data.npz",
                 speed_limit_changes=speed_limit_changes,
                 deceleration_responses=deceleration_responses,
                 stats=stats,
@@ -2880,6 +2914,8 @@ def create_geofence_acceleration_plot(accelerations, sec_accelerations, time_ent
         plt.tight_layout()
 
         if save_plots_dir:
+            save_plots_dir = Path(save_plots_dir)
+            save_plots_dir.mkdir(parents=True, exist_ok=True)
             plt.savefig(save_plots_dir / "geofence_acceleration.png")
             print(f"\nPlot saved to: {save_plots_dir}")
         else:
@@ -2962,15 +2998,18 @@ def check_time_to_begin_acceleration(speed_limit_changes, response_times, respon
         print_stats(stats, 'Acceleration Command Response Time')
 
         if save_stats_dir:
+            save_stats_dir = Path(save_stats_dir)
+            save_stats_dir.mkdir(parents=True, exist_ok=True)
             stats_full_path = save_stats_dir / "acceleration_response_analysis.json"
             with open(stats_full_path, "w") as f:
                 json.dump(stats, f, indent=2)
             print(f"Stats saved to: {save_stats_dir}")
 
         if save_data_dir:
-            save_path = Path(save_data_dir)
+            save_data_dir = Path(save_data_dir)
+            save_data_dir.mkdir(parents=True, exist_ok=True)
             np.savez(
-                save_path / "acceleration_response_data.npz",
+                save_data_dir / "acceleration_response_data.npz",
                 speed_limit_changes=speed_limit_changes,
                 acceleration_responses=acceleration_responses,
                 stats=stats,
