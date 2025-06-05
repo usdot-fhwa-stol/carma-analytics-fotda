@@ -461,7 +461,7 @@ Verifies that vehicle maintains steady state for at least a specified duration a
 - `is_successful`: Boolean - True if vehicle was at steady state for at least the minimum required time
 
 #### Dependencies
-- Topics: HARDWARE_VEHICLE_TWIST_TOPIC
+- Topics: `/hardware_interface/vehicle/twist`
 - Messages: Twist messages with twist.linear.x field containing vehicle speed
 
 ## Adding New Analysis Functions
