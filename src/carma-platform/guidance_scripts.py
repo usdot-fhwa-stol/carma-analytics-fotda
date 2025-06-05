@@ -7,14 +7,8 @@ from pathlib import Path
 from scipy.spatial import KDTree
 import json
 from utils import calculate_error_statistics, print_stats, align_time_series
-from rclpy.time import Time
-from rclpy.duration import Duration
 from scipy.spatial.transform import Rotation as r
 from bisect import bisect_left
-import csv
-import os
-import re
-from datetime import datetime
 
 DEG_TO_RAD = 0.0174533
 MPH_TO_MPS = 0.44704
@@ -2132,7 +2126,7 @@ def get_geofence_entrance_and_exit_times(mcap_path):
 
     return time_enter_active_geofence, time_exit_active_geofence, found_geofence_times
 
-def get_route_original_speed(mcap_path, start_time):
+def get_route_original_speed(mcap_path, start_time=None):
     """
     Get the speed limit of the first route
 
@@ -2160,211 +2154,6 @@ def get_route_original_speed(mcap_path, start_time):
 
     return original_speed_limit
 
-def process_tomcat_logs(
-    cc_data_path,
-    log_date,
-    max_delay,
-    expected_rate,
-    save_stats_dir=None,
-    save_data_dir=None,
-    save_plot_dir=None
-):
-    """
-    Reads .log files to process the TrafficControlRequests and TrafficControlMessages from Carma Cloud.
-    Assumes every file in the directory is a .log file and that all .log files were taken on the same day.
-
-    Args:
-        cc_data_path: Path to directory containing cc.log files
-        log_data: String with the day the logs were taken to convert to log times to Unix Epoch Time
-        max_delay: Maximum allowed delay between TCR recipt and TCM broadcasted
-        expected_rate: Rate in Hz at which any TCM is expected to be broadcasted
-
-    Returns:
-        all_results: Dictionary of dictionaries containing:
-            'reqid': ID of the TCR received and TCM(s) broadcasted
-                'tcr_time': Time the TCR was received
-                'first_tcm_time': Time the first TCM was broadcasted
-                'response_delay': Time between receiving the TCR and broadcasting the first TCM
-                'tcm_1': ID of a TCM broadcasted in response to the TCR
-                    'timestamps': Array of times this exact TCM was broadcasted
-                    'msgnum': Message number of the TCM
-                    'count': Number of times that TCM was broadcasted
-                    'rate': Rate at which that TCM was broadcasted
-                'tcm_2': ...
-    """
-    all_results = {}
-
-    # Formats to determine reqid, time of log, and type of log message in a file
-    time_pattern = re.compile(r'\[DEBUG (\d{2}:\d{2}:\d{2}\.\d{3})')
-    reqid_pattern = r'<reqid>([A-F0-9]+)</reqid>'
-    tcmid_pattern = r'<id>([a-fA-F0-9]+)</id>'
-    msgnum_pattern = r'<msgnum>(\d+)</msgnum>'
-    message_type_pattern = r'<(TrafficControlRequest|TrafficControlMessage)'
-
-    # Parses every file in the passed in directory
-    for filename in os.listdir(cc_data_path):
-        file_path = os.path.join(cc_data_path, filename)
-        if os.path.isfile(file_path):
-            print(f"Opening file {file_path}")
-            with open(file_path, 'r') as f:
-                for line in f:
-                    if 'TrafficControlRequest' not in line and 'TrafficControlMessage' not in line:
-                        continue
-
-                    # Extract timestamp
-                    time_match = re.search(time_pattern, line)
-                    if not time_match:
-                        continue
-                    timestamp_str = time_match.group(1)
-                    timestamp = datetime.strptime(f"{log_date} {timestamp_str}", "%Y-%m-%d %H:%M:%S.%f")
-                    timestamp_epoch = timestamp.timestamp()
-
-                    # Extract reqid
-                    reqid_match = re.search(reqid_pattern, line)
-                    if not reqid_match:
-                        continue
-                    reqid = reqid_match.group(1)
-
-                    # Determine if line contains TCR or TCM
-                    msg_match = re.search(message_type_pattern, line)
-                    if not msg_match:
-                        continue
-                    msg_type = msg_match.group(1)
-
-                    # Initialize reqid entry
-                    if reqid not in all_results:
-                        all_results[reqid] = {
-                            'tcr_time': None,
-                            'first_tcm_time': None,
-                            'response_delay': None
-                        }
-
-                    if msg_type == 'TrafficControlRequest' and all_results[reqid]['tcr_time'] is None:
-                        all_results[reqid]['tcr_time'] = timestamp_epoch
-                    elif msg_type == 'TrafficControlMessage':
-                        tcmid_match = re.search(tcmid_pattern, line)
-                        if not tcmid_match:
-                            continue
-                        tcmid = tcmid_match.group(1)
-
-                        if tcmid not in all_results[reqid]:
-                            all_results[reqid][tcmid] = {
-                                "timestamps": [],
-                                "msgnum": 0,
-                                "count": 0,
-                                "rate": 0.0
-                            }
-
-                        msgnum_match = re.search(msgnum_pattern, line)
-                        if not msgnum_match:
-                            continue
-                        msgnum = int(msgnum_match.group(1))
-
-                        entry = all_results[reqid][tcmid]
-                        entry['timestamps'].append(timestamp_epoch)
-                        entry['count'] += 1
-                        entry['msgnum'] = msgnum
-
-                        if all_results[reqid]['first_tcm_time'] is None:
-                            all_results[reqid]['first_tcm_time'] = timestamp_epoch
-
-                            if all_results[reqid]['tcr_time'] is not None:
-                                delay = (all_results[reqid]['first_tcm_time'] - all_results[reqid]['tcr_time'])
-                                all_results[reqid]['response_delay'] = delay
-
-                        timestamps = all_results[reqid][tcmid]['timestamps']
-                        if len(timestamps) >= 2:
-                            duration = (timestamps[-1] - timestamps[0])
-                            entry['rate'] = entry['count'] / duration if duration > 0 else float('inf')
-                        else:
-                            entry['rate'] = 0.0
-
-                        all_results[reqid][tcmid] = entry
-
-    # Pull data to be graphed
-    req_times = []
-    response_delays = []
-
-    broadcast_rates = []
-    broadcast_times = []
-
-
-    for reqid, data in all_results.items():
-        req_time = data['tcr_time']
-        delay = data.get('response_delay')
-
-        if req_time is not None and delay is not None:
-            req_times.append(req_time)
-            response_delays.append(delay)
-
-        for msg_id, msg_data in data.items():
-            if msg_id in {'tcr_time', 'first_tcm_time', 'response_delay'}:
-                continue
-
-            timestamps = msg_data.get('timestamps', [])
-            rate = msg_data.get('rate', 0)
-
-            if timestamps:
-                first_msg_time = min(timestamps)
-                broadcast_times.append(first_msg_time)
-                broadcast_rates.append(rate)
-
-    # Create visualizations
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12,8), sharex=True)
-
-    ax1.plot(req_times, response_delays, color='blue', label='Response Delay')
-    ax1.axhline(max_delay, color='green', linestyle='--', label=f"Maximum Allowed Delay: {max_delay} s")
-    ax1.set_ylabel("Response Delay (s)")
-    ax1.set_title("(FWZ-4) TCR Receipt to TCM Response Delay Over Time")
-    ax1.legend()
-    ax1.grid(True)
-
-    ax2.plot(broadcast_times, broadcast_rates, color='red', label='Broadcast Rate')
-    ax2.axhline(expected_rate, color='orange', linestyle='--', label=f"Expected Broadcast Rate: {expected_rate} Hz")
-    ax2.set_xlabel("Time (s)")
-    ax2.set_ylabel("Broadcast Rate (Hz)")
-    ax2.set_title("(FWZ-19) TCM Broadcast Rate Over Time")
-    ax2.legend()
-    ax2.grid(True)
-
-    plt.tight_layout()
-
-    if save_plot_dir:
-        save_path = Path(save_plot_dir)
-        plt.savefig(save_path / "cc_TCM_analysis.png")
-        print(f"\nPlot saved to: {save_plot_dir}")
-    else:
-        plt.show()
-
-    # Run statistics on delay and rate
-    response_delays = np.array(response_delays)
-    delay_stats = calculate_error_statistics(response_delays)
-    broadcast_rates = np.array(broadcast_rates)
-    rate_stats = calculate_error_statistics(broadcast_rates)
-
-    # Print statistics
-    print_stats(delay_stats, "CC TCM Delay Statistics")
-    print_stats(rate_stats, "CC TCM Rate Statistics")
-
-    if save_stats_dir:
-        stats_full_path = save_stats_dir / "cc_TCM_analysis.json"
-        with open(stats_full_path, "w") as f:
-            json.dump(delay_stats, f, indent=2)
-            json.dump(rate_stats, f, indent=2)
-        print(f"Stats saved to: {save_stats_dir}")
-
-    # Save data if requested
-    if save_data_dir:
-        save_path = Path(save_data_dir)
-        np.savez(
-            save_path / "cc_TCM_data.npz",
-            all_results=all_results,
-            delay_stats=delay_stats,
-            rate_stats=rate_stats,
-        )
-        print(f"\nData saved to: {save_data_dir}")
-
-    return all_results, plt.gcf()
 
 def check_geofence_in_reroute(
     mcap_path,
@@ -2441,9 +2230,10 @@ def check_geofence_in_reroute(
 
     # Save shortest path data
     if save_data_dir:
-        save_path = Path(save_data_dir)
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
         np.savez(
-            save_path / "shortest_path_data.npz",
+            save_data_dir / "shortest_path_data.npz",
             closed_lanelets=closed_lanelets,
             shortest_path_lanelets=shortest_path_lanelets,
         )
@@ -2451,66 +2241,8 @@ def check_geofence_in_reroute(
 
     return initial_route_includes_closed_lane, map_is_updated_for_closed_lane
 
-def check_cc_response_delay(all_cc_data, expected_delay, save_stats_dir, save_data_dir):
-    """
-    Checks the delay between Carma Cloud receiving a TCR from the vehicle and sending a TCM
 
-    Args:
-        all_cc_data: Dictionary of dictionaries containing:
-            'reqid': ID of the TCR received and TCM(s) broadcasted
-                'tcr_time': Time the TCR was received
-                'first_tcm_time': Time the first TCM was broadcasted
-                'response_delay': Time between receiving the TCR and broadcasting the first TCM
-                'tcm_1': ID of a TCM broadcasted in response to the TCR
-                    'timestamps': Array of times this exact TCM was broadcasted
-                    'msgnum': Message number of the TCM
-                    'count': Number of times that TCM was broadcasted
-                    'rate': Rate at which that TCM was broadcasted
-                'tcm_2': ...
-        expected_delay: Maximum expected delay between TCR receipt and sending TCM
-
-    Returns:
-        is_successful: Boolean - True if all TCR -> TCM delays are within expected_delay
-    """
-    is_successful = True
-    delays = []
-    failed_delays = []
-
-    for reqid in all_cc_data:
-        data = all_cc_data[reqid]
-        delays.append(data['response_delay'])
-        if data['response_delay'] > expected_delay:
-            is_successful = False
-            failed_delays.append((reqid, data['response_delay']))
-
-    if is_successful:
-        print(f"FWZ-4 Succeeded: All TCR's received had a TCM broadcasted within {expected_delay} seconds.")
-    else:
-        print(f"FWZ-4: Failed - {len(failed_delays)} TCMs were broadcasted more than {expected_delay} seconds after TCR receipt.")
-
-    delays = np.array(delays)
-    stats = calculate_error_statistics(delays)
-    print_stats(stats, 'CC TCM Broadcast Delay Statistics')
-
-    if save_stats_dir:
-        stats_full_path = save_stats_dir / "cc_tcm_broadcast_delay_analysis.json"
-        with open(stats_full_path, "w") as f:
-            json.dump(stats, f, indent=2)
-        print(f"Stats saved to: {save_stats_dir}")
-
-    if save_data_dir:
-        save_path = Path(save_data_dir)
-        np.savez(
-            save_path / "cc_tcm_broadcast_delay_data.npz",
-            delays=delays,
-            failed_delays=failed_delays,
-            stats=stats,
-        )
-        print(f"\nData saved to: {save_data_dir}")
-
-    return is_successful
-
-def check_in_geofence_speed_limits(
+def check_speed_limits_in_geofence(
     mcap_path,
     time_enter_geofence,
     time_exit_geofence,
@@ -2532,7 +2264,7 @@ def check_in_geofence_speed_limits(
     geofence_topics = [INCOMING_GEOFENCE_CONTROL_TOPIC]
     route_state_topics = [GUIDANCE_ROUTE_STATE_TOPIC]
 
-    ms_threshold = 0.03
+    speed_tolerance_ms = 0.03
 
     if not time_enter_geofence or not time_exit_geofence:
         print("FWZ-7 Failed: Vehicle never entered geofence - can not determine if workzone speed limit was processed")
@@ -2545,12 +2277,12 @@ def check_in_geofence_speed_limits(
     )
     incoming_geofence_timestamps, tcm_v01s = extracted_geofence_data[geofence_topics[0]]
 
-    time_buffer = 2 # Buffer after entering geofence and before exiting geofence for which advisory speed limit is observed
+    time_buffer_sec = 2 # Buffer in seconds after entering geofence and before exiting geofence for which advisory speed limit is observed
     extracted_route_state_data = extract_mcap_data(
         mcap_path,
         route_state_topics,
-        start_time = (time_enter_geofence + time_buffer),
-        end_time = (time_exit_geofence - time_buffer),
+        start_time = (time_enter_geofence + time_buffer_sec),
+        end_time = (time_exit_geofence - time_buffer_sec),
         field_extractors={GUIDANCE_ROUTE_STATE_TOPIC: lambda msg: (
                 msg.speed_limit,
                 msg.lanelet_id
@@ -2562,10 +2294,7 @@ def check_in_geofence_speed_limits(
     # Check that a TrafficControlMessage was published using the correct advisory speed limit
     has_communicated_advisory_speed_limit = False
     for tcm_v01 in tcm_v01s:
-        if (tcm_v01.params.detail.choice == 12) and (
-            advisory_speed_limit - ms_threshold
-                <= tcm_v01.params.detail.maxspeed * MPH_TO_MPS
-                    <= advisory_speed_limit + ms_threshold):
+        if (tcm_v01.params.detail.choice == 12) and (advisory_speed_limit - speed_tolerance_ms <= tcm_v01.params.detail.maxspeed <= advisory_speed_limit + speed_tolerance_ms):
             has_communicated_advisory_speed_limit = True
 
     # Check that lanelets travelled through within the geofence have the expected advisory speed limit applied
@@ -2575,7 +2304,7 @@ def check_in_geofence_speed_limits(
         speed_limit = state[0]
         lanelet_id = state[1]
         lanelet_speed_limits.append((lanelet_id, speed_limit))
-        if(abs(speed_limit-advisory_speed_limit) >= ms_threshold):
+        if(abs(speed_limit-advisory_speed_limit) >= speed_tolerance_ms):
             print(f"Lanelet ID {lanelet_id} has speed limit of {speed_limit} m/s.")
             print(f"Does not match advisory speed limit of {advisory_speed_limit} m/s.")
             has_correct_geofence_lanelet_speed_limits = False
@@ -2589,9 +2318,10 @@ def check_in_geofence_speed_limits(
         is_successful = False
 
     if save_data_dir:
-        save_path = Path(save_data_dir)
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
         np.savez(
-            save_path / "geofence_speed_limit_data.npz",
+            save_data_dir / "geofence_speed_limit_data.npz",
             advisory_speed_limit=advisory_speed_limit,
             lanelet_speed_limits=lanelet_speed_limits,
         )
@@ -2599,125 +2329,6 @@ def check_in_geofence_speed_limits(
 
     return is_successful
 
-def check_tcm_acknowledgements(
-    mcap_path,
-    max_delay,
-    save_stats_dir=None,
-    save_data_dir=None,
-    save_plots_dir=None
-):
-    """
-    Check that all TCMs received by the vehicle are acknowledged within max_delay
-
-    Args:
-        mcap_path: Path to MCAP file
-        max_delay: Maximum amount of time vehicle can take to acknowledged TCM
-
-    Returns:
-        is_successful: Boolean - True if all TCMs are acknowledged within max_delay
-        tcm_acknowledgements: List of tuples containing
-            key[0]: reqid of the TCM
-            key[1]: msgnum of the TCM
-            tcm_time: time the TCM was received
-            ack_time: time the TCM was acknowledged
-    """
-    topics = [INCOMING_GEOFENCE_CONTROL_TOPIC, OUTGOING_MOBILITY_OPERATION_TOPIC]
-
-    received_tcms = {}
-    acknowledged_tcms = {}
-
-    extracted_data = extract_mcap_data(
-        mcap_path,
-        topics,
-        field_extractors={
-            INCOMING_GEOFENCE_CONTROL_TOPIC: lambda msg: msg.tcm_v01,
-            OUTGOING_MOBILITY_OPERATION_TOPIC: lambda msg: msg
-        }
-    )
-
-    # Get the time that each TCM was received
-    tcm_timestamps, tcms = extracted_data[topics[0]]
-    for timestamp, tcm in zip(tcm_timestamps, tcms):
-        reqid_hex = ''.join(f'{byte:02X}' for byte in tcm.reqid.id)
-        msgnum = tcm.msgnum
-        received_tcms[(reqid_hex, msgnum)] = timestamp
-
-    # Get the time that each TCM was acknowledged
-    ack_timestamps, acks = extracted_data[topics[1]]
-    for timestamp, ack in zip(ack_timestamps, acks):
-        # We only want the Geofence Acknowledgement ones
-        if ack.strategy == "carma3/Geofence_Acknowledgement":
-            match = re.search(r"traffic_control_id:([0-9A-Fa-f]+),\s*msgnum:(\d+)", ack.strategy_params)
-            if match:
-                reqid_hex = match.group(1).upper()
-                msgnum = int(match.group(2))
-                acknowledged_tcms[(reqid_hex, msgnum)] = timestamp
-
-    tcm_acknowledgements = []
-    is_successful = True
-    times_ack_delays = []
-    # Check if every TCM is acknowledged and if so, within max_delay
-    for key, tcm_time in received_tcms.items():
-        if key in acknowledged_tcms:
-            ack_time = acknowledged_tcms[key]
-            time_to_ack = ack_time - tcm_time
-            times_ack_delays.append((ack_time, time_to_ack))
-            if time_to_ack > max_delay:
-                is_successful = False
-                print(f"TCM reqid: {key[0]} msgnum: {key[1]} wasn't acknowledged by threshold. Was {time_to_ack} s, expected {max_delay} s.")
-            # Add tcm acknowledgement tuple to output list
-            tcm_acknowledgements.append((key[0], key[1], tcm_time, ack_time))
-        else:
-            is_successful = False
-            print(f"TCM reqid: {key[0]} msgnum: {key[1]} was not acknowledged")
-
-    if is_successful:
-        print(f"FWZ-9 Succeeded - All TCMs were acknowledged within {max_delay} s.")
-    else:
-        print(f"FWZ-9 Failed: Not all TCMs were acknowledged or acknowledged within {max_delay} s.")
-
-    # Create visualizations
-    times, ack_delays = zip(*times_ack_delays)
-    fig, ax = plt.subplots(figsize=(10,4))
-    ax.plot(times, ack_delays, label='TCM Acknowledgement Delay', color='blue')
-    ax.axhline(y=max_delay, linestyle='--', color='gray', label=f'Max Expected TCM Acknowledgement Delay')
-    ax.set_xlabel('Time (s)')
-    ax.set_ylabel('Acknowledgement Delay (s)')
-    ax.set_title('TCM Acknowledgement Delay Over Time')
-    ax.grid(True)
-    ax.legend()
-    plt.tight_layout()
-
-    if save_plots_dir:
-        save_path = Path(save_plots_dir)
-        plt.savefig(save_path / "tcm_acknowledgement_analysis.png")
-        print(f"\nPlot saved to: {save_plots_dir}")
-    else:
-        plt.show()
-
-    # Calculate, print, and save statistics
-    ack_delays = np.array(ack_delays)
-    stats = calculate_error_statistics(ack_delays)
-    print_stats(stats, "TCM Acknowledgement Delay Statistics")
-
-    if save_stats_dir:
-        stats_full_path = save_stats_dir / "tcm_acknowledgement_analysis.json"
-        with open(stats_full_path, "w") as f:
-            json.dump(stats, f, indent=2)
-        print(f"Stats saved to: {save_stats_dir}")
-
-    if save_data_dir:
-        save_path = Path(save_data_dir)
-        np.savez(
-            save_path / "tcm_acknowledgement_data.npz",
-            tcm_acknowledgements=tcm_acknowledgements,
-            ack_delays=ack_delays,
-            stats=stats,
-        )
-        print(f"\nData saved to: {save_data_dir}")
-
-
-    return is_successful, tcm_acknowledgements, plt.gcf(), stats
 
 def check_reroute_duration(
     mcap_path,
@@ -2818,9 +2429,10 @@ def check_reroute_duration(
         is_successful = False
 
     if save_data_dir:
-        save_path = Path(save_data_dir)
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
         np.savez(
-            save_path / "reroute_duration_data.npz",
+            save_data_dir / "reroute_duration_data.npz",
             paths=paths,
             route_generation_times=route_generation_times,
             duration_reroute_after_closed_lane_tcm_received=duration_reroute_after_closed_lane_tcm_received,
@@ -2862,14 +2474,14 @@ def get_lateral_velocities(mcap_path, start_time=None, end_time=None):
     if not orientation_timestamps.any():
         return []
 
-    # Find the reference orientation 1 index before the lanechnge starts
-    ref_idx = max(0, bisect_left(orientation_timestamps, start_time) - 1)
-    reference_orientation = orientations[ref_idx]  # First orientation as reference
+    # Find the reference orientation 1 index before the lanechange starts
+    ref_idx = max(0, bisect_left(orientation_timestamps, start_time) -1)
+    reference_orientation = orientations[ref_idx] # First orientation as reference
     print(f"Reference Orientation: {reference_orientation} at {orientation_timestamps[ref_idx]} seconds")
     reference_quat = [reference_orientation.x, reference_orientation.y,
-                     reference_orientation.z, reference_orientation.w]
+                      reference_orientation.z, reference_orientation.w]
     reference_rotation = r.from_quat(reference_quat)
-    reference_yaw = reference_rotation.as_euler('xyz')[2]  # Z-axis yaw
+    reference_yaw = reference_rotation.as_euler('xyz')[2] # Z-axis yaw
 
     print(f"Reference Yaw: {reference_yaw} radians")
     # For every twist, find the orientation by nearest timestamp
@@ -2885,18 +2497,17 @@ def get_lateral_velocities(mcap_path, start_time=None, end_time=None):
             nearest_idx = idx - 1 if abs(twist_timestamp - before) < abs(twist_timestamp - after) else idx
 
         closest_orientation = orientations[nearest_idx]
-
         # Transform body velocity to world frame
         body_velocity = [twist.x, twist.y, twist.z]
         current_orientation = [closest_orientation.x, closest_orientation.y,
-                              closest_orientation.z, closest_orientation.w]
+                                closest_orientation.z, closest_orientation.w]
         rotation = r.from_quat(current_orientation)
         world_velocity = rotation.apply(body_velocity)
 
         # Calculate lateral velocity relative to reference heading
         # Project world velocity onto lateral axis of reference heading
         lateral_velocity = (-world_velocity[0] * np.sin(reference_yaw) +
-                           world_velocity[1] * np.cos(reference_yaw))
+                            world_velocity[1] * np.cos(reference_yaw))
         lane_change_velocities.append((twist_timestamp, lateral_velocity))
 
     return lane_change_velocities
@@ -2923,17 +2534,15 @@ def check_lanechange_lateral_velocity(
     # Get times that vehicle is changing lanes
     planner_plugin = "cooperative_lanechange"
     intervals = get_planner_trajectory_intervals(mcap_path, planner_plugin)
+    start_time = intervals[0][0] if intervals else 0
+    # Get the lateral velocities starting at the first lane change
+    lane_change_velocities = get_lateral_velocities(mcap_path, start_time)
+    print("Got lateral velocities")
+
     lane_changes = []
 
     is_successful = True
     for idx, (lanechange_start, lanechange_end) in enumerate(intervals):
-        # Buffer before/after lane change to check lateral velocity to include small straight
-        # segments to use for the heading reference before lanechange
-        lanechange_eval_buffer_s = 0.5
-        lane_change_velocities = get_lateral_velocities(
-            mcap_path,
-            start_time=lanechange_start - lanechange_eval_buffer_s,
-            end_time=lanechange_end + lanechange_eval_buffer_s)
         lane_changes.append((lanechange_start, lanechange_end))
         for t, v in lane_change_velocities:
             if lanechange_start <= t <= lanechange_end:
@@ -2985,8 +2594,9 @@ def check_lanechange_lateral_velocity(
     plt.tight_layout()
 
     if save_plot_dir:
-        save_path = Path(save_plot_dir)
-        plt.savefig(save_path / "lateral_velocity_analysis.png")
+        save_plot_dir = Path(save_plot_dir)
+        save_plot_dir.mkdir(parents=True, exist_ok=True)
+        plt.savefig(save_plot_dir / "lateral_velocity_analysis.png")
         print(f"\nPlot saved to: {save_plot_dir}")
     else:
         plt.show()
@@ -2997,6 +2607,8 @@ def check_lanechange_lateral_velocity(
     print_stats(stats, "Lateral Velocity Statistics")
 
     if save_stats_dir:
+        save_stats_dir = Path(save_stats_dir)
+        save_stats_dir.mkdir(parents=True, exist_ok=True)
         stats_full_path = save_stats_dir / "lateral_velocity_analysis.json"
         with open(stats_full_path, "w") as f:
             json.dump(stats, f, indent=2)
@@ -3004,9 +2616,10 @@ def check_lanechange_lateral_velocity(
 
     # Save data if requested
     if save_data_dir:
-        save_path = Path(save_data_dir)
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
         np.savez(
-            save_path / "lateral_velocity_data.npz",
+            save_data_dir / "lateral_velocity_data.npz",
             lane_change_velocities=lane_change_velocities,
             intervals=intervals,
             stats=stats,
@@ -3055,15 +2668,18 @@ def check_lanechange_duration(
         print_stats(stats, "Lane Change Duration Statistics")
 
         if save_stats_dir:
+            save_stats_dir = Path(save_stats_dir)
+            save_stats_dir.mkdir(parents=True, exist_ok=True)
             stats_full_path = save_stats_dir / "lane_change_duration_analysis.json"
             with open(stats_full_path, "w") as f:
                 json.dump(stats, f, indent=2)
             print(f"Stats saved to: {save_stats_dir}")
 
         if save_data_dir:
-            save_path = Path(save_data_dir)
+            save_data_dir = Path(save_data_dir)
+            save_data_dir.mkdir(parents=True, exist_ok=True)
             np.savez(
-                save_path / "lane_change_duration_data.npz",
+                save_data_dir / "lane_change_duration_data.npz",
                 intervals=intervals,
                 durations=durations,
                 stats=stats,
@@ -3075,145 +2691,6 @@ def check_lanechange_duration(
 
     return is_successful, stats
 
-def check_tcm_broadcast_count(all_cc_data, tcm_acknowledgements, expected_broadcasts, save_stats_dir, save_data_dir):
-    """
-    Verify that each TCM was broadcasted {expected_broadcasts} times or if less than 10, that the vehicle had acknowledged the TCM
-
-    Args:
-        all_cc_data: Dictionary of dictionaries containing:
-            'reqid': ID of the TCR received and TCM(s) broadcasted
-                'tcr_time': Time the TCR was received
-                'first_tcm_time': Time the first TCM was broadcasted
-                'response_delay': Time between receiving the TCR and broadcasting the first TCM
-                'tcm_1': ID of a TCM broadcasted in response to the TCR
-                    'timestamps': Array of times this exact TCM was broadcasted
-                    'msgnum': Message number of the TCM
-                    'count': Number of times that TCM was broadcasted
-                    'rate': Rate at which that TCM was broadcasted
-                'tcm_2': ...
-        tcm_acknowledgements: list of tuples containing (reqid, msgnum, tcm_time, ack_time)
-            reqid: reqid of the TCM
-            msgnum: msgnum of the TCM
-            tcm_time: time the TCM was received
-            ack_time: time the TCM was acknowledged
-        expected_broadcasts: Number of times a TCM is expected to be broadcasted
-
-    Returns:
-        is_successful: Boolean - True if all TCMs were broadcasted the expected number of times, or broadcasted less and acknowledged by the vehicle
-    """
-    messages_acknowledged = {(reqid, msgnum) for (reqid, msgnum, _, _) in tcm_acknowledgements}
-    is_successful = True
-    tcm_counts = []
-
-    for req_id, data in all_cc_data.items():
-        for key, value in data.items():
-            if key in {'tcr_time', 'first_tcm_time', 'response_delay'}:
-                continue
-            count = value.get('count')
-            tcm_counts.append(count)
-            msgnum = value.get('msgnum')
-            if count > expected_broadcasts:
-                is_successful = False
-                print(f"FWZ-18 Failed - TCM reqid: {req_id} msgnum: {msgnum} was broadcasted {count} times. {expected_broadcasts} expected.")
-            elif count < expected_broadcasts:
-                if (req_id, msgnum) not in messages_acknowledged:
-                    is_successful = False
-                    print(f"FWZ-18 Failed - TCM reqid: {req_id} msgnum: {msgnum} was broadcasted less than {expected_broadcasts} times w/o acknowledgement from CMV")
-
-    if is_successful:
-        print(f"FWZ-18 Succeeded - All TCMs were broadcasted {expected_broadcasts} times or less than {expected_broadcasts} times with acknowledgement from CMV")
-
-    tcm_counts = np.array(tcm_counts)
-    stats = calculate_error_statistics(tcm_counts)
-    print_stats(stats, "TCM Broadcast Count")
-
-    if save_stats_dir:
-        stats_full_path = save_stats_dir / "tcm_broadcast_count_analysis.json"
-        with open(stats_full_path, "w") as f:
-            json.dump(stats, f, indent=2, default=str)
-        print(f"Stats saved to: {save_stats_dir}")
-
-    if save_data_dir:
-        save_path = Path(save_data_dir)
-        np.savez(
-            save_path / "tcm_broadcast_count_data.npz",
-            tcm_counts=tcm_counts,
-            stats=stats,
-        )
-        print(f"\nData saved to: {save_data_dir}")
-
-
-    return is_successful
-
-def check_tcm_broadcast_rate(all_cc_data, tcm_acknowledgements, expected_rate, save_stats_dir, save_data_dir):
-    """
-    Verifies that all TCMs are broadcasted at the expected rate
-
-    Args:
-        all_cc_data: Dictionary of dictionaries containing:
-            'reqid': ID of the TCR received and TCM(s) broadcasted
-                'tcr_time': Time the TCR was received
-                'first_tcm_time': Time the first TCM was broadcasted
-                'response_delay': Time between receiving the TCR and broadcasting the first TCM
-                'tcm_1': ID of a TCM broadcasted in response to the TCR
-                    'timestamps': Array of times this exact TCM was broadcasted
-                    'msgnum': Message number of the TCM
-                    'count': Number of times that TCM was broadcasted
-                    'rate': Rate at which that TCM was broadcasted
-                'tcm_2': ...
-        tcm_acknowledgements: list of tuples containing (reqid, msgnum, tcm_time, ack_time)
-            reqid: reqid of the TCM
-            msgnum: msgnum of the TCM
-            tcm_time: time the TCM was received
-            ack_time: time the TCM was acknowledged
-        expected_rate: expected broadcast rate of TCMs in Hz
-
-    Returns:
-        is_successful: Boolean - True if all TCMs are broadcasted at expected_rate
-    """
-    messages_acknowledged = {(reqid, msgnum) for (reqid, msgnum, _, _) in tcm_acknowledgements}
-    is_successful = True
-    tcm_rates = []
-
-    for req_id, data in all_cc_data.items():
-        for key, value in data.items():
-            if key in {'tcr_time', 'first_tcm_time', 'response_delay'}:
-                continue
-            rate = value.get('rate')
-            tcm_rates.append(rate)
-            msgnum = value.get('msgnum')
-            if rate != expected_rate:
-                if (req_id, msgnum) not in messages_acknowledged:
-                    is_successful = False
-                    print(f"TCM reqid: {req_id} msgnum: {msgnum} was broadcasted at {rate} Hz. {expected_rate} Hz expected.")
-                else:
-                    print(f"TCM reqid: {req_id} msgnum: {msgnum} was broadcasted at {rate} Hz. Acknowledged by vehicle.")
-
-    if is_successful:
-        print(f"FWZ-19 Succeeded - All TCMs were broadcasted at {expected_rate} Hz or were acknowledged by the vehicle.")
-    else:
-        print(f"FWZ-19 Failed - TCMs listed above were not broadcasted at {expected_rate} Hz and were not acknowledged by the vehicle.")
-
-    tcm_rates = np.array(tcm_rates)
-    stats = calculate_error_statistics(tcm_rates)
-    print_stats(stats, "TCM Broadcast Rate")
-
-    if save_stats_dir:
-        stats_full_path = save_stats_dir / "tcm_broadcast_rate_analysis.json"
-        with open(stats_full_path, "w") as f:
-            json.dump(stats, f, indent=2)
-        print(f"Stats saved to: {save_stats_dir}")
-
-    if save_data_dir:
-        save_path = Path(save_data_dir)
-        np.savez(
-            save_path / "tcm_broadcast_rate_data.npz",
-            tcm_rates=tcm_rates,
-            stats=stats,
-        )
-        print(f"\nData saved to: {save_data_dir}")
-
-    return is_successful
 
 def find_accel_period(accelerations, time_start, deceleration):
     """
@@ -3302,15 +2779,18 @@ def check_time_to_begin_deceleration(speed_limit_changes, response_times, respon
         print_stats(stats, 'Deceleration Command Response Time')
 
         if save_stats_dir:
+            save_stats_dir = Path(save_stats_dir)
+            save_stats_dir.mkdir(parents=True, exist_ok=True)
             stats_full_path = save_stats_dir / "deceleration_response_analysis.json"
             with open(stats_full_path, "w") as f:
                 json.dump(stats, f, indent=2)
             print(f"Stats saved to: {save_stats_dir}")
 
         if save_data_dir:
-            save_path = Path(save_data_dir)
+            save_data_dir = Path(save_data_dir)
+            save_data_dir.mkdir(parents=True, exist_ok=True)
             np.savez(
-                save_path / "deceleration_response_data.npz",
+                save_data_dir / "deceleration_response_data.npz",
                 speed_limit_changes=speed_limit_changes,
                 deceleration_responses=deceleration_responses,
                 stats=stats,
@@ -3512,7 +2992,7 @@ def check_deceleration_for_geofence(time_enter_geofence, accelerations, max_dece
     Args:
         time_enter_geofence: time the vehicle entered the geofence
         accelerations: Tuple of lists with timestamps and accelerations/decelerations
-        max_decleration: Max deceleration of the vehilce (m/s^2)
+        max_decleration: Max deceleration of the vehicle (m/s^2)
 
     Returns:
         is_successful: Boolean - True if average acceleration over a deceleration period is less than the max
@@ -3579,15 +3059,18 @@ def check_time_to_begin_acceleration(speed_limit_changes, response_times, respon
         print_stats(stats, 'Acceleration Command Response Time')
 
         if save_stats_dir:
+            save_stats_dir = Path(save_stats_dir)
+            save_stats_dir.mkdir(parents=True, exist_ok=True)
             stats_full_path = save_stats_dir / "acceleration_response_analysis.json"
             with open(stats_full_path, "w") as f:
                 json.dump(stats, f, indent=2)
             print(f"Stats saved to: {save_stats_dir}")
 
         if save_data_dir:
-            save_path = Path(save_data_dir)
+            save_data_dir = Path(save_data_dir)
+            save_data_dir.mkdir(parents=True, exist_ok=True)
             np.savez(
-                save_path / "acceleration_response_data.npz",
+                save_data_dir / "acceleration_response_data.npz",
                 speed_limit_changes=speed_limit_changes,
                 acceleration_responses=acceleration_responses,
                 stats=stats,
@@ -3640,99 +3123,11 @@ def check_acceleration_after_geofence(time_exit_geofence, accelerations, min_ave
             print(f"FWZ-26 Failed: Average acceleration at the {timestamp} 1-second interval is {accel} m/s^2. This is greater than the maximum of {max_section_acceleration} m/s^2")
             return False
 
-    print(f"FWZ-26 Succeeded: Average acceleration upon exiting the geofence is {average_acceleration} m/s^2. This is greater than the minimum of {min_average_acceleration} m/s^2")
-    print(f"FWZ-26 Succeeded: All 1-second averages are below the maximum of {max_section_acceleration} m/s^2.")
+    print(f"FWZ-26 Succeded: Average acceleration upon exiting the geofence is {average_acceleration} m/s^2. This is greater than the minimum of {min_average_acceleration} m/s^2")
+    print(f"FWZ-26 Succeded: All 1-second averages are below the maximum of {max_section_acceleration} m/s^2.")
 
     return is_successful
 
-def check_tcm_response_time(mcap_path, expected_tcr_to_tcm_duration, save_stats_dir, save_data_dir, save_plots_dir):
-    """
-    Verifies that after sending a TCR, the vehicle receives a TCM from Carma Cloud within a specified duration
-
-    Args:
-        mcap_path: Path to the MCAP file
-        expected_tcr_to_tcm_duration: expected max duration between sending a TCR to receiving a TCM (sec)
-
-    Returns:
-        is_successful: Boolean - True if all TCRs sent have a received TCM within the expected duration
-    """
-    # reqid_v2x_timestamps: 0 is reqid; 1 is tcr receive time; 2-10 are FIRST tcm tx times for msgnums 0 to 9
-    topics = [OUTGOING_GEOFENCE_REQUEST_TOPIC, INCOMING_GEOFENCE_CONTROL_TOPIC]
-
-    extracted_data = extract_mcap_data(
-        mcap_path,
-        topics,
-        field_extractors={
-            OUTGOING_GEOFENCE_REQUEST_TOPIC: lambda msg: msg.tcr_v01,
-            INCOMING_GEOFENCE_CONTROL_TOPIC: lambda msg: msg.tcm_v01
-        }
-    )
-    tcr_timestamps, tcrs = extracted_data[topics[0]]
-    tcm_timestamps, tcms = extracted_data[topics[1]]
-    tcm_receipt_delay = []
-
-    tcrs_to_tcms = []
-    for timestamp, tcr in zip(tcr_timestamps, tcrs):
-        tcr_id_hex = ''.join(f'{b:02X}' for b in tcr.reqid.id)
-        tcm_times = []
-        for t, tcm in zip(tcm_timestamps, tcms):
-            tcm_id_hex = ''.join(f'{b:02X}' for b in tcm.reqid.id)
-            if tcm_id_hex == tcr_id_hex:
-                tcm_times.append(t)
-        tcrs_to_tcms.append((tcr_id_hex, timestamp, tcm_times))
-
-    is_successful = True
-    for tcr_id, time, tcm_times in tcrs_to_tcms:
-        duration = tcm_times[0] - time
-        tcm_receipt_delay.append((time, duration))
-        if duration > expected_tcr_to_tcm_duration:
-            is_successful = False
-            print(f"FWZ-31 Failed: TCM response for TCR reqid: {tcr_id} was received {duration} seconds after being sent. Expected less than {expected_tcr_to_tcm_duration} seconds.")
-
-    if is_successful:
-        print(f"FWZ-31 Succeeded: All TCRs sent received TCM response within {expected_tcr_to_tcm_duration} seconds.")
-
-    # Create visualizations
-    times, tcm_receipt_delays = zip(*tcm_receipt_delay)
-
-    fig, ax = plt.subplots(figsize=(10,4))
-    ax.plot(times, tcm_receipt_delays, label='TCM Receipt Delay', color='blue')
-    ax.axhline(y=expected_tcr_to_tcm_duration, linestyle='--', color='gray', label=f'Max Expected TCR to TCM Delay')
-
-    ax.set_xlabel('Time (s)')
-    ax.set_ylabel('Delay (s)')
-    ax.set_title('TCR Broadcast to TCM Receipt Delay over Time')
-    ax.grid(True)
-    ax.legend()
-    plt.tight_layout()
-    if save_plots_dir:
-        save_path = Path(save_plots_dir)
-        plt.savefig(save_path / "tcm_receipt_analysis.png")
-        print(f"\nPlot saved to: {save_plots_dir}")
-    else:
-        plt.show()
-
-    # Calculate, print, and save statistics
-    tcm_receipt_delays = np.array(tcm_receipt_delays)
-    stats = calculate_error_statistics(tcm_receipt_delays)
-    print_stats(stats, "TCM Receipt Delay Statistics")
-
-    if save_stats_dir:
-        stats_full_path = save_stats_dir / "tcm_receipt_analysis.json"
-        with open(stats_full_path, "w") as f:
-            json.dump(stats, f, indent=2)
-        print(f"Stats saved to: {save_stats_dir}")
-
-    if save_data_dir:
-        save_path = Path(save_data_dir)
-        np.savez(
-            save_path / "tcm_receipt_data.npz",
-            tcm_receipt_delay=tcm_receipt_delay,
-            stats=stats,
-        )
-        print(f"\nData saved to: {save_data_dir}")
-
-    return is_successful
 
 # More guidance specific analysis scripts to come ....
 

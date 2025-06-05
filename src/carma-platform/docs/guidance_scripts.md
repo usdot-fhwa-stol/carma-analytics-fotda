@@ -279,6 +279,172 @@ Tuple containing:
 #### Example Plot
 ![Speed Limit change response analysis](speed_change_analysis.png)
 
+### get_geofence_entrance_and_exit_times
+Gets the time_enter_geofence and time_exit_geofence by looking at is_on_active_geofence from the `/environment/active_geofence` topic. Returns the timestamps and a boolean showing it is found. Returns None, None, False if the vehicle never entered a geofence.
+
+#### Parameters
+- `mcap_path`: Path to MCAP file
+
+#### Output
+- Returns a tuple: (time_enter_geofence, time_exit_geofence, geofence_times_found)
+
+### get_route_original_speed
+Get the speed limit in m/s of the route at a specified time from `/guidance/route_state`. Returns the first speed limit if no time is specified.
+
+#### Parameters
+- `mcap_path`: Path to MCAP file
+- `start_time`: Time to start the analysis
+
+#### Output
+- `original_speed_limit`: Speed limit in m/s
+
+### check_geofence_in_reroute
+Analyzes `/guidance/route` to determine whether a closed lanelet is present in either the original route or the re-route
+
+#### Parameters
+- `mcap_path`: Path to MCAP file
+- `closed_lanelets`: List of closed lanelet ids
+
+#### Output
+- Returns a tuple: (initial_route_includes_closed_lane, map_updated_for_closed_lane)
+
+### check_in_geofence_speed_limits
+Checks that the vehicle processes the new speed limit after receiving a TCM with new workzone speed limit
+
+#### Parameters
+- `mcap_path`: Path to MCAP file
+- `time_enter_geofence`: Time the vehicle entered the geofence
+- `time_exit_geofence`: Time the vehicle exited the geofence
+- `advisory_speed_limit`: New speed limit within the geofence
+
+#### Output
+-  `is_successful`: Boolean - True if lanelets travelled through within geofence have the advisory speed limit applied
+
+### check_reroute_duration
+Checks that after receiving a TCM with work zone information, the vehicle updates its route within a specified period of time
+
+#### Parameters
+- `mcap_path`: Path to MCAP file
+- `max_duration`: Max amount of time (seconds) vehicle can take to update route
+
+#### Output
+- `is_successful`: Boolean - True if vehicle updates route within the specified time
+
+### get_lateral_velocities
+Gets a list of (timestamp, lateral_velocity) with linear twist and pose orientation data from `/hardware_interface/vehicle/twist` and `/localization/current_pose`
+
+#### Parameters
+- `mcap_path`: Path to MCAP file
+
+#### Output
+- Returns a list of tuples: (timestamp, lateral_velocity)
+
+### check_lanechange_lateral_velocity
+Verifies that the lateral velocity during a lane change is within specified bounds
+
+#### Parameters
+- `mcap_path`: Path to MCAP file
+- `min_lat_velocity`: Minimum allowed lateral velocity (m/s)
+- `max_lat_velocity`: Maximum allowed lateral velocity (m/s)
+
+#### Output
+- Returns a tuple: (is_passed, plot_figure, stats)
+- Saves statistics as JSON, data as NPZ, and plot as PNG (if directories are provided)
+
+### check_lanechange_duration
+Verifies that vehicle completes all lane changes within a specified duration
+
+#### Parameters
+- `mcap_path`: Path to MCAP file
+- `start_time`: Time to begin analysis
+- `max_lanechange_duration`: Maximum allowed duration of lanechange (s)
+
+#### Output
+- Returns a tuple: (is_passed, stats)
+- Saves statistics as JSON, and data as NPZ (if directories are provided)
+
+### find_accel_period
+Helper functon to find the beginning and end of acceleration/deceleration periods, as well as the values during that time.
+
+#### Parameters
+- `accelerations`: Tuple of lists with timestamps and acceleration values
+- `time_start`: Time to begin analysis
+- `deceleration`: Boolean - True if wanting to find deceleration period
+
+#### Output
+- Returns a tuple: (time_start_period, time_end_period, accels)
+
+### check_time_to_begin_deceleration
+Verifies that all slow down speed limit changes are responded to within a specified threshold
+
+#### Parameters
+- `speed_limit_changes`: List of tuples containing (time of speed limit change, old speed limit, new speed limit)
+- `response_times`: List of speed limit change response times
+- `response_threshold`: Maximum amount of time vehicle can take to respond to a speed change
+
+#### Output
+- `is_successful`: Boolean - True if all slow down speed limit changes are responded to within a specified threshold
+
+### check_speed_before_workzone
+Verifies that vehicle speed matches the advisory speed limit upon entering the geofence
+
+#### Parameters
+- `mcap_path`: Path to MCAP file
+- `start_time`: Time to begin analysis
+- `end_time`: Time to end analysis
+- `workzone_lanelet_id`: List of closed/workzone lanelet ids
+- `advisory_speed_limit_ms`: Advisory speed limit of workzone
+- `speed_limit_threshold_ms`: Threshold vehicle speed must be +- within the advisory speed limit
+
+#### Output
+- `is_successful`: Boolean - True if vehicle speed is at advisory speed limit +- a given threshold upon entering geofence
+
+### create_geofence_acceleration_plot
+Creates plots comparing instantaneous acceleration and 1-sec average acceleration over time. Marks the times the vehicle entered and exited the geofence.
+
+#### Parameters
+- `accelerations`: List of tuples containing (timestamp, instantaneous acceleration)
+- `sec_accelerations`: List of tuples containing (timestamp, 1-sec average acceleration)
+- `time_enter_geofence`: Timestamp the vehicle entered the geofence
+- `time_exit_geofence`: Timestamp the vehicle exited the geofence
+
+#### Output
+Plot with instantaneous and 1-sec average acceleration over time. Saved to plot directory if given.
+
+### check_deceleration_for_geofence
+Verifies that the average acceleration over a deceleration period is under a given maximum value
+
+#### Parameters
+- `time_enter_geofence`: Time the vehicle entered the geofence
+- `accelerations`: Tuple of lists with timestamps and acceleration values
+- `max_deceleration`: Maximum deceleration of the vehicle (m/s^2)
+
+#### Output
+- `is_successful`: Boolean - True if average acceleration over the deceleration period upon entering a geofence is under the given maximum value
+
+### check_time_to_begin_acceleration
+Verifies that all speed up speed limit changes are responded to within a specified threshold
+
+#### Parameters
+- `speed_limit_changes`: List of tuples containing (time of speed limit change, old speed limit, new speed limit)
+- `response_times`: List of speed limit change response times
+- `response_threshold`: Maximum amount of time vehicle can take to respond to a speed change
+
+#### Output
+- `is_successful`: Boolean - True if all speed up speed limit changes are responded to within a specified threshold
+
+### check_acceleration_after_geofence
+Verifies that the average acceleration over a acceleration period is not less than the specified average minimum and that the average over any 1-second section is not greater than the specified section maximum
+
+#### Parameters
+- `time_exit_geofence`: Time the vehicle exited the geofence
+- `accelerations`: Tuple of lists with timestamps and acceleration values
+- `min_average_acceleration`: smallest average acceleration allowed over the entire acceleration period (m/s^2)
+- `section_accelerations`: Tuple of lists with timestamps and average accelerations over any given 1 second section
+- `max_section_acceleration`: Max acceleration of the vehilce allowed over any 1-second section(m/s^2)
+
+#### Output
+- `is_successful`: Boolean - True if average acceleration over the deceleration period upon entering a geofence is under the given maximum value
 
 ## Adding New Analysis Functions
 
