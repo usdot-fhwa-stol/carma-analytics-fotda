@@ -153,12 +153,12 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         print(f"Starting analysis for FWZ-7")
         try:
             is_passed = check_speed_limits_in_geofence(mcap_path, time_enter_geofence, time_exit_geofence, FREIGHT_ADVISORY_SPEED_LIMIT_MS, data_dir)
-            analysis_stats["check_in_geofence_speed_limits"] = is_passed
+            analysis_stats["check_speed_limits_in_geofence"] = is_passed
         except Exception as e:
             print(
                 f"Error analyzing {mcap_path} for receiving new speed limit in geofence from CC: {e}"
             )
-            analysis_stats["check_in_geofence_speed_limits"] = None
+            analysis_stats["check_speed_limits_in_geofence"] = None
         print(f"-----------------------------------------------------\n")
 
         ##########################################################################################################

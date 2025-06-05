@@ -308,7 +308,7 @@ Analyzes `/guidance/route` to determine whether a closed lanelet is present in e
 #### Output
 - Returns a tuple: (initial_route_includes_closed_lane, map_updated_for_closed_lane)
 
-### check_in_geofence_speed_limits
+### check_speed_limits_in_geofence
 Checks that the vehicle processes the new speed limit after receiving a TCM with new workzone speed limit
 
 #### Parameters

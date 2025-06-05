@@ -3138,8 +3138,8 @@ def check_acceleration_after_geofence(time_exit_geofence, accelerations, min_ave
             print(f"FWZ-26 Failed: Average acceleration at the {timestamp} 1-second interval is {accel} m/s^2. This is greater than the maximum of {max_section_acceleration} m/s^2")
             return False
 
-    print(f"FWZ-26 Succeded: Average acceleration upon exiting the geofence is {average_acceleration} m/s^2. This is greater than the minimum of {min_average_acceleration} m/s^2")
-    print(f"FWZ-26 Succeded: All 1-second averages are below the maximum of {max_section_acceleration} m/s^2.")
+    print(f"FWZ-26 Succeeded: Average acceleration upon exiting the geofence is {average_acceleration} m/s^2. This is greater than the minimum of {min_average_acceleration} m/s^2")
+    print(f"FWZ-26 Succeeded: All 1-second averages are below the maximum of {max_section_acceleration} m/s^2.")
 
     return is_successful
 

@@ -6,7 +6,7 @@ from guidance_scripts import (
     run_speed_limit_change_response_analysis,
     create_geofence_acceleration_plot,
     run_acceleration_comfort_analysis,
-    check_in_geofence_speed_limits,
+    check_speed_limits_in_geofence,
     check_geofence_in_reroute,
     check_reroute_duration,
     check_lanechange_lateral_velocity,
@@ -128,15 +128,15 @@ def analyze_mcap_file_for_tim_analysis(
         ############################################################################################
         print(f"Starting analysis for FWZ-7")
         try:
-            is_passed = check_in_geofence_speed_limits(
+            is_passed = check_speed_limits_in_geofence(
                 mcap_path, time_enter_geofence,
                 time_exit_geofence, TIM_ADVISORY_SPEED_LIMIT_MS, data_dir)
-            analysis_stats["fwz-7-check_in_geofence_speed_limits"] = is_passed
+            analysis_stats["fwz-7-check_speed_limits_in_geofence"] = is_passed
         except Exception as e:
             print(
                 f"Error analyzing {mcap_path} for receiving new speed limit from ERV: {e}"
             )
-            analysis_stats["fwz-7-check_in_geofence_speed_limits"] = None
+            analysis_stats["fwz-7-check_speed_limits_in_geofence"] = None
         print(f"-----------------------------------------------------\n")
 
         ############################################################################################
