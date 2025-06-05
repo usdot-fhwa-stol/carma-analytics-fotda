@@ -2950,49 +2950,54 @@ def create_geofence_acceleration_plot(accelerations, sec_accelerations, time_ent
         time_exit_geofence: Timestamp the vehicle exited the geofence
 
     """
-    acc_times = []
-    acc_values = []
-    sec_acc_times = []
-    sec_acc_values = []
+    if time_enter_geofence and time_exit_geofence:
+        acc_times = []
+        acc_values = []
+        sec_acc_times = []
+        sec_acc_values = []
 
-    for time, acc in accelerations:
-        if ((time_enter_geofence - 5) <= time <= (time_exit_geofence + 5)):
-            acc_times.append(time)
-            acc_values.append(acc)
+        for time, acc in accelerations:
+            if ((time_enter_geofence - 5) <= time <= (time_exit_geofence + 5)):
+                acc_times.append(time)
+                acc_values.append(acc)
 
-    for time, acc in sec_accelerations:
-        if ((time_enter_geofence - 5) <= time <= (time_exit_geofence + 5)):
-            sec_acc_times.append(time)
-            sec_acc_values.append(acc)
+        for time, acc in sec_accelerations:
+            if ((time_enter_geofence - 5) <= time <= (time_exit_geofence + 5)):
+                sec_acc_times.append(time)
+                sec_acc_values.append(acc)
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(10, 6))
-    ax1.plot(acc_times, acc_values, label='Instantaneous Acceleration', color='blue')
-    ax1.axvline(x=time_enter_geofence, color='gray', linestyle='--')
-    ax1.axvline(x=time_exit_geofence, color='gray', linestyle='--')
-    ax1.text(time_enter_geofence, ax1.get_ylim()[1], f'Entered Geofence: {time_enter_geofence:.2f}', color='gray', ha='center', va='bottom')
-    ax1.text(time_exit_geofence, ax1.get_ylim()[1], f'Exited Geofence: {time_exit_geofence:.2f}', color='gray', ha='center', va='bottom')
-    ax1.set_ylabel('Instantaneous Acceleration (m/s^2)')
-    ax1.set_title('Instantaneous Acceleration over Time', pad=20)
-    ax1.grid(True)
+        fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(10, 6))
+        ax1.plot(acc_times, acc_values, label='Instantaneous Acceleration', color='blue')
+        ax1.axvline(x=time_enter_geofence, color='gray', linestyle='--')
+        ax1.axvline(x=time_exit_geofence, color='gray', linestyle='--')
+        ax1.text(time_enter_geofence, ax1.get_ylim()[1], f'Entered Geofence: {time_enter_geofence:.2f}', color='gray', ha='center', va='bottom')
+        ax1.text(time_exit_geofence, ax1.get_ylim()[1], f'Exited Geofence: {time_exit_geofence:.2f}', color='gray', ha='center', va='bottom')
+        ax1.set_ylabel('Instantaneous Acceleration (m/s^2)')
+        ax1.set_title('Instantaneous Acceleration over Time', pad=20)
+        ax1.grid(True)
 
-    ax2.plot(sec_acc_times, sec_acc_values, label='1-Sec Average Acceleration', color='red')
-    ax2.axvline(x=time_enter_geofence, color='gray', linestyle='--')
-    ax2.axvline(x=time_exit_geofence, color='gray', linestyle='--')
-    ax2.text(time_enter_geofence, ax2.get_ylim()[1], f'Entered Geofence: {time_enter_geofence:.2f}', color='gray', ha='center', va='bottom')
-    ax2.text(time_exit_geofence, ax2.get_ylim()[1], f'Exited Geofence: {time_exit_geofence:.2f}', color='gray', ha='center', va='bottom')
-    ax2.set_ylabel('1-Sec Average Acceleration')
-    ax2.set_xlabel('Time (s)')
-    ax2.set_title('1-Sec Average Acceleration over Time', pad=20)
-    ax2.grid(True)
+        ax2.plot(sec_acc_times, sec_acc_values, label='1-Sec Average Acceleration', color='red')
+        ax2.axvline(x=time_enter_geofence, color='gray', linestyle='--')
+        ax2.axvline(x=time_exit_geofence, color='gray', linestyle='--')
+        ax2.text(time_enter_geofence, ax2.get_ylim()[1], f'Entered Geofence: {time_enter_geofence:.2f}', color='gray', ha='center', va='bottom')
+        ax2.text(time_exit_geofence, ax2.get_ylim()[1], f'Exited Geofence: {time_exit_geofence:.2f}', color='gray', ha='center', va='bottom')
+        ax2.set_ylabel('1-Sec Average Acceleration')
+        ax2.set_xlabel('Time (s)')
+        ax2.set_title('1-Sec Average Acceleration over Time', pad=20)
+        ax2.grid(True)
 
-    plt.legend()
-    plt.tight_layout()
+        plt.legend()
+        plt.tight_layout()
 
-    if save_plots_dir:
-        plt.savefig(save_plots_dir / "geofence_acceleration.png")
-        print(f"\nPlot saved to: {save_plots_dir}")
+        if save_plots_dir:
+            save_plots_dir = Path(save_plots_dir)
+            save_plots_dir.mkdir(parents=True, exist_ok=True)
+            plt.savefig(save_plots_dir / "geofence_acceleration.png")
+            print(f"\nPlot saved to: {save_plots_dir}")
+        else:
+            plt.show()
     else:
-        plt.show()
+        print(f"Vehicle never entered geofence, can not create geofence plots.")
 
 
 def check_deceleration_for_geofence(time_enter_geofence, accelerations, max_deceleration):
