@@ -2939,7 +2939,17 @@ def check_steady_state_after_geofence(
     return is_successful
 
 def create_geofence_acceleration_plot(accelerations, sec_accelerations, time_enter_geofence, time_exit_geofence, save_plots_dir=None):
+    """
+    Creates plots comparing instantaneous acceleration and 1-sec average acceleration over time. Marks the times the vehicle entered & exited the geofence
+    Saves the plot to save_plots_dir
 
+    Args:
+        accelerations: List of tuples containing (timestamp, instantaneous acceleration)
+        sec_accelerations: List of tuples containing (timestamp, 1-sec average acceleration)
+        time_enter_geofence: Timestamp the vehicle entered the geofence
+        time_exit_geofence: Timestamp the vehicle exited the geofence
+
+    """
     acc_times = []
     acc_values = []
     sec_acc_times = []
