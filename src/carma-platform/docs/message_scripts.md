@@ -86,3 +86,5 @@ Verifies that after sending a TCR, the vehicle receives a TCM within a specified
 #### Output
 - `is_successful`: Boolean - True if all TCRs sent have a received TCM within the specified time
 - Saves statistics as JSON, data as NPZ, and plot as PNG (if directories are provided)
+
+![Example Message Broadcast Rate Check Plot](example_message_broadcast_rate_check.png)
