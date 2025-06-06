@@ -308,7 +308,7 @@ Analyzes `/guidance/route` to determine whether a closed lanelet is present in e
 #### Output
 - Returns a tuple: (initial_route_includes_closed_lane, map_updated_for_closed_lane)
 
-### check_in_geofence_speed_limits
+### check_speed_limits_in_geofence
 Checks that the vehicle processes the new speed limit after receiving a TCM with new workzone speed limit
 
 #### Parameters
@@ -445,6 +445,24 @@ Verifies that the average acceleration over a acceleration period is not less th
 
 #### Output
 - `is_successful`: Boolean - True if average acceleration over the deceleration period upon entering a geofence is under the given maximum value
+
+### check_steady_state_after_geofence
+Verifies that vehicle maintains steady state for at least a specified duration after exiting a geofenced area. Steady state is defined as maintaining speed within a threshold range of the original speed limit.
+
+#### Parameters
+- `mcap_path`: Path to MCAP file
+- `time_begin_acceleration_after_geofence`: Start time to look for steady state
+- `time_end_engagement`: End time of engagement
+- `original_speed_limit_ms`: Original speed limit in m/s
+- `min_time_at_steady_state`: Minimum time required at steady state in seconds (default: 5.0)
+- `threshold_speed_limit_offset`: Speed threshold offset in m/s for steady state detection (default: 0.89408 m/s = 2 mph)
+
+#### Output
+- `is_successful`: Boolean - True if vehicle was at steady state for at least the minimum required time
+
+#### Dependencies
+- Topics: `/hardware_interface/vehicle/twist`
+- Messages: Twist messages with twist.linear.x field containing vehicle speed
 
 ## Adding New Analysis Functions
 

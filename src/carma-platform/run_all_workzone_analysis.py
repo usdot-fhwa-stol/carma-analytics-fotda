@@ -36,11 +36,11 @@ from guidance_scripts import (
 CC_LOG_SOURCE_FOLDER = "/workspaces/carma-analytics-fotda/.devcontainer/cc_log"
 DATE_CC_LOGS_TAKEN = "2025-05-20" # Assumes all logs were taken the same day
 CLOSED_LANELETS = [] # List of closed lanelets used in this test
-CC_TCR_TO_TCM_SEC = 0.1 
+CC_TCR_TO_TCM_SEC = 0.1
 CC_MAX_BROADCAST_COUNT = 10
-CC_MAX_BROADCAST_RATE_HZ = 10 
+CC_MAX_BROADCAST_RATE_HZ = 10
 
-FREIGHT_STEADY_STATE_TIME_SEC = 5 
+FREIGHT_STEADY_STATE_TIME_SEC = 5
 FREIGHT_MAINTAIN_SPEED_RANGE_MS = 0.89408 # 0.89408 m/s is 2 mph
 FREIGHT_TCM_ACKNOWLEDGEMENT_DELAY_SEC = 1
 FREIGHT_UPDATE_ACTIVE_ROUTE_SEC = 3
@@ -57,7 +57,7 @@ FREIGHT_ADVISORY_SPEED_LIMIT_MS = 4.5
 def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, stats_dir: Path, data_dir: Path, plots_dir: Path) -> list:
     """Extract single MCAP file and run all workzone analysis on it"""
     # 0. General Steps needed for all
-    
+
     # Get the engage/disengage times
     print("\nGetting engage/disengage times")
     try:
@@ -68,7 +68,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
 
     # Get the geofence entrance and exit times
     print("\nGetting the times the vehicle entered/exited the geofence")
-    try: 
+    try:
         time_enter_geofence, time_exit_geofence, found_geofence_times = get_geofence_entrance_and_exit_times(mcap_path)
         print(f"Enter time: {time_enter_geofence} Exit time: {time_exit_geofence} Found: {found_geofence_times}\n")
     except Exception as e:
@@ -76,7 +76,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
             f"Error analyzing {mcap_path} for getting geofence times: {e}\n"
         )
         return None
-    
+
     # Get the original speed limit
     print("\nGetting the original route speed limit")
     original_speed_limit_ms = get_route_original_speed(mcap_path, engage_time)
@@ -89,7 +89,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
     print("\nRunning Speed Limit Analysis")
     # Run the speed limit analysis for the entire period of time
     _, _, _, speed_limit_changes, response_times = run_speed_limit_change_response_analysis(mcap_path, steady_state_indication_time=FREIGHT_ADVISORY_SPEED_RESPONSE_SEC, save_stats_dir=stats_dir, save_data_dir=data_dir, save_plot_dir=plots_dir)
-    
+
     print("\nRunning Acceleration Analysis")
     # Run the acceleration analysis for the entire period of time
     _, _, _, _, accelerations, avg_accelerations, timepoints, avg_timepoints = run_acceleration_comfort_analysis(mcap_path, FREIGHT_MAX_DECELERATION_MS2, save_stats_dir=stats_dir, save_data_dir=data_dir, save_plot_dir=plots_dir)
@@ -102,15 +102,15 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
 
     print("\nCreating Geofence Plots")
     create_geofence_acceleration_plot(accelerations_times, avg_accelerations_times, time_enter_geofence, time_exit_geofence, plots_dir)
-    
+
     # Run all the tests from engage to disengage
     intervals = [(engage_time, disengage_time)]
     all_analysis_stats = []
-    
+
     print(f"-----------------------------------------------------")
     print(f"-------------Beginning workzone analysis-------------")
     print(f"-----------------------------------------------------")
-    for start_time, end_time in intervals:        
+    for start_time, end_time in intervals:
         analysis_stats = {}
 
         ##########################################################################################################
@@ -153,12 +153,12 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         print(f"Starting analysis for FWZ-7")
         try:
             is_passed = check_speed_limits_in_geofence(mcap_path, time_enter_geofence, time_exit_geofence, FREIGHT_ADVISORY_SPEED_LIMIT_MS, data_dir)
-            analysis_stats["check_in_geofence_speed_limits"] = is_passed
+            analysis_stats["check_speed_limits_in_geofence"] = is_passed
         except Exception as e:
             print(
                 f"Error analyzing {mcap_path} for receiving new speed limit in geofence from CC: {e}"
             )
-            analysis_stats["check_in_geofence_speed_limits"] = None
+            analysis_stats["check_speed_limits_in_geofence"] = None
         print(f"-----------------------------------------------------\n")
 
         ##########################################################################################################
@@ -213,7 +213,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         print(f"-----------------------------------------------------\n")
 
         ##########################################################################################################
-        # FWZ-14: After changing lanes, the vehicle will achieve steady-state 
+        # FWZ-14: After changing lanes, the vehicle will achieve steady-state
         #           (i.e. truck is driving within the lane) within 5 seconds
         ##########################################################################################################
         print(f"Starting analysis for FWZ-14")
@@ -228,7 +228,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         print(f"-----------------------------------------------------\n")
 
         ##########################################################################################################
-        # FWZ-18: CC will broadcast the TCM up to 10 times or until receipt of acknowledgement 
+        # FWZ-18: CC will broadcast the TCM up to 10 times or until receipt of acknowledgement
         #           message from the CMV
         ##########################################################################################################
         print(f"Starting analysis for FWZ-18")
@@ -259,7 +259,7 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
         #           deceleration command to the advisory speed limit within less than 1.3 seconds
         ##########################################################################################################
         print(f"Starting analysis for FWZ-22")
-        try: 
+        try:
             is_passed = check_time_to_begin_deceleration(speed_limit_changes, response_times, FREIGHT_ADVISORY_SPEED_RESPONSE_SEC, stats_dir, data_dir)
             analysis_stats["check_time_to_begin_deceleration"] = is_passed
         except Exception as e:
@@ -299,9 +299,9 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
             )
             analysis_stats["check_deceleration_for_geofence"] = None
         print(f"-----------------------------------------------------\n")
-        
+
         ##########################################################################################################
-        # FWZ-25: After exiting the geofenced area with an advisory speed limit, the vehicle will begin 
+        # FWZ-25: After exiting the geofenced area with an advisory speed limit, the vehicle will begin
         #           accelerating back to the origianl speed limit within less than 1.3 seconds
         ##########################################################################################################
         print(f"Starting analysis for FWZ-25")
@@ -314,10 +314,10 @@ def analyze_mcap_file_for_workzone_analysis(mcap_path: Path, output_dir: Path, s
             )
             analysis_stats["check_time_to_begin_acceleration"] = None
         print(f"-----------------------------------------------------\n")
-        
+
         ##########################################################################################################
-        # FWZ-26: After exiting the geofenced area with an advisory speed limit, the actual trajectory back to 
-        #           normal operations will include an acceleration section. The average acceleration over the 
+        # FWZ-26: After exiting the geofenced area with an advisory speed limit, the actual trajectory back to
+        #           normal operations will include an acceleration section. The average acceleration over the
         #           entire section shall be no less than 1 m/s^2, and the average acceleration over any 1-second
         #           portion of the section shall be no greater than 2.0 m/s^2
         ##########################################################################################################

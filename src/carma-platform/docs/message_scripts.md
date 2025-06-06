@@ -86,3 +86,28 @@ Verifies that after sending a TCR, the vehicle receives a TCM within a specified
 #### Output
 - `is_successful`: Boolean - True if all TCRs sent have a received TCM within the specified time
 - Saves statistics as JSON, data as NPZ, and plot as PNG (if directories are provided)
+
+### check_message_broadcast_rate
+Analyzes the broadcast rate of messages on any given topic to verify they are transmitted at the expected frequency. Uses both instantaneous rates and rolling window averages to determine if message timing meets requirements.
+
+#### Parameters
+- `mcap_path`: Path to MCAP file
+- `topic_name`: Name of the ROS topic to analyze (e.g., "/message/incoming_mobility_operation")
+- `expected_rate_hz`: Expected broadcast rate in Hz
+- `rate_tolerance_pct`: Tolerance percentage for rate matching (default: 0.1 = 10%)
+- `start_time`: Time to start the analysis (optional)
+- `end_time`: Time to end the analysis (optional)
+- `save_stats_dir`: Directory to save analysis stats (optional)
+- `save_data_dir`: Directory to save extracted data (optional)
+- `save_plot_dir`: Directory to save generated plots (optional)
+
+#### Output
+Returns:
+- `is_passed`: Boolean indicating if broadcast rate meets requirements (passes if ≥95% of time windows are within tolerance)
+- `stats`: Dictionary with statistical analysis including instantaneous and rolling window rate statistics
+- `figure`: Matplotlib figure object with two subplots showing instantaneous and 1-second window average rates
+- `broadcast_intervals`: Array of time intervals between messages
+- `timestamps`: Array of message timestamps
+- Saves statistics as JSON, data as NPZ, and plot as PNG (if directories are provided)
+
+![Example Message Broadcast Rate Check Plot](example_message_broadcast_rate_check.png)

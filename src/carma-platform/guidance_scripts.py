@@ -166,12 +166,16 @@ def run_crosstrack_analysis(
     print_stats(stats, "Cross Track Error Statistics")
 
     if save_stats_dir:
+        save_stats_dir = Path(save_stats_dir)
+        save_stats_dir.mkdir(parents=True, exist_ok=True)
         stats_full_path = save_stats_dir / "cross_track_stats_result.json"
         with open(stats_full_path, "w") as f:
             json.dump(stats, f, indent=2)
         print(f"Stats saved to: {save_stats_dir}")
 
     if save_data_dir:
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
         np.savez(
             save_data_dir / "cross_track_extracted_numpy_data.npz",
             timestamps=timestamps,
@@ -181,6 +185,8 @@ def run_crosstrack_analysis(
         print(f"\nData saved to: {save_data_dir}")
 
     if save_plot_dir:
+        save_plot_dir = Path(save_plot_dir)
+        save_plot_dir.mkdir(parents=True, exist_ok=True)
         plt.savefig(save_plot_dir / "cross_track_error_over_time.png")
         print(f"\nPlot saved to: {save_plot_dir}")
     else:
@@ -2087,14 +2093,14 @@ def get_geofence_entrance_and_exit_times(mcap_path):
     found_geofence_exit_time = False
 
     topics = [ACTIVE_GEOFENCE_TOPIC]
-    
+
     extracted_data = extract_mcap_data(
-        mcap_path, 
+        mcap_path,
         topics,
         field_extractors={ACTIVE_GEOFENCE_TOPIC: lambda msg: msg.is_on_active_geofence}
     )
     timestamps, states = extracted_data[topics[0]]
-    
+
     for timestamp, geofence_state in zip(timestamps, states):
         # Check if is_on_active_geofence parameter is true and aren't currently in a geofence
         if(geofence_state and not is_on_active_geofence):
@@ -2102,7 +2108,7 @@ def get_geofence_entrance_and_exit_times(mcap_path):
             print("Entered geofence at " + str(timestamp))
             found_geofence_entrance_time = True
             is_on_active_geofence = True
-        
+
         # Check if is_on_active_geofence parameter is false and are currently in a geofence
         if(not geofence_state and is_on_active_geofence):
             time_exit_active_geofence = timestamp
@@ -2110,7 +2116,7 @@ def get_geofence_entrance_and_exit_times(mcap_path):
             time_in_geofence = time_exit_active_geofence - time_enter_active_geofence
             print("Spent " + str(time_in_geofence) + " sec in geofence. Started at " + str(time_enter_active_geofence))
             is_on_active_geofence = False
-    
+
     found_geofence_times = False
     if (found_geofence_entrance_time and found_geofence_exit_time):
         found_geofence_times = True
@@ -2150,9 +2156,9 @@ def get_route_original_speed(mcap_path, start_time=None):
 
 
 def check_geofence_in_reroute(
-    mcap_path, 
-    closed_lanelets,  
-    save_data_dir=None, 
+    mcap_path,
+    closed_lanelets,
+    save_data_dir=None,
 ):
     """
     Checks whether a closed lanelet is present in either the original route (FWZ-1) or the reroute (FWZ-8)
@@ -2182,7 +2188,7 @@ def check_geofence_in_reroute(
 
     for timestamp, path in zip(timestamps, paths):
         print(f"Shortest Path Route Update at {timestamp}: {path}")
-        
+
         shortest_path_lanelets.append([])
         for lanelet in path:
             shortest_path_lanelets[-1].append(lanelet)
@@ -2201,7 +2207,7 @@ def check_geofence_in_reroute(
             else:
                 initial_route_includes_closed_lane = False
                 break
-        
+
         for lanelet_id in closed_lanelets:
             if lanelet_id not in rerouted_shortest_path:
                 map_is_updated_for_closed_lane = True
@@ -2210,13 +2216,13 @@ def check_geofence_in_reroute(
                 break
     else:
         print(f"Invalid quantity of route updates found in bag file ({str(len(shortest_path_lanelets))} found, more than 1 expected)")
-    
+
     # Print result statements and return success flags
     if initial_route_includes_closed_lane:
         print(f"FWZ-1 succeeded: all closed lanelets {str(closed_lanelets)} were in the initial route.")
     else:
         print(f"FWZ-1 failed: not all closed lanelets {str(closed_lanelets)} were in the initial route.")
-        
+
     if map_is_updated_for_closed_lane:
         print(f"FWZ-8 succeeded: no closed lanelets {str(closed_lanelets)} were in the re-routed route.")
     else:
@@ -2240,7 +2246,7 @@ def check_speed_limits_in_geofence(
     mcap_path,
     time_enter_geofence,
     time_exit_geofence,
-    advisory_speed_limit, 
+    advisory_speed_limit,
     save_data_dir=None
 ):
     """
@@ -2263,14 +2269,14 @@ def check_speed_limits_in_geofence(
     if not time_enter_geofence or not time_exit_geofence:
         print("FWZ-7 Failed: Vehicle never entered geofence - can not determine if workzone speed limit was processed")
         return False
-    
+
     extracted_geofence_data = extract_mcap_data(
         mcap_path,
         geofence_topics,
         field_extractors={INCOMING_GEOFENCE_CONTROL_TOPIC: lambda msg: msg.tcm_v01}
     )
     incoming_geofence_timestamps, tcm_v01s = extracted_geofence_data[geofence_topics[0]]
-    
+
     time_buffer_sec = 2 # Buffer in seconds after entering geofence and before exiting geofence for which advisory speed limit is observed
     extracted_route_state_data = extract_mcap_data(
         mcap_path,
@@ -2282,7 +2288,7 @@ def check_speed_limits_in_geofence(
                 msg.lanelet_id
             )}
     )
-    
+
     guidance_route_timestamps, guidance_route_states = extracted_route_state_data[route_state_topics[0]]
 
     # Check that a TrafficControlMessage was published using the correct advisory speed limit
@@ -2320,13 +2326,13 @@ def check_speed_limits_in_geofence(
             lanelet_speed_limits=lanelet_speed_limits,
         )
         print(f"\nLanelet speed limit data saved to: {save_data_dir}")
-        
+
     return is_successful
 
 
 def check_reroute_duration(
-    mcap_path, 
-    max_duration, 
+    mcap_path,
+    max_duration,
     save_data_dir=None
 ):
     """
@@ -2356,6 +2362,7 @@ def check_reroute_duration(
 
     restricted_lane_present = False
     for timestamp, tcm_v01 in zip(timestamps, tcm_v01s):
+        print(f"FWZ-11 (DEBUG): Received TCM at {timestamp} with detail choice {tcm_v01.params.detail.choice}")
         # Evaluate a received TCM for a closed lane
         if tcm_v01.params.detail.choice == 5:
             # Determine whether the closed lane is closed to passenger vehicles
@@ -2381,9 +2388,9 @@ def check_reroute_duration(
     route_generation_times = []
     timestamps, paths = extracted_data[topics[1]]
     for timestamp in timestamps:
-            print(f"FWZ-11 (DEBUG): Generated route at {timestamp}")
-            route_generation_times.append(timestamp)
-    
+        print(f"FWZ-11 (DEBUG): Generated route at {timestamp}")
+        route_generation_times.append(timestamp)
+
     is_successful = True
     duration_reroute_after_closed_lane_tcm_received = None
     duration_reroute_after_restricted_lane_tcm_received = None
@@ -2404,13 +2411,13 @@ def check_reroute_duration(
                 duration_reroute_after_restricted_lane_tcm_received = (route_generation_times[1] - restricted_lane_tcm_receive_time)
         else:
             duration_reroute_after_closed_lane_tcm_received = (route_generation_times[1] - closed_lane_tcm_receive_time)
-    
+
         # Determine whether the reroute duration is within the appropriate time
         if duration_reroute_after_closed_lane_tcm_received <= max_duration:
             print(f"FWZ-11 succeeded; rerouted {duration_reroute_after_closed_lane_tcm_received} sec after receiving closed lane TCM")
         else:
             print(f"FWZ-11 failed; rerouted {duration_reroute_after_closed_lane_tcm_received} sec after receiving closed lane TCM")
-            is_successful = False    
+            is_successful = False
         if restricted_lane_present:
             if duration_reroute_after_restricted_lane_tcm_received <= max_duration:
                 print(f"FWZ-11 succeeded; rerouted {duration_reroute_after_restricted_lane_tcm_received} sec after receiving restricted lane TCM")
@@ -2466,7 +2473,7 @@ def get_lateral_velocities(mcap_path, start_time=None, end_time=None):
     # Get reference heading (initial heading before lane change)
     if not orientation_timestamps.any():
         return []
-    
+
     # Find the reference orientation 1 index before the lanechange starts
     ref_idx = max(0, bisect_left(orientation_timestamps, start_time) -1)
     reference_orientation = orientations[ref_idx] # First orientation as reference
@@ -2492,7 +2499,7 @@ def get_lateral_velocities(mcap_path, start_time=None, end_time=None):
         closest_orientation = orientations[nearest_idx]
         # Transform body velocity to world frame
         body_velocity = [twist.x, twist.y, twist.z]
-        current_orientation = [closest_orientation.x, closest_orientation.y, 
+        current_orientation = [closest_orientation.x, closest_orientation.y,
                                 closest_orientation.z, closest_orientation.w]
         rotation = r.from_quat(current_orientation)
         world_velocity = rotation.apply(body_velocity)
@@ -2506,8 +2513,8 @@ def get_lateral_velocities(mcap_path, start_time=None, end_time=None):
     return lane_change_velocities
 
 def check_lanechange_lateral_velocity(
-    mcap_path, 
-    min_lat_velocity, 
+    mcap_path,
+    min_lat_velocity,
     max_lat_velocity,
     save_stats_dir=None,
     save_data_dir=None,
@@ -2529,9 +2536,9 @@ def check_lanechange_lateral_velocity(
     intervals = get_planner_trajectory_intervals(mcap_path, planner_plugin)
     start_time = intervals[0][0] if intervals else 0
     # Get the lateral velocities starting at the first lane change
-    lane_change_velocities = get_lateral_velocities(mcap_path, start_time)    
+    lane_change_velocities = get_lateral_velocities(mcap_path, start_time)
     print("Got lateral velocities")
-    
+
     lane_changes = []
 
     is_successful = True
@@ -2542,7 +2549,7 @@ def check_lanechange_lateral_velocity(
                 if min_lat_velocity >= abs(v) or max_lat_velocity <= abs(v):
                     is_successful = False
                     print(f"FWZ-13 Failed: Lateral velocity during lanechange {idx+1} was {abs(v)} m/s at {t} seconds. Not in the 0.5-1.25 m/s threshold")
-    
+
     if is_successful and lane_changes:
         print(f"FWZ-13 Succeeded: All lateral velocities during lanechanges were within the 0.5-1.25 m/s threshold")
     else:
@@ -2618,14 +2625,14 @@ def check_lanechange_lateral_velocity(
             stats=stats,
         )
         print(f"\nData saved to: {save_data_dir}")
-    
+
     return is_successful, plt.gcf(), stats
 
 def check_lanechange_duration(
-    mcap_path, 
-    start_time, 
-    max_lanechange_duration, 
-    save_stats_dir, 
+    mcap_path,
+    start_time,
+    max_lanechange_duration,
+    save_stats_dir,
     save_data_dir
 ):
     """
@@ -2652,7 +2659,7 @@ def check_lanechange_duration(
         if duration > max_lanechange_duration:
             print(f"FWZ-14 (LC {i+1}) failed; lane change completed in {duration:.2f} seconds")
             is_successful = False
-    
+
     if is_successful and durations:
         print(f"FWZ-14 Succeeded: all lane changes completed in less than {max_lanechange_duration} seconds")
 
@@ -2727,12 +2734,12 @@ def find_accel_period(accelerations, time_start, deceleration):
             consec_count = 0
             time_begin_period = None
             accels = []
-    
+
     # Handle case where sequence continues to end
     if consec_count >= num_consecutive:
         time_end_period = filtered_accelerations[-1][0]
         return time_begin_period, time_end_period, accels
-    
+
     return None, None, []
 
 def check_time_to_begin_deceleration(speed_limit_changes, response_times, response_threshold, save_stats_dir, save_data_dir):
@@ -2793,11 +2800,11 @@ def check_time_to_begin_deceleration(speed_limit_changes, response_times, respon
     return is_successful
 
 def check_speed_before_workzone(
-    mcap_path, 
-    start_time, 
-    end_time, 
-    workzone_lanelet_id, 
-    advisory_speed_limit_ms, 
+    mcap_path,
+    start_time,
+    end_time,
+    workzone_lanelet_id,
+    advisory_speed_limit_ms,
     speed_limit_threshold_ms
 ):
     """
@@ -2819,7 +2826,7 @@ def check_speed_before_workzone(
     min_speed_limit_ms = advisory_speed_limit_ms - speed_limit_threshold_ms
     max_speed_limit_ms = advisory_speed_limit_ms + speed_limit_threshold_ms
     time_enter_workzone = 0.0
-    
+
     if not workzone_lanelet_id:
         print(f"FWZ-23 Failed: Passed in list of closed lanelets was empty. Can not evaluate if advisory speed limit was achieved upon entering geofence. Please populate closed lanelets")
         return False
@@ -2832,13 +2839,13 @@ def check_speed_before_workzone(
         field_extractors={GUIDANCE_ROUTE_STATE_TOPIC: lambda msg: msg.lanelet_id}
     )
     timestamps, lanelets = extracted_data[route_state_topics[0]]
-    
+
     # Get the time the vehicle entered the workzone lanelet
     for timestamp, lanelet in zip(timestamps, lanelets):
         if lanelet == workzone_lanelet_id:
             time_enter_workzone = timestamp
 
-    
+
     extracted_data = extract_mcap_data(
         mcap_path,
         vehicle_twist_topics,
@@ -2846,19 +2853,88 @@ def check_speed_before_workzone(
         end_time=end_time,
         field_extractors={HARDWARE_VEHICLE_TWIST_TOPIC: lambda msg: msg.twist}
     )
-    
+
     # Get the first speed the vehicle was traveling in the workzone lanelet
     timestamps, twists = extracted_data[vehicle_twist_topics[0]]
     for timestamp, twist in zip(timestamps, twists):
         vehicle_speed_workzone_entrance_ms = twist.linear.x
         break
-    
+
     is_successful = False
     if(min_speed_limit_ms <= vehicle_speed_workzone_entrance_ms <= max_speed_limit_ms):
         print(f"FWZ-23 succeeded: Vehicle travelling at {vehicle_speed_workzone_entrance_ms} m/s when entering the workzone.")
         is_successful = True
     else:
         print(f"FWZ-23 failed: Vehicle travelling at {vehicle_speed_workzone_entrance_ms} m/s when entering the workzone. Should be between {min_speed_limit_ms} m/s and {max_speed_limit_ms}.")
+
+    return is_successful
+
+def check_steady_state_after_geofence(
+    mcap_path,
+    time_begin_acceleration_after_geofence,
+    time_end_engagement,
+    original_speed_limit_ms,
+    min_time_at_steady_state=5.0,
+    threshold_speed_limit_offset=0.89408
+):
+    """
+    Verifies that vehicle maintains steady state for at least 5 seconds after exiting geofenced area
+
+    Args:
+        mcap_path: Path to MCAP file
+        time_begin_acceleration_after_geofence: Start time to look for steady state
+        time_end_engagement: End time of engagement
+        original_speed_limit_ms: Original speed limit in m/s
+        min_time_at_steady_state: Minimum time required at steady state in seconds (default: 5.0)
+        threshold_speed_limit_offset: Speed threshold offset in m/s for steady state detection (default: 0.89408 m/s = 2 mph)
+
+    Returns:
+        is_successful: Boolean - True if vehicle was at steady state for at least the minimum required time
+    """
+    # (m/s) Threshold offset of vehicle speed to speed limit to be considered at steady state
+    min_steady_state_speed = original_speed_limit_ms - threshold_speed_limit_offset
+    max_steady_state_speed = original_speed_limit_ms + threshold_speed_limit_offset
+
+    vehicle_twist_topics = [HARDWARE_VEHICLE_TWIST_TOPIC]
+
+    extracted_data = extract_mcap_data(
+        mcap_path,
+        vehicle_twist_topics,
+        start_time=time_begin_acceleration_after_geofence,
+        end_time=time_end_engagement,
+        field_extractors={HARDWARE_VEHICLE_TWIST_TOPIC: lambda msg: msg.twist}
+    )
+
+    timestamps, twists = extracted_data[vehicle_twist_topics[0]]
+
+    has_reached_steady_state = False
+    time_start_steady_state = 0.0
+    time_end_steady_state = 0.0
+
+    for timestamp, twist in zip(timestamps, twists):
+        current_speed = twist.linear.x
+
+        if (min_steady_state_speed <= current_speed <= max_steady_state_speed) and not has_reached_steady_state:
+            time_start_steady_state = timestamp
+            has_reached_steady_state = True
+
+        if not (min_steady_state_speed <= current_speed <= max_steady_state_speed) and has_reached_steady_state:
+            time_end_steady_state = timestamp
+            break
+        elif has_reached_steady_state:
+            time_end_steady_state = timestamp
+
+    if has_reached_steady_state:
+        time_at_steady_state = time_end_steady_state - time_start_steady_state
+    else:
+        time_at_steady_state = 0.0
+
+    is_successful = False
+    if time_at_steady_state >= min_time_at_steady_state:
+        print(f"FWZ-29 succeeded: Vehicle was at steady state for {time_at_steady_state} seconds after exiting the geofence (required: {min_time_at_steady_state} seconds)")
+        is_successful = True
+    else:
+        print(f"FWZ-29 failed: Vehicle was at steady state for {time_at_steady_state} seconds after exiting the geofence (required: {min_time_at_steady_state} seconds)")
 
     return is_successful
 
@@ -2939,7 +3015,7 @@ def check_deceleration_for_geofence(time_enter_geofence, accelerations, max_dece
     if not time_enter_geofence:
         print(f"FWZ-24 Failed: Vehicle never entered geofence, can not evaluate deceleration upon entering geofence")
         return False
-    
+
     find_decelerations = True
     time_begin_deceleration_in_geofence, time_end_deceleration_in_geofence, decelerations = find_accel_period(accelerations, time_enter_geofence, find_decelerations)
 
@@ -2947,7 +3023,7 @@ def check_deceleration_for_geofence(time_enter_geofence, accelerations, max_dece
     if not decelerations:
         print(f"FWZ-24 Failed: Deceleration period never began upon entering geofence")
         return False
-    
+
     is_successful = False
     print(f"Deceleration timeframe upon entering geofence found. Start: {time_begin_deceleration_in_geofence} End: {time_end_deceleration_in_geofence}")
 
@@ -2957,7 +3033,7 @@ def check_deceleration_for_geofence(time_enter_geofence, accelerations, max_dece
     if(abs(average_deceleration) > abs(max_deceleration)):
         print(f"FWZ-24 Failed: Average deceleration upon entering the geofence is {average_deceleration} m/s^2. This is greater than the maximum of {max_deceleration} m/s^2")
     else:
-        print(f"FWZ-24 Succeded: Average deceleration upon entering the geofence is {average_deceleration} m/s^2. This is within the maximum of {max_deceleration} m/s^2")
+        print(f"FWZ-24 Succeeded: Average deceleration upon entering the geofence is {average_deceleration} m/s^2. This is within the maximum of {max_deceleration} m/s^2")
         is_successful = True
 
     return is_successful
@@ -2977,7 +3053,7 @@ def check_time_to_begin_acceleration(speed_limit_changes, response_times, respon
     if not speed_limit_changes:
         print(f"FWZ-25 Failed: No speed limit changes recorded. Can not evaluate response time to acceleration command.")
         return False
-    
+
     is_successful = True
     acceleration_responses = []
     for i, (speed_change, response_time) in enumerate(zip(speed_limit_changes, response_times)):
@@ -3044,7 +3120,7 @@ def check_acceleration_after_geofence(time_exit_geofence, accelerations, min_ave
     if not accelerations:
         print(f"FWZ-26 Failed: Acceleration period never began upon exiting geofence")
         return False, None
-    
+
     is_successful = True
     print(f"Acceleration timeframe upon exiting geofence found. Start: {time_begin_acceleration_after_geofence} End: {time_end_acceleration_after_geofence}")
 
@@ -3061,9 +3137,9 @@ def check_acceleration_after_geofence(time_exit_geofence, accelerations, min_ave
         if accel > max_section_acceleration:
             print(f"FWZ-26 Failed: Average acceleration at the {timestamp} 1-second interval is {accel} m/s^2. This is greater than the maximum of {max_section_acceleration} m/s^2")
             return False
-    
-    print(f"FWZ-26 Succeded: Average acceleration upon exiting the geofence is {average_acceleration} m/s^2. This is greater than the minimum of {min_average_acceleration} m/s^2")
-    print(f"FWZ-26 Succeded: All 1-second averages are below the maximum of {max_section_acceleration} m/s^2.")
+
+    print(f"FWZ-26 Succeeded: Average acceleration upon exiting the geofence is {average_acceleration} m/s^2. This is greater than the minimum of {min_average_acceleration} m/s^2")
+    print(f"FWZ-26 Succeeded: All 1-second averages are below the maximum of {max_section_acceleration} m/s^2.")
 
     return is_successful
 
