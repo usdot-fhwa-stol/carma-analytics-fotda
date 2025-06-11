@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 from guidance_scripts import *
 from pytest import approx
+from types import SimpleNamespace
 import numpy as np
 
 """
@@ -702,3 +703,515 @@ def test_run_speed_limit_change_response_analysis_fail_case(mock_figure):
 
         # Test should fail
         assert passed == False
+
+def test_get_lateral_velocities(mock_mcap_path):
+    """Test Get Lateral Velocities functionality"""
+    with patch('guidance_scripts.extract_mcap_data') as mock_extract:
+        start_time=0
+        end_time=4
+        orientation_timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+        orientations = [
+            SimpleNamespace(x=0, y=0, z=0, w=1),
+            SimpleNamespace(x=0, y=0, z=0.09, w=1),
+            SimpleNamespace(x=0.13, y=0, z=0, w=0.99),
+            SimpleNamespace(x=0.17, y=-0.09, z=0, w=0.98),
+            SimpleNamespace(x=0.12, y=0.12, z=0.17, w=0.97)
+        ]
+        twist_timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.5])
+        twists = [
+            SimpleNamespace(x=1, y=0, z=0),
+            SimpleNamespace(x=2, y=0, z=0),
+            SimpleNamespace(x=1.8, y=0, z=0),
+            SimpleNamespace(x=1.9, y=0, z=0),
+            SimpleNamespace(x=2.1, y=0, z=0)
+        ]
+
+        mock_extract.return_value = {
+            '/localization/current_pose': (orientation_timestamps, orientations),
+            '/hardware_interface/vehicle/twist': (twist_timestamps, twists)
+        }
+
+        lane_change_velocities = get_lateral_velocities(mock_mcap_path, start_time, end_time)
+
+        assert len(lane_change_velocities) == 5
+        assert lane_change_velocities[0][1] == lane_change_velocities[2][1] == 0
+        assert lane_change_velocities[1][1] > 0 and lane_change_velocities[4][1] > 0
+        assert lane_change_velocities[3][1] < 0
+
+    """Test get lateral velocities with no orientation data"""
+    with patch('guidance_scripts.extract_mcap_data') as mock_extract:
+        start_time=0
+        end_time=4
+        orientation_timestamps = np.array([])
+        orientations = []
+        twist_timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.5])
+        twists = [
+            SimpleNamespace(x=1, y=0, z=0),
+            SimpleNamespace(x=2, y=0, z=0),
+            SimpleNamespace(x=1.8, y=0, z=0),
+            SimpleNamespace(x=1.9, y=0, z=0),
+            SimpleNamespace(x=2.1, y=0, z=0)
+        ]
+
+        mock_extract.return_value = {
+            '/localization/current_pose': (orientation_timestamps, orientations),
+            '/hardware_interface/vehicle/twist': (twist_timestamps, twists)
+        }
+
+        lane_change_velocities = get_lateral_velocities(mock_mcap_path, start_time, end_time)
+
+        assert not lane_change_velocities
+
+
+def test_check_reroute_duration(mock_mcap_path):
+    fake_save_dir = '/fake/dir'
+    max_route_update_duration = 3
+
+    """Test successful check_reroute_duration() with no restricted lanes"""
+
+    with patch('guidance_scripts.extract_mcap_data') as mock_extract, \
+        patch.object(Path, "mkdir") as mock_mkdir, \
+        patch("numpy.savez") as mock_savez:
+
+        mock_extract.return_value = {
+            "/message/incoming_geofence_control": (
+                [1, 2],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 5})
+                            ]
+                        )
+                    ),
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 0})
+                            ]
+                        )
+                    )
+                ]
+            ),
+            "/guidance/route": (
+                [0, 3, 4],
+                [[123,432,632], [123, 342, 241, 632], [123, 342, 142, 143, 632]]
+            )
+        }
+
+        passed = check_reroute_duration(mock_mcap_path, max_route_update_duration, fake_save_dir)
+        assert passed
+
+
+        """Test passing check_reroute_duration() with restricted lane received before closed lane"""
+        mock_extract.return_value = {
+            "/message/incoming_geofence_control": (
+                [1, 2],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 2})
+                            ]
+                        )
+                    ),
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 5})
+                            ]
+                        )
+                    )
+                ]
+            ),
+            "/guidance/route": (
+                [0, 3, 4],
+                [[123,432,632], [123, 342, 241, 632], [123, 342, 142, 143, 632]]
+            )
+        }
+
+        passed = check_reroute_duration(mock_mcap_path, max_route_update_duration, fake_save_dir)
+        assert passed
+
+        """Test passing check_reroute_duration() with restricted lane received after closed lane"""
+        mock_extract.return_value = {
+            "/message/incoming_geofence_control": (
+                [1, 2],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 5})
+                            ]
+                        )
+                    ),
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 2})
+                            ]
+                        )
+                    )
+                ]
+            ),
+            "/guidance/route": (
+                [0, 3, 4],
+                [[123,432,632], [123, 342, 241, 632], [123, 342, 142, 143, 632]]
+            )
+        }
+
+        passed = check_reroute_duration(mock_mcap_path, max_route_update_duration, fake_save_dir)
+        assert passed
+
+        """Test failing check_reroute_duration() with restricted lane update after max_duration"""
+        mock_extract.return_value = {
+            "/message/incoming_geofence_control": (
+                [1, 4],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 2})
+                            ]
+                        )
+                    ),
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 5})
+                            ]
+                        )
+                    )
+                ]
+            ),
+            "/guidance/route": (
+                [0, 5, 6],
+                [[123,432,632], [123, 342, 241, 632], [123, 342, 142, 143, 632]]
+            )
+        }
+
+        passed = check_reroute_duration(mock_mcap_path, max_route_update_duration, fake_save_dir)
+        assert not passed
+
+        """Test failing check_reroute_duration() with closed lane update after max_duration"""
+        mock_extract.return_value = {
+            "/message/incoming_geofence_control": (
+                [1, 2],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 2})
+                            ]
+                        )
+                    ),
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 5})
+                            ]
+                        )
+                    )
+                ]
+            ),
+            "/guidance/route": (
+                [0, 3, 6],
+                [[123,432,632], [123, 342, 241, 632], [123, 342, 142, 143, 632]]
+            )
+        }
+
+        passed = check_reroute_duration(mock_mcap_path, max_route_update_duration, fake_save_dir)
+        assert not passed
+
+        """Test failing check_reroute_duration() with invalid number of route updates"""
+        mock_extract.return_value = {
+            "/message/incoming_geofence_control": (
+                [1, 4],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 2})
+                            ]
+                        )
+                    ),
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 5})
+                            ]
+                        )
+                    )
+                ]
+            ),
+            "/guidance/route": (
+                [0],
+                [[123,432,632]]
+            )
+        }
+
+        passed = check_reroute_duration(mock_mcap_path, max_route_update_duration, fake_save_dir)
+        assert not passed
+
+
+def test_check_speed_limits_in_geofence(mock_mcap_path):
+    fake_save_dir = "/fake/dir"
+    time_enter = 1
+    time_exit = 5
+    advisory_speed = 2
+
+    """Test passing check_speed_limits_in_geofence"""
+
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract, \
+        patch.object(Path, "mkdir") as mock_mkdir, \
+        patch("numpy.savez") as mock_savez:
+
+        mock_extract.side_effect = [
+            # Incoming_geofence_control - Guidance_route_state
+            {"/message/incoming_geofence_control": (
+                [2,4],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=12,
+                                maxspeed=2
+                            )
+                        )
+                    )
+                ]
+            )},
+            {"/guidance/route_state": (
+                [3,4],
+                [(2,2),(1.98,3)]
+            )}
+        ]
+
+        passed = check_speed_limits_in_geofence(mock_mcap_path, time_enter, time_exit, advisory_speed, fake_save_dir)
+    
+        assert passed
+
+        """Test failing check_speed_limits_in_geofence() with advisory speed not matched"""
+        mock_extract.side_effect = [
+            # Incoming_geofence_control - Guidance_route_state
+            {"/message/incoming_geofence_control": (
+                [2,4],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=12,
+                                maxspeed=2
+                            )
+                        )
+                    )
+                ]
+            )},
+            {"/guidance/route_state": (
+                [3,4],
+                [(2,2),(3,3)]
+            )}
+        ]
+
+        passed = check_speed_limits_in_geofence(mock_mcap_path, time_enter, time_exit, advisory_speed, fake_save_dir)
+    
+        assert not passed
+
+        """Test failing check_speed_limits_in_geofence() with no time enter/exit geofence"""
+        mock_extract.side_effect = [
+            # Incoming_geofence_control - Guidance_route_state
+            {"/message/incoming_geofence_control": (
+                [2,4],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=12,
+                                maxspeed=2
+                            )
+                        )
+                    )
+                ]
+            )},
+            {"/guidance/route_state": (
+                [3,4],
+                [(2,2),(3,3)]
+            )}
+        ]
+
+        passed = check_speed_limits_in_geofence(mock_mcap_path, None, None, advisory_speed, fake_save_dir)
+    
+        assert not passed
+
+
+def test_check_geofence_in_reroute(mock_mcap_path):
+    fake_save_dir = "/fake/dir"
+    closed_lanelets = [3,5]
+
+    """Test check_geofence_in_reroute() with closed lanelets in initial route and removed from reroute"""
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract, \
+        patch.object(Path, "mkdir") as mock_mkdir, \
+        patch("numpy.savez") as mock_savez:
+
+        mock_extract.return_value = {
+            "/guidance/route": (
+                [1,2],
+                [[1,3,5,7],[1,2,4,6,7]]
+            )
+        }
+
+        fwz_1_passed, fwz_8_passed = check_geofence_in_reroute(mock_mcap_path, closed_lanelets, fake_save_dir)
+        assert fwz_1_passed
+        assert fwz_8_passed
+
+        """Test check_geofence_in_reroute() with closed lanelets not in initial route and removed from reroute"""
+        mock_extract.return_value = {
+            "/guidance/route": (
+                [1,2],
+                [[1,2,4,6,7],[1,2,6,7]]
+            )
+        }
+
+        fwz_1_passed, fwz_8_passed = check_geofence_in_reroute(mock_mcap_path, closed_lanelets, fake_save_dir)
+        assert not fwz_1_passed
+        assert fwz_8_passed
+
+        """Test check_geofence_in_reroute() with closed lanelets in initial route and in reroute"""
+        mock_extract.return_value = {
+            "/guidance/route": (
+                [1,2],
+                [[1,3,5,7],[1,3,5,6,7]]
+            )
+        }
+
+        fwz_1_passed, fwz_8_passed = check_geofence_in_reroute(mock_mcap_path, closed_lanelets, fake_save_dir)
+        assert fwz_1_passed
+        assert not fwz_8_passed
+
+        """Test check_geofence_in_reroute() with closed lanelets not in initial route and present in reroute"""
+        mock_extract.return_value = {
+            "/guidance/route": (
+                [1,2],
+                [[1,2,4,6,7],[1,3,5,7]]
+            )
+        }
+
+        fwz_1_passed, fwz_8_passed = check_geofence_in_reroute(mock_mcap_path, closed_lanelets, fake_save_dir)
+        assert not fwz_1_passed
+        assert not fwz_8_passed
+
+        """Test check_geofence_in_reroute() with invalid number of routes"""
+        mock_extract.return_value = {
+            "/guidance/route": (
+                [1],
+                [[1,3,5,7]]
+            )
+        }
+
+        fwz_1_passed, fwz_8_passed = check_geofence_in_reroute(mock_mcap_path, closed_lanelets, fake_save_dir)
+        assert not fwz_1_passed
+        assert not fwz_8_passed
+
+        """Test check_geofence_in_reroute() with no closed lanelets"""
+        mock_extract.return_value = {
+            "/guidance/route": (
+                [1,2],
+                [[1,3,5,7],[1,2,4,6,7]]
+            )
+        }
+
+        fwz_1_passed, fwz_8_passed = check_geofence_in_reroute(mock_mcap_path, [], fake_save_dir)
+        assert not fwz_1_passed
+        assert not fwz_8_passed
+
+
+def test_get_route_original_speed(mock_mcap_path):
+
+    with patch('guidance_scripts.extract_mcap_data') as mock_extract:
+
+        mock_extract.return_value = {
+            '/guidance/route_state': (
+                [1,3,5],
+                [2,4,6]
+            )
+        }
+
+        speed_limit = get_route_original_speed(mock_mcap_path)
+        assert speed_limit == 2
+
+        mock_extract.return_value = {
+            '/guidance/route_state': (
+                [1,3,5],
+                [6,4,2]
+            )
+        }
+
+        speed_limit = get_route_original_speed(mock_mcap_path)
+        assert speed_limit == 6
+
+
+def test_get_geofence_entrance_and_exit_times(mock_mcap_path):
+
+    """Test get_geofence_entrance_and_exit_times() with normal behavior"""
+    with patch('guidance_scripts.extract_mcap_data') as mock_extract:
+
+        mock_extract.return_value = {
+            '/environment/active_geofence': (
+                [1,2,3,4,5,6],
+                [False, False, True, True, True, False]
+            )
+        }
+
+        time_enter, time_exit, found = get_geofence_entrance_and_exit_times(mock_mcap_path)
+        assert time_enter == 3
+        assert time_exit == 6
+        assert found
+
+        """Test get_geofence_entrance_and_exit_times() with never entering geofence"""
+        mock_extract.return_value = {
+            '/environment/active_geofence': (
+                [1,2,3,4,5,6],
+                [False, False, False, False, False, False]
+            )
+        }
+
+        time_enter, time_exit, found = get_geofence_entrance_and_exit_times(mock_mcap_path)
+        assert time_enter == None
+        assert time_exit == None
+        assert not found

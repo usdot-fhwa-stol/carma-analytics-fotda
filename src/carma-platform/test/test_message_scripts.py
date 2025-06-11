@@ -88,7 +88,6 @@ def test_passing_check_tcm_acknowledgement_delay(mock_mcap_path):
 
 
 def test_failing_check_tcm_acknowledgement_delay(mock_mcap_path):
-    fake_save_dir = '/fake/dir'
     max_delay_sec = 1
     mock_data = {
         '/message/incoming_geofence_control':
