@@ -16,7 +16,12 @@ python3 -m pytest test
 def mock_mcap_path():
     return Path("/path/to/mock.mcap")
 
-def test_passing_check_tcm_acknowledgement_delay(mock_mcap_path):
+@patch('message_scripts.plt')
+@patch('builtins.open', new_callable=mock_open)
+@patch('message_scripts.Path.mkdir')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_passing_check_tcm_acknowledgement_delay(mock_json_dump, mock_savez, mock_mkdir, mock_file, mock_plt, mock_mcap_path):
     fake_save_dir = '/fake/dir'
     max_delay_sec = 1
     mock_data = {
@@ -64,12 +69,7 @@ def test_passing_check_tcm_acknowledgement_delay(mock_mcap_path):
         ]
     }
 
-    with patch("message_scripts.extract_mcap_data") as mock_extract, \
-        patch('message_scripts.plt') as mock_plt, \
-        patch.object(Path, "mkdir") as mock_mkdir, \
-        patch("numpy.savez") as mock_savez, \
-        patch("builtins.open", mock_open()) as mock_file, \
-        patch("json.dump") as mock_json_dump:
+    with patch("message_scripts.extract_mcap_data") as mock_extract:
 
         mock_extract.return_value = mock_data
 
@@ -86,8 +86,8 @@ def test_passing_check_tcm_acknowledgement_delay(mock_mcap_path):
         assert stats["maximum"] == approx(0.14, rel=1e-2)
         assert stats["sample_count"] == 3
 
-
-def test_failing_check_tcm_acknowledgement_delay(mock_mcap_path):
+@patch('message_scripts.plt')
+def test_failing_check_tcm_acknowledgement_delay(mock_plt, mock_mcap_path):
     max_delay_sec = 1
     mock_data = {
         '/message/incoming_geofence_control':
@@ -134,8 +134,7 @@ def test_failing_check_tcm_acknowledgement_delay(mock_mcap_path):
         ]
     }
 
-    with patch("message_scripts.extract_mcap_data") as mock_extract, \
-        patch('message_scripts.plt') as mock_plt:
+    with patch("message_scripts.extract_mcap_data") as mock_extract:
 
         mock_extract.return_value = mock_data
 
@@ -152,8 +151,12 @@ def test_failing_check_tcm_acknowledgement_delay(mock_mcap_path):
         assert stats["maximum"] == approx(1.14, rel=1e-2)
         assert stats["sample_count"] == 2
 
-
-def test_passing_check_tcm_response_time(mock_mcap_path):
+@patch('message_scripts.plt')
+@patch('builtins.open', new_callable=mock_open)
+@patch('message_scripts.Path.mkdir')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_passing_check_tcm_response_time(mock_json_dump, mock_savez, mock_mkdir, mock_file, mock_plt, mock_mcap_path):
     fake_save_dir = '/fake/dir'
     expected_duration_sec = 1
 
@@ -205,12 +208,7 @@ def test_passing_check_tcm_response_time(mock_mcap_path):
         ]
     }
 
-    with patch('message_scripts.extract_mcap_data') as mock_extract, \
-        patch('message_scripts.plt') as mock_plt, \
-        patch.object(Path, "mkdir") as mock_mkdir, \
-        patch("numpy.savez") as mock_savez, \
-        patch("builtins.open", mock_open()) as mock_file, \
-        patch("json.dump") as mock_json_dump:
+    with patch('message_scripts.extract_mcap_data') as mock_extract:
 
         mock_extract.return_value = mock_data
 
@@ -222,8 +220,12 @@ def test_passing_check_tcm_response_time(mock_mcap_path):
 
         assert passed
 
-
-def test_failing_check_tcm_response_time(mock_mcap_path):
+@patch('message_scripts.plt')
+@patch('builtins.open', new_callable=mock_open)
+@patch('message_scripts.Path.mkdir')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_failing_check_tcm_response_time(mock_json_dump, mock_savez, mock_mkdir, mock_file, mock_plt, mock_mcap_path):
     fake_save_dir = '/fake/dir'
     expected_duration_sec = 1
 
@@ -275,12 +277,7 @@ def test_failing_check_tcm_response_time(mock_mcap_path):
         ]
     }
 
-    with patch('message_scripts.extract_mcap_data') as mock_extract, \
-        patch('message_scripts.plt') as mock_plt, \
-        patch.object(Path, "mkdir") as mock_mkdir, \
-        patch("numpy.savez") as mock_savez, \
-        patch("builtins.open", mock_open()) as mock_file, \
-        patch("json.dump") as mock_json_dump:
+    with patch('message_scripts.extract_mcap_data') as mock_extract:
 
         mock_extract.return_value = mock_data
 
@@ -292,8 +289,11 @@ def test_failing_check_tcm_response_time(mock_mcap_path):
 
         assert not passed
 
-
-def test_process_cc_logs_for_tcr_tcm_data():
+@patch('message_scripts.plt')
+@patch('message_scripts.Path.mkdir')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_process_cc_logs_for_tcr_tcm_data(mock_json_dump, mock_savez, mock_mkdir, mock_plt):
     log_date = "2025-05-20"
     max_delay_sec = 0.1
     expected_rate_hz = 20
@@ -329,11 +329,7 @@ def test_process_cc_logs_for_tcr_tcm_data():
 
     with patch('os.listdir', return_value=fake_files), \
         patch('os.path.isfile', return_value=True), \
-        patch('builtins.open', mock_open(read_data=file_contents)) as mock_file, \
-        patch('message_scripts.plt') as mock_plt, \
-        patch.object(Path, "mkdir") as mock_mkdir, \
-        patch("numpy.savez") as mock_savez, \
-        patch("json.dump") as mock_json_dump:
+        patch('builtins.open', mock_open(read_data=file_contents)) as mock_file:
 
         mock_fig = MagicMock()
         mock_ax1 = MagicMock()
@@ -366,8 +362,11 @@ def test_process_cc_logs_for_tcr_tcm_data():
                 if tcm_id in inf_rate_tcm_ids:
                     assert tcm_data["rate"] == float('inf')
 
-
-def test_bad_data_process_cc_logs_for_tcr_tcm_data():
+@patch('message_scripts.plt')
+@patch('message_scripts.Path.mkdir')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_bad_data_process_cc_logs_for_tcr_tcm_data(mock_json_dump, mock_savez, mock_mkdir, mock_plt):
     log_date = "2025-05-20"
     max_delay_sec = 0.1
     expected_rate_hz = 0
@@ -405,11 +404,7 @@ def test_bad_data_process_cc_logs_for_tcr_tcm_data():
 
     with patch('os.listdir', return_value=fake_files), \
         patch('os.path.isfile', return_value=True), \
-        patch('builtins.open', mock_open(read_data=file_contents)) as mock_file, \
-        patch('message_scripts.plt') as mock_plt, \
-        patch.object(Path, "mkdir") as mock_mkdir, \
-        patch("numpy.savez") as mock_savez, \
-        patch("json.dump") as mock_json_dump:
+        patch('builtins.open', mock_open(read_data=file_contents)) as mock_file:
 
         mock_fig = MagicMock()
         mock_ax1 = MagicMock()
@@ -439,7 +434,10 @@ def test_bad_data_process_cc_logs_for_tcr_tcm_data():
                 assert tcm_data["rate"] == approx(expected_rate_hz, rel=0.05)
 
 
-def test_passing_check_cc_response_delay():
+@patch('builtins.open', new_callable=mock_open)
+@patch('numpy.savez')
+@patch('json.dump')
+def test_passing_check_cc_response_delay(mock_json_dump, mock_savez, mock_file):
     fake_save_dir = '/fake/dir'
     expected_delay_sec = 1
 
@@ -447,17 +445,17 @@ def test_passing_check_cc_response_delay():
                'B': {'tcr_time': 1.5, 'first_Tcm_time': 2.4, 'response_delay': 0.9, 'b1': {'timestamps': [2.4], 'msgnum': 1, 'count': 1, 'rate': 0}}
     }
 
-    with patch.object(Path, "mkdir") as mock_mkdir, \
-        patch("numpy.savez") as mock_savez, \
-        patch("builtins.open", mock_open()) as mock_file, \
-        patch("json.dump") as mock_json_dump:
+    with patch.object(Path, "mkdir") as mock_mkdir:
     
         passed = check_cc_response_delay(cc_data, expected_delay_sec, fake_save_dir, fake_save_dir)
 
         assert passed
 
 
-def test_failing_check_cc_response_delay():
+@patch('builtins.open', new_callable=mock_open)
+@patch('numpy.savez')
+@patch('json.dump')
+def test_failing_check_cc_response_delay(mock_json_dump, mock_savez, mock_file):
     fake_save_dir = '/fake/dir'
     expected_delay_sec = 1
 
@@ -465,17 +463,17 @@ def test_failing_check_cc_response_delay():
                'B': {'tcr_time': 1.5, 'first_Tcm_time': 2.6, 'response_delay': 1.1, 'b1': {'timestamps': [2.6], 'msgnum': 1, 'count': 1, 'rate': 0}}
     }
 
-    with patch.object(Path, "mkdir") as mock_mkdir, \
-        patch("numpy.savez") as mock_savez, \
-        patch("builtins.open", mock_open()) as mock_file, \
-        patch("json.dump") as mock_json_dump:
+    with patch.object(Path, "mkdir") as mock_mkdir:
     
         passed = check_cc_response_delay(cc_data, expected_delay_sec, fake_save_dir, fake_save_dir)
 
         assert not passed
 
 
-def test_passing_check_tcm_broadcast_count():
+@patch('builtins.open', new_callable=mock_open)
+@patch('numpy.savez')
+@patch('json.dump')
+def test_passing_check_tcm_broadcast_count(mock_json_dump, mock_savez, mock_file):
     fake_save_dir = '/fake/dir'
     expected_count = 3
 
@@ -485,17 +483,17 @@ def test_passing_check_tcm_broadcast_count():
 
     acknowledgements = [('A', 1, 1.1, 1.2), ('B', 2, 2.6, 3.2)]
 
-    with patch.object(Path, "mkdir") as mock_mkdir, \
-        patch("numpy.savez") as mock_savez, \
-        patch("builtins.open", mock_open()) as mock_file, \
-        patch("json.dump") as mock_json_dump:
+    with patch.object(Path, "mkdir") as mock_mkdir:
 
         passed = check_tcm_broadcast_count(cc_data, acknowledgements, expected_count, fake_save_dir, fake_save_dir)
 
         assert passed
 
 
-def test_failing_check_tcm_broadcast_count():
+@patch('builtins.open', new_callable=mock_open)
+@patch('numpy.savez')
+@patch('json.dump')
+def test_failing_check_tcm_broadcast_count(mock_json_dump, mock_savez, mock_file):
     fake_save_dir = '/fake/dir'
     expected_count = 2 # Causes failure on 'A' because the count is greater than expected
 
@@ -505,17 +503,16 @@ def test_failing_check_tcm_broadcast_count():
 
     acknowledgements = [('A', 1, 1.1, 1.2)] # Causes failure on 'B' because count is less than expected AND was not acknowledged
 
-    with patch.object(Path, "mkdir") as mock_mkdir, \
-        patch("numpy.savez") as mock_savez, \
-        patch("builtins.open", mock_open()) as mock_file, \
-        patch("json.dump") as mock_json_dump:
+    with patch.object(Path, "mkdir") as mock_mkdir:
 
         passed = check_tcm_broadcast_count(cc_data, acknowledgements, expected_count, fake_save_dir, fake_save_dir)
 
         assert not passed
 
-
-def test_passing_check_tcm_broadcast_rate():
+@patch('builtins.open', new_callable=mock_open)
+@patch('numpy.savez')
+@patch('json.dump')
+def test_passing_check_tcm_broadcast_rate(mock_json_dump, mock_savez, mock_file):
     fake_save_dir = '/fake/dir'
     expected_rate_hz = 5
 
@@ -525,17 +522,16 @@ def test_passing_check_tcm_broadcast_rate():
 
     acknowledgements = [('A', 1, 1.1, 1.2), ('B', 2, 2.6, 3.2)]
 
-    with patch.object(Path, "mkdir") as mock_mkdir, \
-        patch("numpy.savez") as mock_savez, \
-        patch("builtins.open", mock_open()) as mock_file, \
-        patch("json.dump") as mock_json_dump:
+    with patch.object(Path, "mkdir") as mock_mkdir:
 
         passed = check_tcm_broadcast_rate(cc_data, acknowledgements, expected_rate_hz, fake_save_dir, fake_save_dir)
 
         assert passed
 
-
-def test_failing_check_tcm_broadcast_rate():
+@patch('builtins.open', new_callable=mock_open)
+@patch('numpy.savez')
+@patch('json.dump')
+def test_failing_check_tcm_broadcast_rate(mock_json_dump, mock_savez, mock_file):
     fake_save_dir = '/fake/dir'
     expected_rate_hz = 10 # Fails 'A' for having an incorrect rate (still accepted because acknowledged)
 
@@ -545,10 +541,7 @@ def test_failing_check_tcm_broadcast_rate():
 
     acknowledgements = [('A', 1, 1.1, 1.2)] # Fails 'B' because rate is wrong AND not acknowledged
 
-    with patch.object(Path, "mkdir") as mock_mkdir, \
-        patch("numpy.savez") as mock_savez, \
-        patch("builtins.open", mock_open()) as mock_file, \
-        patch("json.dump") as mock_json_dump:
+    with patch.object(Path, "mkdir") as mock_mkdir:
 
         passed = check_tcm_broadcast_rate(cc_data, acknowledgements, expected_rate_hz, fake_save_dir, fake_save_dir)
 

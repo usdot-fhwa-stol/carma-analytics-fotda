@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, mock_open
 from guidance_scripts import *
 from pytest import approx
 from types import SimpleNamespace
@@ -35,11 +35,14 @@ def test_get_engage_time(mock_mcap_path):
         assert start_time == 2
         assert end_time == 4
 
+@patch('matplotlib.pyplot.figure')
+@patch('builtins.open', new_callable=mock_open)
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_run_crosstrack_analysis(mock_json_dump, mock_file, mock_savez, mock_mkdir, mock_plt, mock_mcap_path):
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
 
-def test_run_crosstrack_analysis(mock_mcap_path):
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
-        "guidance_scripts.plt"
-    ) as mock_plt:
         mock_extract.return_value = {
             "/guidance/route_state": (
                 [0, 1, 2, 3],
@@ -48,15 +51,17 @@ def test_run_crosstrack_analysis(mock_mcap_path):
         }
         mock_plt.figure.return_value = MagicMock()
 
+        fake_save_dir = "/fake/dir"
+
         is_passed, stats, plot_figure, cross_tracks, timestamps = (
             run_crosstrack_analysis(
                 mock_mcap_path,
                 error_threshold_to_pass_meter=2.0,
                 start_time=0,
                 end_time=3,
-                save_stats_dir=None,
-                save_data_dir=None,
-                save_plot_dir=None,
+                save_stats_dir=fake_save_dir,
+                save_data_dir=fake_save_dir,
+                save_plot_dir=fake_save_dir,
             )
         )
 
@@ -68,11 +73,14 @@ def test_run_crosstrack_analysis(mock_mcap_path):
         assert cross_tracks == approx([1.0, 1.5, 0.5, 1.8])
         assert timestamps == approx([0, 1, 2, 3])
 
+@patch('matplotlib.pyplot.figure')
+@patch('builtins.open', new_callable=mock_open)
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_run_turn_accuracy_analysis(mock_json_dump, mock_file, mock_savez, mock_mkdir, mock_plt, mock_mcap_path):
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
 
-def test_run_turn_accuracy_analysis(mock_mcap_path):
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
-        "guidance_scripts.plt"
-    ) as mock_plt:
         mock_extract.return_value = {
             "/localization/current_pose": (
                 [0, 1, 2],
@@ -81,6 +89,7 @@ def test_run_turn_accuracy_analysis(mock_mcap_path):
             "/guidance/plan_trajectory": ([0], [[(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)]]),
         }
         mock_plt.figure.return_value = MagicMock()
+        fake_save_dir = "/fake/dir"
 
         (
             is_passed,
@@ -95,6 +104,9 @@ def test_run_turn_accuracy_analysis(mock_mcap_path):
             error_threshold_to_pass_meter=2.0,
             start_time=0,
             end_time=2,
+            save_stats_dir=Path(fake_save_dir),
+            save_data_dir=fake_save_dir,
+            save_plot_dir=fake_save_dir
         )
 
         expected_actual_path = [[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]
@@ -143,16 +155,21 @@ def test_calculate_window_average():
     # Timestamps should start from original timestamps
     assert avg_timestamps[0] == approx(0.0)
 
-
-def test_run_acceleration_comfort_analysis(mock_mcap_path):
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
-        "guidance_scripts.plt"
-    ) as mock_plt:
+@patch('guidance_scripts.plt')
+@patch('builtins.open', new_callable=mock_open)
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_run_acceleration_comfort_analysis(mock_json_dump, mock_file, mock_savez, mock_mkdir, mock_plt, mock_mcap_path):
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
         # Mock plt.subplots to return a tuple of (figure, (ax1, ax2))
         mock_fig = MagicMock()
         mock_ax1 = MagicMock()
         mock_ax2 = MagicMock()
         mock_plt.subplots.return_value = (mock_fig, (mock_ax1, mock_ax2))
+
+        # Create fake save directory
+        fake_save_dir = "/fake/dir"
 
         # Use more data points with 0.1s intervals to ensure window calculations work
         timestamps = np.arange(0, 3.1, 0.1)  # 0 to 3 seconds with 0.1s intervals
@@ -210,6 +227,9 @@ def test_run_acceleration_comfort_analysis(mock_mcap_path):
             comfort_deceleration_threshold_to_pass=3.0,
             start_time=0,
             end_time=3,
+            save_stats_dir=Path(fake_save_dir),
+            save_data_dir=fake_save_dir,
+            save_plot_dir=fake_save_dir
         )
 
         # Test instant acceleration stats
@@ -275,12 +295,14 @@ def test_calculate_instant_lateral_values_zero_input():
     assert np.all(lateral_acc == 0)
     assert np.all(lateral_jerk == 0)
 
-
-def test_run_lateral_analysis(mock_mcap_path):
+@patch('guidance_scripts.plt')
+@patch('builtins.open', new_callable=mock_open)
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_run_lateral_analysis(mock_json_dump, mock_file, mock_savez, mock_mkdir, mock_plt, mock_mcap_path):
     """Test the run_lateral_analysis function with mocked data"""
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
-        "guidance_scripts.plt"
-    ) as mock_plt:
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
 
         # Mock timestamps and twist messages
         timestamps = np.array([0.0, 0.5, 1.0, 1.5, 2.0])
@@ -309,6 +331,9 @@ def test_run_lateral_analysis(mock_mcap_path):
             (mock_fig_jerk, (mock_ax3, mock_ax4)),
         ]
 
+        # Create fake save directory
+        fake_save_dir = "/fake/dir"
+
         # Run analysis
         (
             is_passed,
@@ -323,7 +348,12 @@ def test_run_lateral_analysis(mock_mcap_path):
             lateral_jerk_avg,
             timestamps_out,
         ) = run_lateral_analysis(
-            mock_mcap_path, acc_threshold_to_pass=2.0, jerk_threshold_to_pass=2.0
+            mock_mcap_path, 
+            acc_threshold_to_pass=2.0, 
+            jerk_threshold_to_pass=2.0,
+            save_stats_dir=Path(fake_save_dir),
+            save_data_dir=Path(fake_save_dir),
+            save_plot_dir=Path(fake_save_dir)
         )
 
         # Test that values were calculated correctly
@@ -380,11 +410,13 @@ def test_run_lateral_analysis_exceeds_threshold(mock_mcap_path):
         # Test that analysis failed due to exceeded thresholds
         assert result[0] == False  # is_passed should be False
 
-
-def test_run_guidance_steering_analysis(mock_mcap_path):
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
-        "guidance_scripts.plt"
-    ) as mock_plt:
+@patch('guidance_scripts.plt')
+@patch('builtins.open', new_callable=mock_open)
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_run_guidance_steering_analysis(mock_json_dump, mock_file, mock_savez, mock_mkdir, mock_plt, mock_mcap_path):
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
 
         # Mock timestamps and steering angles
         timestamps = np.array([0, 1, 2, 3, 4])
@@ -399,6 +431,9 @@ def test_run_guidance_steering_analysis(mock_mcap_path):
         # Mock plt.figure to return a MagicMock
         mock_plt.figure.return_value = MagicMock()
 
+        # Create fake save directory
+        fake_save_dir = "/fake/dir"
+
         # Run analysis
         is_passed, stats, plot_figure, error_angles, common_timestamps = (
             run_guidance_steering_analysis(
@@ -406,6 +441,9 @@ def test_run_guidance_steering_analysis(mock_mcap_path):
                 error_threshold_to_pass_radian=0.1,
                 start_time=0,
                 end_time=4,
+                save_stats_dir=Path(fake_save_dir),
+                save_data_dir=Path(fake_save_dir),
+                save_plot_dir=Path(fake_save_dir)
             )
         )
 
@@ -448,11 +486,13 @@ def test_run_guidance_steering_analysis_fails_threshold(mock_mcap_path):
         assert is_passed == False  # Should fail due to large errors
         assert stats["median"] > 0.1  # Median error should exceed threshold
 
-
-def test_run_steering_wheel_analysis(mock_mcap_path):
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
-        "guidance_scripts.plt"
-    ) as mock_plt:
+@patch('guidance_scripts.plt')
+@patch('builtins.open', new_callable=mock_open)
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_run_steering_wheel_analysis(mock_json_dump, mock_file, mock_savez, mock_mkdir, mock_plt, mock_mcap_path):
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
 
         # Mock timestamps and steering values
         timestamps = np.array([0, 1, 2, 3, 4])
@@ -467,10 +507,18 @@ def test_run_steering_wheel_analysis(mock_mcap_path):
 
         mock_plt.figure.return_value = MagicMock()
 
+        # Create fake save directory
+        fake_save_dir = "/fake/dir"
+
         # Run analysis
         is_passed, stats, plot_figure, error_values, timestamps = (
             run_steering_wheel_analysis(
-                mock_mcap_path, error_threshold_to_pass=0.1, start_time=0, end_time=4
+                mock_mcap_path, error_threshold_to_pass=0.1,
+                start_time=0, 
+                end_time=4,
+                save_stats_dir=Path(fake_save_dir),
+                save_data_dir=Path(fake_save_dir),
+                save_plot_dir=Path(fake_save_dir)
             )
         )
 
@@ -626,9 +674,11 @@ def test_analyze_speed_responses():
 
 
 @patch('matplotlib.pyplot.figure')
+@patch('builtins.open', new_callable=mock_open)
+@patch('guidance_scripts.Path.mkdir')
 @patch('numpy.savez')
 @patch('json.dump')
-def test_run_speed_limit_change_response_analysis_basic(mock_json_dump, mock_savez, mock_figure):
+def test_run_speed_limit_change_response_analysis_basic(mock_json_dump, mock_savez, mock_mkdir, mock_file, mock_figure):
     """Test the main analysis function with basic mocked data"""
     with patch('guidance_scripts.extract_mcap_data') as mock_extract:
         # Create simple test data
@@ -648,15 +698,18 @@ def test_run_speed_limit_change_response_analysis_basic(mock_json_dump, mock_sav
         mock_fig = MagicMock()
         mock_figure.return_value = mock_fig
 
+        # Create fake save directory
+        fake_save_dir = "/fake/dir"
+
         # Run the analysis function
         result = run_speed_limit_change_response_analysis(
             mcap_path="test.mcap",
             response_time_threshold=0.2,
             steady_state_indication_time=1.0,
             speed_tolerance_pct=0.05,
-            save_stats_dir=None,
-            save_data_dir=None,
-            save_plot_dir=None
+            save_stats_dir=fake_save_dir,
+            save_data_dir=fake_save_dir,
+            save_plot_dir=fake_save_dir
         )
 
         # Check basic structure of results
@@ -763,15 +816,15 @@ def test_get_lateral_velocities(mock_mcap_path):
         assert not lane_change_velocities
 
 
-def test_check_reroute_duration(mock_mcap_path):
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+def test_check_reroute_duration(mock_savez, mock_mkdir, mock_mcap_path):
     fake_save_dir = '/fake/dir'
     max_route_update_duration = 3
 
     """Test successful check_reroute_duration() with no restricted lanes"""
 
-    with patch('guidance_scripts.extract_mcap_data') as mock_extract, \
-        patch.object(Path, "mkdir") as mock_mkdir, \
-        patch("numpy.savez") as mock_savez:
+    with patch('guidance_scripts.extract_mcap_data') as mock_extract:
 
         mock_extract.return_value = {
             "/message/incoming_geofence_control": (
@@ -990,7 +1043,9 @@ def test_check_reroute_duration(mock_mcap_path):
         assert not passed
 
 
-def test_check_speed_limits_in_geofence(mock_mcap_path):
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+def test_check_speed_limits_in_geofence(mock_savez, mock_mkdir, mock_mcap_path):
     fake_save_dir = "/fake/dir"
     time_enter = 1
     time_exit = 5
@@ -998,9 +1053,7 @@ def test_check_speed_limits_in_geofence(mock_mcap_path):
 
     """Test passing check_speed_limits_in_geofence"""
 
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, \
-        patch.object(Path, "mkdir") as mock_mkdir, \
-        patch("numpy.savez") as mock_savez:
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
 
         mock_extract.side_effect = [
             # Incoming_geofence_control - Guidance_route_state
@@ -1080,14 +1133,14 @@ def test_check_speed_limits_in_geofence(mock_mcap_path):
         assert not passed
 
 
-def test_check_geofence_in_reroute(mock_mcap_path):
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+def test_check_geofence_in_reroute(mock_savez, mock_mkdir, mock_mcap_path):
     fake_save_dir = "/fake/dir"
     closed_lanelets = [3,5]
 
     """Test check_geofence_in_reroute() with closed lanelets in initial route and removed from reroute"""
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, \
-        patch.object(Path, "mkdir") as mock_mkdir, \
-        patch("numpy.savez") as mock_savez:
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
 
         mock_extract.return_value = {
             "/guidance/route": (
