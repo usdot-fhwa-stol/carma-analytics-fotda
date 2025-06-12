@@ -17,6 +17,65 @@ def mock_mcap_path():
     return Path("/path/to/mock.mcap")
 
 
+def test_check_deceleration_for_geofence():
+    # Test vehicle doesn't enter geofence
+    assert check_deceleration_for_geofence(time_enter_geofence=None, accelerations=None, max_deceleration=None) is False
+
+    # Test vehicle enters geofence with sufficient deceleration
+    accelerations = [
+        (1.0, 2.0),
+        (2.0, -1.0),
+        (3.0, -4.0),
+        (4.0, -5.0),
+        (5.0, -2.0),
+        (6.0, -2.0),
+        (7.0, -2.0),
+        (8.0, -2.0),
+        (9.0, -2.0),
+        (10.0, -2.0),
+        (11.0, -2.0)]
+    max_deceleration = -4.0
+    time_enter_geofence = 1.0
+
+    assert check_deceleration_for_geofence(time_enter_geofence, accelerations, max_deceleration) is True
+
+    # Test deceleration period never began
+    accelerations = [[1.0, 2.0, 3.0, 4.0, 5.0], [0.0, 0.0, 0.0, 0.0, 0.0]]
+    assert check_deceleration_for_geofence(time_enter_geofence, accelerations, max_deceleration) is False
+
+def test_check_acceleration_after_geofence():
+
+    assert check_acceleration_after_geofence(time_exit_geofence=None, accelerations=None, min_average_acceleration=None, section_accelerations=None, max_section_acceleration=None) is False
+
+    time_exit_geofence = 2.0
+    min_average_acceleration = 2.0
+    max_section_acceleration = 5.0
+    section_accelerations = [
+        (1.0, 2.0), (2.0, 1.0), (3.0, 4.0), (4.0, 5.0), (5.0, 2.0), (6.0, 2.0),
+        (7.0, 2.0), (8.0, 2.0), (9.0, 2.0), (10.0, 2.0), (11.0, 2.0), (12.0, 2.0)
+    ]
+
+    # Test vehicle exits geofence with less than sufficient acceleration
+    times = range (1,13)
+    accel_values = [1.0] * 12
+    accelerations = list(zip(times, accel_values))
+
+    assert check_acceleration_after_geofence(time_exit_geofence, accelerations, min_average_acceleration, section_accelerations, max_section_acceleration) is False
+
+    accel_values = [-2.0, 1.0, 4.0, 5.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
+    accelerations = list(zip(times, accel_values))
+
+    assert check_acceleration_after_geofence(time_exit_geofence, accelerations, min_average_acceleration, section_accelerations, max_section_acceleration) is True
+
+def test_deceleration_for_geofence():
+    time_enter_geofence = 1.0
+    times = range (1,12)
+    accel_values = [-1.0] * 11
+    accelerations = list(zip(times, accel_values))
+    max_deceleration = -3.0
+
+    assert check_deceleration_for_geofence(time_enter_geofence, accelerations, max_deceleration) is True
+
 def test_get_engage_time(mock_mcap_path):
     STARTUP = 1
     ACTIVE = 3
