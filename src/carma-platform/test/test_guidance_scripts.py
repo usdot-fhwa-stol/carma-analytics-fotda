@@ -5,6 +5,10 @@ from guidance_scripts import *
 from pytest import approx
 import numpy as np
 
+import matplotlib
+# Use Agg backend for matplotlib to avoid GUI issues in CI environments
+matplotlib.use('Agg')
+
 """
 Usage:
 cd carma-analytics-fotda/src/carma-platform/
@@ -67,7 +71,7 @@ def test_check_acceleration_after_geofence():
 
     assert check_acceleration_after_geofence(time_exit_geofence, accelerations, min_average_acceleration, section_accelerations, max_section_acceleration) is True
 
-def test_deceleration_for_geofence():
+def test_check_deceleration_for_geofence():
     time_enter_geofence = 1.0
     times = range (1,12)
     accel_values = [-1.0] * 11
@@ -75,6 +79,97 @@ def test_deceleration_for_geofence():
     max_deceleration = -3.0
 
     assert check_deceleration_for_geofence(time_enter_geofence, accelerations, max_deceleration) is True
+
+def test_create_geofence_acceleration_plot(tmp_path):
+
+    times = range (1,13)
+    accel_values = [1, -2, -3, -4, -2] + [1.0] * 7
+    accelerations = list(zip(times, accel_values))
+
+    sec_accelerations = [
+        (1.0, 2.0), (2.0, 1.0), (3.0, 4.0), (4.0, 5.0), (5.0, 2.0), (6.0, 2.0),
+        (7.0, 2.0), (8.0, 2.0), (9.0, 2.0), (10.0, 2.0), (11.0, 2.0), (12.0, 2.0)
+    ]
+
+    time_enter_geofence = 2.0
+    time_exit_geofence = 5.0
+    save_dir = tmp_path
+
+    mock_fig = MagicMock()
+    mock_ax1 = MagicMock()
+    mock_ax2 = MagicMock()
+
+    with patch("matplotlib.pyplot.subplots", return_value=(mock_fig, (mock_ax1, mock_ax2))), \
+         patch("matplotlib.pyplot.savefig") as mock_savefig, \
+         patch("matplotlib.pyplot.show") as mock_show:
+        create_geofence_acceleration_plot(
+            accelerations, sec_accelerations, time_enter_geofence, time_exit_geofence, save_plots_dir=save_dir
+        )
+        mock_savefig.assert_called_once()
+        mock_show.assert_not_called()
+        args, kwargs = mock_savefig.call_args
+        assert "geofence_acceleration.png" in str(args[0])
+
+def test_check_speed_before_before_workzone(mock_mcap_path):
+    workzone_lanelet_id = 174
+    start_time = 0
+    end_time = 5
+    advisory_speed_limit_ms = 15.0
+    speed_limit_threshold_ms = 1.0
+
+    def make_twist(x):
+        linear = MagicMock()
+        linear.x = x
+        twist = MagicMock()
+        twist.linear = linear
+        return twist
+
+
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
+        # Mock timestamps and twist messages
+        timestamps = np.array([0.0, 0.5, 1.0, 1.5, 2.0])
+        twists = [make_twist(x) for x in [16.0, 15.0, 15.0, 20.0, 20.0]]
+
+        # Setup mock return value
+        mock_extract.return_value = {
+            "/hardware_interface/vehicle/twist": (timestamps, twists),
+            "/guidance/route_state": (
+                [0, 1, 2, 3, 4, 5],
+                [172, 173, 174, 175, 176, 177],  # Lanelet IDs
+            )
+        }
+        assert check_speed_before_workzone("mock_mcap_path", start_time, end_time, workzone_lanelet_id, advisory_speed_limit_ms, speed_limit_threshold_ms) is True
+
+def test_check_time_to_begin_deceleration():
+    #Test no speed limit changes
+    assert check_time_to_begin_deceleration(speed_limit_changes=None, response_times=None, response_threshold=None, save_stats_dir=None, save_data_dir=None) is False
+
+    #Test speed limit changes under response threshold
+    speed_limit_change_times = [1.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0]
+    old_speed_limits = [3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0]
+    new_speed_limits = [2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0]
+    speed_limit_changes = zip(speed_limit_change_times, old_speed_limits, new_speed_limits)
+
+    response_times = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5]
+    response_threshold = 4.0
+
+    assert check_time_to_begin_deceleration(speed_limit_changes, response_times, response_threshold, None, None) is True
+
+def test_find_accel_period():
+    # Arguments required (accelerations, time_start, deceleration)
+    # Tuple of lists with timestamps and accelerations/decelerations
+    timestamps = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+    acceleration_values = [1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0]
+    acceleration = zip(timestamps, acceleration_values)
+    time_start = 1.0
+    deceleration = True
+
+    time_start_period, time_end_period, accels = find_accel_period(acceleration, time_start, deceleration)
+    # Returns - time_start_period, time_end_period, accels
+    assert time_start_period == 2.0
+    assert time_end_period == 12.0
+    assert accels[0] == approx(-2.0, rel=1e-2)
+
 
 def test_get_engage_time(mock_mcap_path):
     STARTUP = 1
