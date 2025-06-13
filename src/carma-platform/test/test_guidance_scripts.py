@@ -763,20 +763,23 @@ def test_get_lateral_velocities(mock_mcap_path):
         start_time=0
         end_time=4
         orientation_timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+        
+        # Test Scenario where vehicle starts straight, lane changes left (30 degrees), moves straight, lane changes right (30 degrees), moves straight at a constant 2 m/s
+        # 30 Degrees -> z = sin(30deg) = 0.259, w = cos(30deg) = 0.966
         orientations = [
             SimpleNamespace(x=0, y=0, z=0, w=1),
-            SimpleNamespace(x=0, y=0, z=0.09, w=1),
-            SimpleNamespace(x=0.13, y=0, z=0, w=0.99),
-            SimpleNamespace(x=0.17, y=-0.09, z=0, w=0.98),
-            SimpleNamespace(x=0.12, y=0.12, z=0.17, w=0.97)
+            SimpleNamespace(x=0, y=0, z=0.259, w=0.966),
+            SimpleNamespace(x=0, y=0, z=0, w=1),
+            SimpleNamespace(x=0, y=0, z=-0.259, w=0.966),
+            SimpleNamespace(x=0, y=0, z=0, w=1)
         ]
         twist_timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.5])
         twists = [
-            SimpleNamespace(x=1, y=0, z=0),
             SimpleNamespace(x=2, y=0, z=0),
-            SimpleNamespace(x=1.8, y=0, z=0),
-            SimpleNamespace(x=1.9, y=0, z=0),
-            SimpleNamespace(x=2.1, y=0, z=0)
+            SimpleNamespace(x=2, y=0, z=0),
+            SimpleNamespace(x=2, y=0, z=0),
+            SimpleNamespace(x=2, y=0, z=0),
+            SimpleNamespace(x=2, y=0, z=0)
         ]
 
         mock_extract.return_value = {
@@ -787,9 +790,9 @@ def test_get_lateral_velocities(mock_mcap_path):
         lane_change_velocities = get_lateral_velocities(mock_mcap_path, start_time, end_time)
 
         assert len(lane_change_velocities) == 5
-        assert lane_change_velocities[0][1] == lane_change_velocities[2][1] == 0
-        assert lane_change_velocities[1][1] > 0 and lane_change_velocities[4][1] > 0
-        assert lane_change_velocities[3][1] < 0
+        assert lane_change_velocities[0][1] == lane_change_velocities[2][1] == lane_change_velocities[4][1] == 0
+        assert lane_change_velocities[1][1] == approx(1.0, rel=1e-2)
+        assert lane_change_velocities[3][1] == approx(-1.0, rel=1e-2)
 
     """Test get lateral velocities with no orientation data"""
     with patch('guidance_scripts.extract_mcap_data') as mock_extract:
