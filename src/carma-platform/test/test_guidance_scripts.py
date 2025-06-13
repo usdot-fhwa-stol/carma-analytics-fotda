@@ -765,7 +765,7 @@ def test_get_lateral_velocities(mock_mcap_path):
         orientation_timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
         
         # Test Scenario where vehicle starts straight, lane changes left (30 degrees), moves straight, lane changes right (30 degrees), moves straight at a constant 2 m/s
-        # 30 Degrees -> z = sin(30deg) = 0.259, w = cos(30deg) = 0.966
+        # 30 Degrees -> z = sin(30deg / 2) = 0.259, w = cos(30deg / 2) = 0.966
         orientations = [
             SimpleNamespace(x=0, y=0, z=0, w=1),
             SimpleNamespace(x=0, y=0, z=0.259, w=0.966),
