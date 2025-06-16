@@ -1,8 +1,9 @@
 import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, mock_open
 from guidance_scripts import *
 from pytest import approx
+from types import SimpleNamespace
 import numpy as np
 
 """
@@ -34,11 +35,14 @@ def test_get_engage_time(mock_mcap_path):
         assert start_time == 2
         assert end_time == 4
 
+@patch('matplotlib.pyplot.figure')
+@patch('builtins.open', new_callable=mock_open)
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_run_crosstrack_analysis(mock_json_dump, mock_file, mock_savez, mock_mkdir, mock_plt, mock_mcap_path):
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
 
-def test_run_crosstrack_analysis(mock_mcap_path):
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
-        "guidance_scripts.plt"
-    ) as mock_plt:
         mock_extract.return_value = {
             "/guidance/route_state": (
                 [0, 1, 2, 3],
@@ -47,15 +51,17 @@ def test_run_crosstrack_analysis(mock_mcap_path):
         }
         mock_plt.figure.return_value = MagicMock()
 
+        fake_save_dir = "/fake/dir"
+
         is_passed, stats, plot_figure, cross_tracks, timestamps = (
             run_crosstrack_analysis(
                 mock_mcap_path,
                 error_threshold_to_pass_meter=2.0,
                 start_time=0,
                 end_time=3,
-                save_stats_dir=None,
-                save_data_dir=None,
-                save_plot_dir=None,
+                save_stats_dir=fake_save_dir,
+                save_data_dir=fake_save_dir,
+                save_plot_dir=fake_save_dir,
             )
         )
 
@@ -67,11 +73,14 @@ def test_run_crosstrack_analysis(mock_mcap_path):
         assert cross_tracks == approx([1.0, 1.5, 0.5, 1.8])
         assert timestamps == approx([0, 1, 2, 3])
 
+@patch('matplotlib.pyplot.figure')
+@patch('builtins.open', new_callable=mock_open)
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_run_turn_accuracy_analysis(mock_json_dump, mock_file, mock_savez, mock_mkdir, mock_plt, mock_mcap_path):
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
 
-def test_run_turn_accuracy_analysis(mock_mcap_path):
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
-        "guidance_scripts.plt"
-    ) as mock_plt:
         mock_extract.return_value = {
             "/localization/current_pose": (
                 [0, 1, 2],
@@ -80,6 +89,7 @@ def test_run_turn_accuracy_analysis(mock_mcap_path):
             "/guidance/plan_trajectory": ([0], [[(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)]]),
         }
         mock_plt.figure.return_value = MagicMock()
+        fake_save_dir = "/fake/dir"
 
         (
             is_passed,
@@ -94,6 +104,9 @@ def test_run_turn_accuracy_analysis(mock_mcap_path):
             error_threshold_to_pass_meter=2.0,
             start_time=0,
             end_time=2,
+            save_stats_dir=Path(fake_save_dir),
+            save_data_dir=fake_save_dir,
+            save_plot_dir=fake_save_dir
         )
 
         expected_actual_path = [[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]
@@ -142,16 +155,21 @@ def test_calculate_window_average():
     # Timestamps should start from original timestamps
     assert avg_timestamps[0] == approx(0.0)
 
-
-def test_run_acceleration_comfort_analysis(mock_mcap_path):
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
-        "guidance_scripts.plt"
-    ) as mock_plt:
+@patch('guidance_scripts.plt')
+@patch('builtins.open', new_callable=mock_open)
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_run_acceleration_comfort_analysis(mock_json_dump, mock_file, mock_savez, mock_mkdir, mock_plt, mock_mcap_path):
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
         # Mock plt.subplots to return a tuple of (figure, (ax1, ax2))
         mock_fig = MagicMock()
         mock_ax1 = MagicMock()
         mock_ax2 = MagicMock()
         mock_plt.subplots.return_value = (mock_fig, (mock_ax1, mock_ax2))
+
+        # Create fake save directory
+        fake_save_dir = "/fake/dir"
 
         # Use more data points with 0.1s intervals to ensure window calculations work
         timestamps = np.arange(0, 3.1, 0.1)  # 0 to 3 seconds with 0.1s intervals
@@ -209,6 +227,9 @@ def test_run_acceleration_comfort_analysis(mock_mcap_path):
             comfort_deceleration_threshold_to_pass=3.0,
             start_time=0,
             end_time=3,
+            save_stats_dir=Path(fake_save_dir),
+            save_data_dir=fake_save_dir,
+            save_plot_dir=fake_save_dir
         )
 
         # Test instant acceleration stats
@@ -274,12 +295,14 @@ def test_calculate_instant_lateral_values_zero_input():
     assert np.all(lateral_acc == 0)
     assert np.all(lateral_jerk == 0)
 
-
-def test_run_lateral_analysis(mock_mcap_path):
+@patch('guidance_scripts.plt')
+@patch('builtins.open', new_callable=mock_open)
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_run_lateral_analysis(mock_json_dump, mock_file, mock_savez, mock_mkdir, mock_plt, mock_mcap_path):
     """Test the run_lateral_analysis function with mocked data"""
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
-        "guidance_scripts.plt"
-    ) as mock_plt:
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
 
         # Mock timestamps and twist messages
         timestamps = np.array([0.0, 0.5, 1.0, 1.5, 2.0])
@@ -308,6 +331,9 @@ def test_run_lateral_analysis(mock_mcap_path):
             (mock_fig_jerk, (mock_ax3, mock_ax4)),
         ]
 
+        # Create fake save directory
+        fake_save_dir = "/fake/dir"
+
         # Run analysis
         (
             is_passed,
@@ -322,7 +348,12 @@ def test_run_lateral_analysis(mock_mcap_path):
             lateral_jerk_avg,
             timestamps_out,
         ) = run_lateral_analysis(
-            mock_mcap_path, acc_threshold_to_pass=2.0, jerk_threshold_to_pass=2.0
+            mock_mcap_path, 
+            acc_threshold_to_pass=2.0, 
+            jerk_threshold_to_pass=2.0,
+            save_stats_dir=Path(fake_save_dir),
+            save_data_dir=Path(fake_save_dir),
+            save_plot_dir=Path(fake_save_dir)
         )
 
         # Test that values were calculated correctly
@@ -379,11 +410,13 @@ def test_run_lateral_analysis_exceeds_threshold(mock_mcap_path):
         # Test that analysis failed due to exceeded thresholds
         assert result[0] == False  # is_passed should be False
 
-
-def test_run_guidance_steering_analysis(mock_mcap_path):
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
-        "guidance_scripts.plt"
-    ) as mock_plt:
+@patch('guidance_scripts.plt')
+@patch('builtins.open', new_callable=mock_open)
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_run_guidance_steering_analysis(mock_json_dump, mock_file, mock_savez, mock_mkdir, mock_plt, mock_mcap_path):
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
 
         # Mock timestamps and steering angles
         timestamps = np.array([0, 1, 2, 3, 4])
@@ -398,6 +431,9 @@ def test_run_guidance_steering_analysis(mock_mcap_path):
         # Mock plt.figure to return a MagicMock
         mock_plt.figure.return_value = MagicMock()
 
+        # Create fake save directory
+        fake_save_dir = "/fake/dir"
+
         # Run analysis
         is_passed, stats, plot_figure, error_angles, common_timestamps = (
             run_guidance_steering_analysis(
@@ -405,6 +441,9 @@ def test_run_guidance_steering_analysis(mock_mcap_path):
                 error_threshold_to_pass_radian=0.1,
                 start_time=0,
                 end_time=4,
+                save_stats_dir=Path(fake_save_dir),
+                save_data_dir=Path(fake_save_dir),
+                save_plot_dir=Path(fake_save_dir)
             )
         )
 
@@ -447,11 +486,13 @@ def test_run_guidance_steering_analysis_fails_threshold(mock_mcap_path):
         assert is_passed == False  # Should fail due to large errors
         assert stats["median"] > 0.1  # Median error should exceed threshold
 
-
-def test_run_steering_wheel_analysis(mock_mcap_path):
-    with patch("guidance_scripts.extract_mcap_data") as mock_extract, patch(
-        "guidance_scripts.plt"
-    ) as mock_plt:
+@patch('guidance_scripts.plt')
+@patch('builtins.open', new_callable=mock_open)
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+@patch('json.dump')
+def test_run_steering_wheel_analysis(mock_json_dump, mock_file, mock_savez, mock_mkdir, mock_plt, mock_mcap_path):
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
 
         # Mock timestamps and steering values
         timestamps = np.array([0, 1, 2, 3, 4])
@@ -466,10 +507,18 @@ def test_run_steering_wheel_analysis(mock_mcap_path):
 
         mock_plt.figure.return_value = MagicMock()
 
+        # Create fake save directory
+        fake_save_dir = "/fake/dir"
+
         # Run analysis
         is_passed, stats, plot_figure, error_values, timestamps = (
             run_steering_wheel_analysis(
-                mock_mcap_path, error_threshold_to_pass=0.1, start_time=0, end_time=4
+                mock_mcap_path, error_threshold_to_pass=0.1,
+                start_time=0, 
+                end_time=4,
+                save_stats_dir=Path(fake_save_dir),
+                save_data_dir=Path(fake_save_dir),
+                save_plot_dir=Path(fake_save_dir)
             )
         )
 
@@ -625,9 +674,11 @@ def test_analyze_speed_responses():
 
 
 @patch('matplotlib.pyplot.figure')
+@patch('builtins.open', new_callable=mock_open)
+@patch('guidance_scripts.Path.mkdir')
 @patch('numpy.savez')
 @patch('json.dump')
-def test_run_speed_limit_change_response_analysis_basic(mock_json_dump, mock_savez, mock_figure):
+def test_run_speed_limit_change_response_analysis_basic(mock_json_dump, mock_savez, mock_mkdir, mock_file, mock_figure):
     """Test the main analysis function with basic mocked data"""
     with patch('guidance_scripts.extract_mcap_data') as mock_extract:
         # Create simple test data
@@ -647,15 +698,18 @@ def test_run_speed_limit_change_response_analysis_basic(mock_json_dump, mock_sav
         mock_fig = MagicMock()
         mock_figure.return_value = mock_fig
 
+        # Create fake save directory
+        fake_save_dir = "/fake/dir"
+
         # Run the analysis function
         result = run_speed_limit_change_response_analysis(
             mcap_path="test.mcap",
             response_time_threshold=0.2,
             steady_state_indication_time=1.0,
             speed_tolerance_pct=0.05,
-            save_stats_dir=None,
-            save_data_dir=None,
-            save_plot_dir=None
+            save_stats_dir=fake_save_dir,
+            save_data_dir=fake_save_dir,
+            save_plot_dir=fake_save_dir
         )
 
         # Check basic structure of results
@@ -702,3 +756,518 @@ def test_run_speed_limit_change_response_analysis_fail_case(mock_figure):
 
         # Test should fail
         assert passed == False
+
+def test_get_lateral_velocities(mock_mcap_path):
+    """Test Get Lateral Velocities functionality"""
+    with patch('guidance_scripts.extract_mcap_data') as mock_extract:
+        start_time=0
+        end_time=4
+        orientation_timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+        
+        # Test Scenario where vehicle starts straight, lane changes left (30 degrees), moves straight, lane changes right (30 degrees), moves straight at a constant 2 m/s
+        # 30 Degrees -> z = sin(30deg / 2) = 0.259, w = cos(30deg / 2) = 0.966
+        orientations = [
+            SimpleNamespace(x=0, y=0, z=0, w=1),
+            SimpleNamespace(x=0, y=0, z=0.259, w=0.966),
+            SimpleNamespace(x=0, y=0, z=0, w=1),
+            SimpleNamespace(x=0, y=0, z=-0.259, w=0.966),
+            SimpleNamespace(x=0, y=0, z=0, w=1)
+        ]
+        twist_timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.5])
+        twists = [
+            SimpleNamespace(x=2, y=0, z=0),
+            SimpleNamespace(x=2, y=0, z=0),
+            SimpleNamespace(x=2, y=0, z=0),
+            SimpleNamespace(x=2, y=0, z=0),
+            SimpleNamespace(x=2, y=0, z=0)
+        ]
+
+        mock_extract.return_value = {
+            '/localization/current_pose': (orientation_timestamps, orientations),
+            '/hardware_interface/vehicle/twist': (twist_timestamps, twists)
+        }
+
+        lane_change_velocities = get_lateral_velocities(mock_mcap_path, start_time, end_time)
+
+        assert len(lane_change_velocities) == 5
+        assert lane_change_velocities[0][1] == lane_change_velocities[2][1] == lane_change_velocities[4][1] == 0
+        assert lane_change_velocities[1][1] == approx(1.0, rel=1e-2)
+        assert lane_change_velocities[3][1] == approx(-1.0, rel=1e-2)
+
+    """Test get lateral velocities with no orientation data"""
+    with patch('guidance_scripts.extract_mcap_data') as mock_extract:
+        start_time=0
+        end_time=4
+        orientation_timestamps = np.array([])
+        orientations = []
+        twist_timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.5])
+        twists = [
+            SimpleNamespace(x=1, y=0, z=0),
+            SimpleNamespace(x=2, y=0, z=0),
+            SimpleNamespace(x=1.8, y=0, z=0),
+            SimpleNamespace(x=1.9, y=0, z=0),
+            SimpleNamespace(x=2.1, y=0, z=0)
+        ]
+
+        mock_extract.return_value = {
+            '/localization/current_pose': (orientation_timestamps, orientations),
+            '/hardware_interface/vehicle/twist': (twist_timestamps, twists)
+        }
+
+        lane_change_velocities = get_lateral_velocities(mock_mcap_path, start_time, end_time)
+
+        assert not lane_change_velocities
+
+
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+def test_check_reroute_duration(mock_savez, mock_mkdir, mock_mcap_path):
+    fake_save_dir = '/fake/dir'
+    max_route_update_duration = 3
+
+    """Test successful check_reroute_duration() with no restricted lanes"""
+
+    with patch('guidance_scripts.extract_mcap_data') as mock_extract:
+
+        mock_extract.return_value = {
+            "/message/incoming_geofence_control": (
+                [1, 2],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 5})
+                            ]
+                        )
+                    ),
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 0})
+                            ]
+                        )
+                    )
+                ]
+            ),
+            "/guidance/route": (
+                [0, 3, 4],
+                [[123,432,632], [123, 342, 241, 632], [123, 342, 142, 143, 632]]
+            )
+        }
+
+        passed = check_reroute_duration(mock_mcap_path, max_route_update_duration, fake_save_dir)
+        assert passed
+
+
+        """Test passing check_reroute_duration() with restricted lane received before closed lane"""
+        mock_extract.return_value = {
+            "/message/incoming_geofence_control": (
+                [1, 2],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 2})
+                            ]
+                        )
+                    ),
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 5})
+                            ]
+                        )
+                    )
+                ]
+            ),
+            "/guidance/route": (
+                [0, 3, 4],
+                [[123,432,632], [123, 342, 241, 632], [123, 342, 142, 143, 632]]
+            )
+        }
+
+        passed = check_reroute_duration(mock_mcap_path, max_route_update_duration, fake_save_dir)
+        assert passed
+
+        """Test passing check_reroute_duration() with restricted lane received after closed lane"""
+        mock_extract.return_value = {
+            "/message/incoming_geofence_control": (
+                [1, 2],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 5})
+                            ]
+                        )
+                    ),
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 2})
+                            ]
+                        )
+                    )
+                ]
+            ),
+            "/guidance/route": (
+                [0, 3, 4],
+                [[123,432,632], [123, 342, 241, 632], [123, 342, 142, 143, 632]]
+            )
+        }
+
+        passed = check_reroute_duration(mock_mcap_path, max_route_update_duration, fake_save_dir)
+        assert passed
+
+        """Test failing check_reroute_duration() with restricted lane update after max_duration"""
+        mock_extract.return_value = {
+            "/message/incoming_geofence_control": (
+                [1, 4],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 2})
+                            ]
+                        )
+                    ),
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 5})
+                            ]
+                        )
+                    )
+                ]
+            ),
+            "/guidance/route": (
+                [0, 5, 6],
+                [[123,432,632], [123, 342, 241, 632], [123, 342, 142, 143, 632]]
+            )
+        }
+
+        passed = check_reroute_duration(mock_mcap_path, max_route_update_duration, fake_save_dir)
+        assert not passed
+
+        """Test failing check_reroute_duration() with closed lane update after max_duration"""
+        mock_extract.return_value = {
+            "/message/incoming_geofence_control": (
+                [1, 2],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 2})
+                            ]
+                        )
+                    ),
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 5})
+                            ]
+                        )
+                    )
+                ]
+            ),
+            "/guidance/route": (
+                [0, 3, 6],
+                [[123,432,632], [123, 342, 241, 632], [123, 342, 142, 143, 632]]
+            )
+        }
+
+        passed = check_reroute_duration(mock_mcap_path, max_route_update_duration, fake_save_dir)
+        assert not passed
+
+        """Test failing check_reroute_duration() with invalid number of route updates"""
+        mock_extract.return_value = {
+            "/message/incoming_geofence_control": (
+                [1, 4],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 2})
+                            ]
+                        )
+                    ),
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=5
+                            ),
+                            vclasses=[
+                                SimpleNamespace(**{"vehicle_class": 5})
+                            ]
+                        )
+                    )
+                ]
+            ),
+            "/guidance/route": (
+                [0],
+                [[123,432,632]]
+            )
+        }
+
+        passed = check_reroute_duration(mock_mcap_path, max_route_update_duration, fake_save_dir)
+        assert not passed
+
+
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+def test_check_speed_limits_in_geofence(mock_savez, mock_mkdir, mock_mcap_path):
+    fake_save_dir = "/fake/dir"
+    time_enter = 1
+    time_exit = 5
+    advisory_speed = 2
+
+    """Test passing check_speed_limits_in_geofence"""
+
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
+
+        mock_extract.side_effect = [
+            # Incoming_geofence_control - Guidance_route_state
+            {"/message/incoming_geofence_control": (
+                [2,4],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=12,
+                                maxspeed=2
+                            )
+                        )
+                    )
+                ]
+            )},
+            {"/guidance/route_state": (
+                [3,4],
+                [(2,2),(1.98,3)]
+            )}
+        ]
+
+        passed = check_speed_limits_in_geofence(mock_mcap_path, time_enter, time_exit, advisory_speed, fake_save_dir)
+    
+        assert passed
+
+        """Test failing check_speed_limits_in_geofence() with advisory speed not matched"""
+        mock_extract.side_effect = [
+            # Incoming_geofence_control - Guidance_route_state
+            {"/message/incoming_geofence_control": (
+                [2,4],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=12,
+                                maxspeed=2
+                            )
+                        )
+                    )
+                ]
+            )},
+            {"/guidance/route_state": (
+                [3,4],
+                [(2,2),(3,3)]
+            )}
+        ]
+
+        passed = check_speed_limits_in_geofence(mock_mcap_path, time_enter, time_exit, advisory_speed, fake_save_dir)
+    
+        assert not passed
+
+        """Test failing check_speed_limits_in_geofence() with no time enter/exit geofence"""
+        mock_extract.side_effect = [
+            # Incoming_geofence_control - Guidance_route_state
+            {"/message/incoming_geofence_control": (
+                [2,4],
+                [
+                    SimpleNamespace(
+                        params=SimpleNamespace(
+                            detail=SimpleNamespace(
+                                choice=12,
+                                maxspeed=2
+                            )
+                        )
+                    )
+                ]
+            )},
+            {"/guidance/route_state": (
+                [3,4],
+                [(2,2),(3,3)]
+            )}
+        ]
+
+        passed = check_speed_limits_in_geofence(mock_mcap_path, None, None, advisory_speed, fake_save_dir)
+    
+        assert not passed
+
+
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+def test_check_geofence_in_reroute(mock_savez, mock_mkdir, mock_mcap_path):
+    fake_save_dir = "/fake/dir"
+    closed_lanelets = [3,5]
+
+    """Test check_geofence_in_reroute() with closed lanelets in initial route and removed from reroute"""
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
+
+        mock_extract.return_value = {
+            "/guidance/route": (
+                [1,2],
+                [[1,3,5,7],[1,2,4,6,7]]
+            )
+        }
+
+        fwz_1_passed, fwz_8_passed = check_geofence_in_reroute(mock_mcap_path, closed_lanelets, fake_save_dir)
+        assert fwz_1_passed
+        assert fwz_8_passed
+
+        """Test check_geofence_in_reroute() with closed lanelets not in initial route and removed from reroute"""
+        mock_extract.return_value = {
+            "/guidance/route": (
+                [1,2],
+                [[1,2,4,6,7],[1,2,6,7]]
+            )
+        }
+
+        fwz_1_passed, fwz_8_passed = check_geofence_in_reroute(mock_mcap_path, closed_lanelets, fake_save_dir)
+        assert not fwz_1_passed
+        assert fwz_8_passed
+
+        """Test check_geofence_in_reroute() with closed lanelets in initial route and in reroute"""
+        mock_extract.return_value = {
+            "/guidance/route": (
+                [1,2],
+                [[1,3,5,7],[1,3,5,6,7]]
+            )
+        }
+
+        fwz_1_passed, fwz_8_passed = check_geofence_in_reroute(mock_mcap_path, closed_lanelets, fake_save_dir)
+        assert fwz_1_passed
+        assert not fwz_8_passed
+
+        """Test check_geofence_in_reroute() with closed lanelets not in initial route and present in reroute"""
+        mock_extract.return_value = {
+            "/guidance/route": (
+                [1,2],
+                [[1,2,4,6,7],[1,3,5,7]]
+            )
+        }
+
+        fwz_1_passed, fwz_8_passed = check_geofence_in_reroute(mock_mcap_path, closed_lanelets, fake_save_dir)
+        assert not fwz_1_passed
+        assert not fwz_8_passed
+
+        """Test check_geofence_in_reroute() with invalid number of routes"""
+        mock_extract.return_value = {
+            "/guidance/route": (
+                [1],
+                [[1,3,5,7]]
+            )
+        }
+
+        fwz_1_passed, fwz_8_passed = check_geofence_in_reroute(mock_mcap_path, closed_lanelets, fake_save_dir)
+        assert not fwz_1_passed
+        assert not fwz_8_passed
+
+        """Test check_geofence_in_reroute() with no closed lanelets"""
+        mock_extract.return_value = {
+            "/guidance/route": (
+                [1,2],
+                [[1,3,5,7],[1,2,4,6,7]]
+            )
+        }
+
+        fwz_1_passed, fwz_8_passed = check_geofence_in_reroute(mock_mcap_path, [], fake_save_dir)
+        assert not fwz_1_passed
+        assert not fwz_8_passed
+
+
+def test_get_route_original_speed(mock_mcap_path):
+
+    with patch('guidance_scripts.extract_mcap_data') as mock_extract:
+
+        mock_extract.return_value = {
+            '/guidance/route_state': (
+                [1,3,5],
+                [2,4,6]
+            )
+        }
+
+        speed_limit = get_route_original_speed(mock_mcap_path)
+        assert speed_limit == 2
+
+        mock_extract.return_value = {
+            '/guidance/route_state': (
+                [1,3,5],
+                [6,4,2]
+            )
+        }
+
+        speed_limit = get_route_original_speed(mock_mcap_path)
+        assert speed_limit == 6
+
+
+def test_get_geofence_entrance_and_exit_times(mock_mcap_path):
+
+    """Test get_geofence_entrance_and_exit_times() with normal behavior"""
+    with patch('guidance_scripts.extract_mcap_data') as mock_extract:
+
+        mock_extract.return_value = {
+            '/environment/active_geofence': (
+                [1,2,3,4,5,6],
+                [False, False, True, True, True, False]
+            )
+        }
+
+        time_enter, time_exit, found = get_geofence_entrance_and_exit_times(mock_mcap_path)
+        assert time_enter == 3
+        assert time_exit == 6
+        assert found
+
+        """Test get_geofence_entrance_and_exit_times() with never entering geofence"""
+        mock_extract.return_value = {
+            '/environment/active_geofence': (
+                [1,2,3,4,5,6],
+                [False, False, False, False, False, False]
+            )
+        }
+
+        time_enter, time_exit, found = get_geofence_entrance_and_exit_times(mock_mcap_path)
+        assert time_enter == None
+        assert time_exit == None
+        assert not found
