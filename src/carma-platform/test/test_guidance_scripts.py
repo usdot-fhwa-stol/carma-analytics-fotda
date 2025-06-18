@@ -171,6 +171,7 @@ def test_find_accel_period():
     assert time_end_period == 12.0
     assert accels[0] == approx(-2.0, rel=1e-2)
 
+
 def test_check_lanechange_duration(mock_mcap_path, tmp_path):
 
     start_time = 0.0
@@ -197,47 +198,60 @@ def test_check_lanechange_duration(mock_mcap_path, tmp_path):
         assert is_successful is True
 
 
-# def test_check_lanechange_lateral_velocity(mock_mcap_path, tmp_path):
-#     # mcap_path: Path to MCAP file
-#     # min_lat_velocity: Minimum lateral velocity value during lane change
-#     # max_lat_velocity: Maximum lateral velocity value during lane change
-#     # save_stats_dir
-#     # save_data_dir
-#     # save_plot_dir
+def test_check_lanechange_lateral_velocity(mock_mcap_path, tmp_path):
 
-#     min_lat_velocity = 0.5
-#     max_lat_velocity = 2.0
+    min_lat_velocity = 0.5
+    max_lat_velocity = 2.0
 
-#     def make_twist(x):
-#         linear = MagicMock()
-#         linear.x = x
-#         twist = MagicMock()
-#         twist.linear = linear
-#         return twist
+    def make_orientations(x):
+        orientation = MagicMock()
+        orientation.x = x
+        orientation.y = x
+        orientation.z = x
+        orientation.w = x
+        return orientation
 
-#     # Mock timestamps and twist messages
-#     timestamps = np.array([0.0, 0.5, 1.0, 1.5, 2.0])
-#     twists = [make_twist(x) for x in [16.0, 15.0, 15.0, 20.0, 20.0]]
 
-#     with patch("guidance_scripts.extract_mcap_data") as mock_extract:
-#         mock_extract.return_value = {
-#             "/guidance/plan_trajectory": (
-#                 [0.0, 1.0, 2.0, 3.0, 4.0],
-#                 [
-#                     ("cooperative_lanechange"),
-#                     ("cooperative_lanechange"),
-#                     ("cooperative_lanechange"),
-#                     ("cooperative_lanechange"),
-#                     ("cooperative_lanechange")
-#                 ]
-#             ),
-#             "/localization/current_pose": (
-#                 [0, 1, 2, 3, 4],
-#                 [(0.0, 0.0), (1.0, 1.0), (2.0, 2.0), (3.0, 3.0), (4.0, 4.0)],
-#                 ),
-#                 "/hardware_interface/vehicle/twist": (timestamps, twists)
-#         }
-#         check_lanechange_lateral_velocity(mock_mcap_path, min_lat_velocity, max_lat_velocity)
+    def make_twist(x):
+        twist = MagicMock()
+        twist.x = x
+        twist.y = x
+        twist.z = x
+        return twist
+
+    # Mock timestamps and twist messages
+    timestamps = np.array([0.0, 0.5, 1.0, 1.5, 2.0])
+    twists = [make_twist(x) for x in [16.0, 15.0, 15.0, 20.0, 20.0]]
+    orientations = [make_orientations(x) for x in [16.0, 15.0, 15.0, 20.0, 20.0]]
+
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
+        mock_extract.return_value = {
+            "/guidance/plan_trajectory": (
+                np.array([0.0, 1.0, 2.0, 3.0, 4.0]),
+                [
+                    ("cooperative_lanechange"),
+                    ("cooperative_lanechange"),
+                    ("cooperative_lanechange"),
+                    ("cooperative_lanechange"),
+                    ("cooperative_lanechange")
+                ]
+            ),
+            "/localization/current_pose": (
+                np.array([0.0, 0.5, 1.0, 1.5, 2.0]),
+                orientations
+                ),
+                "/hardware_interface/vehicle/twist": (timestamps, twists)
+        }
+        check_lanechange_lateral_velocity(mock_mcap_path, min_lat_velocity, max_lat_velocity)
+
+
+def test_check_time_to_begin_acceleration(tmp_path):
+
+    speed_limit_changes = [(5,5,10), (10, 10, 15), (15, 15, 10)]
+    response_times = [2.0, 3.0, 2.0]
+    response_thresholds = 5.0
+
+    assert check_time_to_begin_acceleration(speed_limit_changes, response_times, response_thresholds, save_stats_dir=tmp_path, save_data_dir=tmp_path) is True
 
 
 def test_check_steady_state_after_geofence(mock_mcap_path):

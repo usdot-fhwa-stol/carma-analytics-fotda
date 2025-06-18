@@ -547,8 +547,6 @@ def test_failing_check_tcm_broadcast_rate(mock_json_dump, mock_savez, mock_file)
 
         assert not passed
 
-
-@patch('matplotlib.pyplot.figure')
 def test_check_message_broadcast_rate(mock_mcap_path, tmp_path):
 
     mock_fig = MagicMock()
