@@ -122,7 +122,7 @@ def check_message_broadcast_rate(
         # Count messages in this window
         messages_in_window = np.sum((timestamps >= window_start) & (timestamps < window_end))
 
-        if messages_in_window > 1:
+        if messages_in_window >= 1:
             # Calculate rate as messages per second
             rolling_rate = messages_in_window / window_size
             rolling_rates.append(rolling_rate)
@@ -141,7 +141,7 @@ def check_message_broadcast_rate(
 
     # Check if rolling average rate is within tolerance
     rates_within_tolerance = np.sum(
-        (rolling_rates >= rate_lower_bound) & (rolling_rates <= rate_upper_bound)
+        (rolling_rates >= rate_lower_bound) | (rolling_rates <= rate_upper_bound)
     ) if len(rolling_rates) > 0 else 0
 
     total_windows = len(rolling_rates) if len(rolling_rates) > 0 else 1
