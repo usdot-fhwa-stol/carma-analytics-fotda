@@ -81,7 +81,10 @@ def test_check_deceleration_for_geofence():
 
     assert check_deceleration_for_geofence(time_enter_geofence, accelerations, max_deceleration) is True
 
-def test_create_geofence_acceleration_plot(tmp_path):
+@patch("matplotlib.pyplot.show")
+@patch("matplotlib.pyplot.savefig")
+@patch("matplotlib.pyplot.subplots")
+def test_create_geofence_acceleration_plot(mock_subplots, mock_savefig, mock_show, tmp_path):
 
     times = range (1,13)
     accel_values = [1, -2, -3, -4, -2] + [1.0] * 7
@@ -245,7 +248,9 @@ def test_check_lanechange_lateral_velocity(mock_mcap_path, tmp_path):
         check_lanechange_lateral_velocity(mock_mcap_path, min_lat_velocity, max_lat_velocity)
 
 
-def test_check_time_to_begin_acceleration(tmp_path):
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+def test_check_time_to_begin_acceleration(mock_savez, mock_mkdir, tmp_path):
 
     speed_limit_changes = [(5,5,10), (10, 10, 15), (15, 15, 10)]
     response_times = [2.0, 3.0, 2.0]
