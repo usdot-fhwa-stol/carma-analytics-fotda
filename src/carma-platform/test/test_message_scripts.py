@@ -579,3 +579,47 @@ def test_check_message_broadcast_rate(mock_mcap_path, tmp_path):
         )
 
         assert is_passed is True
+
+    # Test extract_timestamp
+    mock_msg_with_header = MagicMock()
+    mock_msg_with_header.header.stamp.sec = 5
+    mock_msg_with_header.header.stamp.nanosec = 500000000
+    
+    mock_msg_with_stamp = MagicMock()
+    del mock_msg_with_stamp.header
+    mock_msg_with_stamp.stamp.sec = 3
+    mock_msg_with_stamp.stamp.nanosec = 250000000
+    
+    mock_msg_no_stamp = MagicMock()
+    del mock_msg_no_stamp.header
+    del mock_msg_no_stamp.stamp
+    
+    with patch("message_scripts.extract_mcap_data") as mock_extract:
+        def mock_extract_side_effect(mcap_path, topics, start_time=None, end_time=None, field_extractors=None):
+            if field_extractors and topics[0] in field_extractors:
+                extractor = field_extractors[topics[0]]
+                # Test the extractor with mock messages
+                result1 = extractor(mock_msg_with_header)
+                result2 = extractor(mock_msg_with_stamp) 
+                result3 = extractor(mock_msg_no_stamp)
+                
+                assert result1 == 5.5
+                assert result2 == 3.25
+                assert result3 is None
+                
+                return {topics[0]: ([1.0, 2.0, 3.0], [result1, result2, result3])}
+        
+        mock_extract.side_effect = mock_extract_side_effect
+
+        # Call main function to trigger extract_timestamp
+        check_message_broadcast_rate(
+            mcap_path=mock_mcap_path,
+            topic_name="test_topic",
+            expected_rate_hz=0.8,
+            rate_tolerance_pct=0.1,  # 10% tolerance
+            start_time=1.0,
+            end_time=5.0,
+            save_stats_dir=tmp_path,
+            save_data_dir=tmp_path,
+            save_plot_dir=tmp_path,
+        )
