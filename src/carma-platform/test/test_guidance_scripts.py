@@ -173,6 +173,9 @@ def test_find_accel_period():
     assert time_start_period == 2.0
     assert time_end_period == 12.0
     assert accels[0] == approx(-2.0, rel=1e-2)
+    acceleration = tuple()
+    time_start_period, time_end_period, accels = find_accel_period(acceleration, time_start, deceleration)
+    assert not accels
 
 
 def test_check_lanechange_duration(mock_mcap_path, tmp_path):
