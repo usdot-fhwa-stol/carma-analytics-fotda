@@ -78,7 +78,7 @@ def test_passing_check_tcm_acknowledgement_delay(mock_json_dump, mock_savez, moc
         mock_plt.subplots.return_value = (mock_fig, mock_ax)
 
         passed, acknowledgements, plt_fig, stats = check_tcm_acknowledgement_delay(mock_mcap_path, max_delay_sec, fake_save_dir, fake_save_dir, fake_save_dir)
-    
+
         assert passed
         assert len(acknowledgements) == 3
         assert plt_fig is not None
@@ -108,7 +108,7 @@ def test_failing_check_tcm_acknowledgement_delay(mock_plt, mock_mcap_path):
                 ),
                 SimpleNamespace(
                     reqid=SimpleNamespace(
-                        id=np.array([253, 183,   5,  51, 158,  15,  76,  27]) 
+                        id=np.array([253, 183,   5,  51, 158,  15,  76,  27])
                     ),
                     msgnum=1
                 )
@@ -143,7 +143,7 @@ def test_failing_check_tcm_acknowledgement_delay(mock_plt, mock_mcap_path):
         mock_plt.subplots.return_value = (mock_fig, mock_ax)
 
         passed, acknowledgements, plt_fig, stats = check_tcm_acknowledgement_delay(mock_mcap_path, max_delay_sec)
-    
+
         assert not passed
         assert len(acknowledgements) == 2
         assert plt_fig is not None
@@ -301,7 +301,7 @@ def test_process_cc_logs_for_tcr_tcm_data(mock_json_dump, mock_savez, mock_mkdir
     expected_reqids = ['F688453EA7C54511', 'FDB705339E0F4C1B', 'F804AA710EA64E31', 'D3F3512874AC47A1']
     rate_tcm_ids = ['00305feb9eac2d077bd5f534833d0152', '008ba29f41eb4df1cf0a4e3a2ab11094']
     inf_rate_tcm_ids = ['00305feb9eac2d077bd5f534833d0153', '008ba29f41eb4df1cf0a4e3a2ab11095']
-    
+
     # Fake files in the directory
     fake_files = ['file1.txt']
     fake_save_dir = '/fake/dir'
@@ -372,7 +372,7 @@ def test_bad_data_process_cc_logs_for_tcr_tcm_data(mock_json_dump, mock_savez, m
     expected_rate_hz = 0
 
     expected_reqids = ['F688453EA7C54511', 'FDB705339E0F4C1B', 'F804AA710EA64E31', 'D3F3512874AC47A1']
-    
+
     # Fake files in the directory
     fake_files = ['file1.txt']
     fake_save_dir = '/fake/dir'
@@ -397,7 +397,7 @@ def test_bad_data_process_cc_logs_for_tcr_tcm_data(mock_json_dump, mock_savez, m
         '[DEBUG 19:03:28.521 [TcmReqServlet] - <?xml version="1.0" encoding="UTF-8"?><TrafficControlRequest port="33333" list="true"><reqid>D3F3512874AC47A1</reqid><reqseq>0</reqseq><scale>-1</scale><bounds><TrafficControlBounds><oldest>29107863</oldest><reflon>-771510186</reflon><reflat>389548654</reflat><offsets><OffsetPoint><deltax>3015</deltax><deltay>0</deltay></OffsetPoint><OffsetPoint><deltax>3015</deltax><deltay>1049</deltay></OffsetPoint><OffsetPoint><deltax>0</deltax><deltay>1049</deltay></OffsetPoint></offsets></TrafficControlBounds></bounds></TrafficControlRequest>',
         '[DEBUG 19:03:28.525 [TcmReqServlet] - <?xml version="1.0" encoding="UTF-8"?><TrafficControlMessage><tcmV01><reqid>D3F3512874AC47A1</reqid><reqseq>0</reqseq><msgtot>2</msgtot><msgnum>1</msgnum><id>008ba29f41eb4df1cf0a4e3a2ab11096</id><updated>0</updated><package><label>workzone</label><tcids><Id128b>008ba29f41eb4df1cf0a4e3a2ab11096</Id128b></tcids></package><params><vclasses><micromobile/><motorcycle/><passenger-car/><light-truck-van/><bus/><two-axle-six-tire-single-unit-truck/><three-axle-single-unit-truck/><four-or-more-axle-single-unit-truck/><four-or-fewer-axle-single-trailer-truck/><five-axle-single-trailer-truck/><six-or-more-axle-single-trailer-truck/><five-or-fewer-axle-multi-trailer-truck/><six-axle-multi-trailer-truck/><seven-or-more-axle-multi-trailer-truck/></vclasses><schedule><start>29109288</start><end>153722867280912</end><dow>1111111</dow></schedule><regulatory><true/></regulatory><detail><closed><notopen/></closed></detail></params><geometry><proj>epsg:3785</proj><datum>WGS84</datum><reftime>29109288</reftime><reflon>-771486221</reflon><reflat>389549122</reflat><refelv>0</refelv><heading>3312</heading><nodes><PathNode><x>5</x><y>0</y><width>1</width></PathNode><PathNode><x>-1491</x><y>94</y><width>8</width></PathNode><PathNode><x>-830</x><y>80</y><width>3</width></PathNode></nodes></geometry></tcmV01></TrafficControlMessage>',
         '[DEBUG 19:03:28.526 [TcmReqServlet] - <?xml version="1.0" encoding="UTF-8"?><TrafficControlMessage><tcmV01><reqid>D3F3512874AC47A1</reqid><reqseq>0</reqseq><msgtot>2</msgtot><msgnum>2</msgnum><id>00305feb9eac2d077bd5f534833d0151</id><updated>0</updated><package><label>workzone</label><tcids><Id128b>00305feb9eac2d077bd5f534833d0151</Id128b></tcids></package><params><vclasses><micromobile/><motorcycle/><passenger-car/><light-truck-van/><bus/><two-axle-six-tire-single-unit-truck/><three-axle-single-unit-truck/><four-or-more-axle-single-unit-truck/><four-or-fewer-axle-single-trailer-truck/><five-axle-single-trailer-truck/><six-or-more-axle-single-trailer-truck/><five-or-fewer-axle-multi-trailer-truck/><six-axle-multi-trailer-truck/><seven-or-more-axle-multi-trailer-truck/></vclasses><schedule><start>29129391</start><end>153722867280912</end><dow>1111111</dow></schedule><regulatory><true/></regulatory><detail><maxspeed>45</maxspeed></detail></params><geometry><proj>epsg:3785</proj><datum>WGS84</datum><reftime>29129391</reftime><reflon>-771488786</reflon><reflat>389548996</reflat><refelv>0</refelv><heading>3312</heading><nodes><PathNode><x>1</x><y>0</y><width>-1</width></PathNode><PathNode><x>1489</x><y>-152</y><width>24</width></PathNode><PathNode><x>1496</x><y>-92</y><width>9</width></PathNode><PathNode><x>60</x><y>-3</y><width>2</width></PathNode></nodes></geometry></tcmV01></TrafficControlMessage>'
-    
+
     ]
 
     file_contents = "\n".join(sample_lines)+"\n"
@@ -446,7 +446,7 @@ def test_passing_check_cc_response_delay(mock_json_dump, mock_savez, mock_file):
     }
 
     with patch.object(Path, "mkdir") as mock_mkdir:
-    
+
         passed = check_cc_response_delay(cc_data, expected_delay_sec, fake_save_dir, fake_save_dir)
 
         assert passed
@@ -464,7 +464,7 @@ def test_failing_check_cc_response_delay(mock_json_dump, mock_savez, mock_file):
     }
 
     with patch.object(Path, "mkdir") as mock_mkdir:
-    
+
         passed = check_cc_response_delay(cc_data, expected_delay_sec, fake_save_dir, fake_save_dir)
 
         assert not passed
@@ -547,3 +547,79 @@ def test_failing_check_tcm_broadcast_rate(mock_json_dump, mock_savez, mock_file)
 
         assert not passed
 
+def test_check_message_broadcast_rate(mock_mcap_path, tmp_path):
+
+    mock_fig = MagicMock()
+    mock_ax1 = MagicMock()
+    mock_ax2 = MagicMock()
+
+    with patch("message_scripts.extract_mcap_data") as mock_extract, \
+        patch("matplotlib.pyplot.subplots", return_value=(mock_fig, (mock_ax1, mock_ax2))), \
+        patch("matplotlib.pyplot.savefig") as mock_savefig, \
+        patch("matplotlib.pyplot.show") as mock_show :
+
+        timestamps = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        messages = np.array([1.0, 2.1, 3.1, 4.1, 5.1])
+
+        # Setup mock return value
+        mock_extract.return_value = {
+            "test_topic": (timestamps, messages),
+        }
+
+        is_passed, stats, fig, broadcast_intervals, timestamps = check_message_broadcast_rate(
+            mcap_path=mock_mcap_path,
+            topic_name="test_topic",
+            expected_rate_hz=0.8,
+            rate_tolerance_pct=0.1,  # 10% tolerance
+            start_time=1.0,
+            end_time=5.0,
+            save_stats_dir=tmp_path,
+            save_data_dir=tmp_path,
+            save_plot_dir=tmp_path,
+        )
+
+        assert is_passed is True
+
+    # Test extract_timestamp
+    mock_msg_with_header = MagicMock()
+    mock_msg_with_header.header.stamp.sec = 5
+    mock_msg_with_header.header.stamp.nanosec = 500000000
+    
+    mock_msg_with_stamp = MagicMock()
+    del mock_msg_with_stamp.header
+    mock_msg_with_stamp.stamp.sec = 3
+    mock_msg_with_stamp.stamp.nanosec = 250000000
+    
+    mock_msg_no_stamp = MagicMock()
+    del mock_msg_no_stamp.header
+    del mock_msg_no_stamp.stamp
+    
+    with patch("message_scripts.extract_mcap_data") as mock_extract:
+        def mock_extract_side_effect(mcap_path, topics, start_time=None, end_time=None, field_extractors=None):
+            if field_extractors and topics[0] in field_extractors:
+                extractor = field_extractors[topics[0]]
+                # Test the extractor with mock messages
+                result1 = extractor(mock_msg_with_header)
+                result2 = extractor(mock_msg_with_stamp) 
+                result3 = extractor(mock_msg_no_stamp)
+                
+                assert result1 == 5.5
+                assert result2 == 3.25
+                assert result3 is None
+                
+                return {topics[0]: ([1.0, 2.0, 3.0], [result1, result2, result3])}
+        
+        mock_extract.side_effect = mock_extract_side_effect
+
+        # Call main function to trigger extract_timestamp
+        check_message_broadcast_rate(
+            mcap_path=mock_mcap_path,
+            topic_name="test_topic",
+            expected_rate_hz=0.8,
+            rate_tolerance_pct=0.1,  # 10% tolerance
+            start_time=1.0,
+            end_time=5.0,
+            save_stats_dir=tmp_path,
+            save_data_dir=tmp_path,
+            save_plot_dir=tmp_path,
+        )

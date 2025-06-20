@@ -2739,6 +2739,9 @@ def find_accel_period(accelerations, time_start, deceleration):
     if consec_count >= num_consecutive:
         time_end_period = filtered_accelerations[-1][0]
         return time_begin_period, time_end_period, accels
+    else:
+        print(f"Could not find a valid acceleration/deceleration period with the given parameters. Required at least {num_consecutive} points and found {consec_count}.")
+
 
     return None, None, []
 

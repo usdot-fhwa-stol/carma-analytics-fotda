@@ -6,6 +6,10 @@ from pytest import approx
 from types import SimpleNamespace
 import numpy as np
 
+import matplotlib
+# Use Agg backend for matplotlib to avoid GUI issues in CI environments
+matplotlib.use('Agg')
+
 """
 Usage:
 cd carma-analytics-fotda/src/carma-platform/
@@ -16,6 +20,274 @@ python3 -m pytest test
 @pytest.fixture
 def mock_mcap_path():
     return Path("/path/to/mock.mcap")
+
+
+def test_check_deceleration_for_geofence():
+    # Test vehicle doesn't enter geofence
+    assert check_deceleration_for_geofence(time_enter_geofence=None, accelerations=None, max_deceleration=None) is False
+
+    # Test vehicle enters geofence with sufficient deceleration
+    accelerations = [
+        (1.0, 2.0),
+        (2.0, -1.0),
+        (3.0, -4.0),
+        (4.0, -5.0),
+        (5.0, -2.0),
+        (6.0, -2.0),
+        (7.0, -2.0),
+        (8.0, -2.0),
+        (9.0, -2.0),
+        (10.0, -2.0),
+        (11.0, -2.0)]
+    max_deceleration = -4.0
+    time_enter_geofence = 1.0
+
+    assert check_deceleration_for_geofence(time_enter_geofence, accelerations, max_deceleration) is True
+
+    # Test deceleration period never began
+    accelerations = [[1.0, 2.0, 3.0, 4.0, 5.0], [0.0, 0.0, 0.0, 0.0, 0.0]]
+    assert check_deceleration_for_geofence(time_enter_geofence, accelerations, max_deceleration) is False
+
+def test_check_acceleration_after_geofence():
+
+    assert check_acceleration_after_geofence(time_exit_geofence=None, accelerations=None, min_average_acceleration=None, section_accelerations=None, max_section_acceleration=None) is False
+
+    time_exit_geofence = 2.0
+    min_average_acceleration = 2.0
+    max_section_acceleration = 5.0
+    section_accelerations = [
+        (1.0, 2.0), (2.0, 1.0), (3.0, 4.0), (4.0, 5.0), (5.0, 2.0), (6.0, 2.0),
+        (7.0, 2.0), (8.0, 2.0), (9.0, 2.0), (10.0, 2.0), (11.0, 2.0), (12.0, 2.0)
+    ]
+
+    # Test vehicle exits geofence with less than sufficient acceleration
+    times = range (1,13)
+    accel_values = [1.0] * 12
+    accelerations = list(zip(times, accel_values))
+
+    assert check_acceleration_after_geofence(time_exit_geofence, accelerations, min_average_acceleration, section_accelerations, max_section_acceleration) is False
+
+    accel_values = [-2.0, 1.0, 4.0, 5.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
+    accelerations = list(zip(times, accel_values))
+
+    assert check_acceleration_after_geofence(time_exit_geofence, accelerations, min_average_acceleration, section_accelerations, max_section_acceleration) is True
+
+def test_check_deceleration_for_geofence():
+    time_enter_geofence = 1.0
+    times = range (1,12)
+    accel_values = [-1.0] * 11
+    accelerations = list(zip(times, accel_values))
+    max_deceleration = -3.0
+
+    assert check_deceleration_for_geofence(time_enter_geofence, accelerations, max_deceleration) is True
+
+@patch("matplotlib.pyplot.show")
+@patch("matplotlib.pyplot.savefig")
+@patch("matplotlib.pyplot.subplots")
+def test_create_geofence_acceleration_plot(mock_subplots, mock_savefig, mock_show, tmp_path):
+
+    times = range (1,13)
+    accel_values = [1, -2, -3, -4, -2] + [1.0] * 7
+    accelerations = list(zip(times, accel_values))
+
+    sec_accelerations = [
+        (1.0, 2.0), (2.0, 1.0), (3.0, 4.0), (4.0, 5.0), (5.0, 2.0), (6.0, 2.0),
+        (7.0, 2.0), (8.0, 2.0), (9.0, 2.0), (10.0, 2.0), (11.0, 2.0), (12.0, 2.0)
+    ]
+
+    time_enter_geofence = 2.0
+    time_exit_geofence = 5.0
+    save_dir = tmp_path
+
+    mock_fig = MagicMock()
+    mock_ax1 = MagicMock()
+    mock_ax2 = MagicMock()
+
+    with patch("matplotlib.pyplot.subplots", return_value=(mock_fig, (mock_ax1, mock_ax2))), \
+         patch("matplotlib.pyplot.savefig") as mock_savefig, \
+         patch("matplotlib.pyplot.show") as mock_show:
+        create_geofence_acceleration_plot(
+            accelerations, sec_accelerations, time_enter_geofence, time_exit_geofence, save_plots_dir=save_dir
+        )
+        mock_savefig.assert_called_once()
+        mock_show.assert_not_called()
+        args, kwargs = mock_savefig.call_args
+        assert "geofence_acceleration.png" in str(args[0])
+
+def test_check_speed_before_before_workzone(mock_mcap_path):
+    workzone_lanelet_id = 174
+    start_time = 0
+    end_time = 5
+    advisory_speed_limit_ms = 15.0
+    speed_limit_threshold_ms = 1.0
+
+    def make_twist(x):
+        linear = MagicMock()
+        linear.x = x
+        twist = MagicMock()
+        twist.linear = linear
+        return twist
+
+
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
+        # Mock timestamps and twist messages
+        timestamps = np.array([0.0, 0.5, 1.0, 1.5, 2.0])
+        twists = [make_twist(x) for x in [16.0, 15.0, 15.0, 20.0, 20.0]]
+
+        # Setup mock return value
+        mock_extract.return_value = {
+            "/hardware_interface/vehicle/twist": (timestamps, twists),
+            "/guidance/route_state": (
+                [0, 1, 2, 3, 4, 5],
+                [172, 173, 174, 175, 176, 177],  # Lanelet IDs
+            )
+        }
+        assert check_speed_before_workzone("mock_mcap_path", start_time, end_time, workzone_lanelet_id, advisory_speed_limit_ms, speed_limit_threshold_ms) is True
+
+def test_check_time_to_begin_deceleration():
+    #Test no speed limit changes
+    assert check_time_to_begin_deceleration(speed_limit_changes=None, response_times=None, response_threshold=None, save_stats_dir=None, save_data_dir=None) is False
+
+    #Test speed limit changes under response threshold
+    speed_limit_change_times = [1.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0]
+    old_speed_limits = [3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0]
+    new_speed_limits = [2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0]
+    speed_limit_changes = zip(speed_limit_change_times, old_speed_limits, new_speed_limits)
+
+    response_times = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5]
+    response_threshold = 4.0
+
+    assert check_time_to_begin_deceleration(speed_limit_changes, response_times, response_threshold, None, None) is True
+
+def test_find_accel_period():
+    # Arguments required (accelerations, time_start, deceleration)
+    # Tuple of lists with timestamps and accelerations/decelerations
+    timestamps = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]
+    acceleration_values = [1.0, -2.0, -3.0, -4.0, -5.0, -6.0, -7.0, -8.0, -9.0, -10.0, -11.0, -12.0]
+    acceleration = zip(timestamps, acceleration_values)
+    time_start = 1.0
+    deceleration = True
+
+    time_start_period, time_end_period, accels = find_accel_period(acceleration, time_start, deceleration)
+    # Returns - time_start_period, time_end_period, accels
+    assert time_start_period == 2.0
+    assert time_end_period == 12.0
+    assert accels[0] == approx(-2.0, rel=1e-2)
+    acceleration = tuple()
+    time_start_period, time_end_period, accels = find_accel_period(acceleration, time_start, deceleration)
+    assert not accels
+
+
+def test_check_lanechange_duration(mock_mcap_path, tmp_path):
+
+    start_time = 0.0
+    max_lanechange_duration = 5.0
+
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
+        mock_extract.return_value = {
+            "/guidance/plan_trajectory": (
+                [0.0, 1.0, 2.0, 3.0, 4.0],
+                [
+                    ("cooperative_lanechange"),
+                    ("cooperative_lanechange"),
+                    ("cooperative_lanechange"),
+                    ("cooperative_lanechange"),
+                    ("cooperative_lanechange")
+                ],
+            )
+        }
+        is_successful, stats = check_lanechange_duration(mock_mcap_path, start_time, max_lanechange_duration, None, None)
+        assert is_successful is True
+        assert stats["maximum"] == approx(4.0, rel=0.1)
+
+        is_successful, stats = check_lanechange_duration(mock_mcap_path, start_time, max_lanechange_duration, tmp_path, tmp_path)
+        assert is_successful is True
+
+
+def test_check_lanechange_lateral_velocity(mock_mcap_path, tmp_path):
+
+    min_lat_velocity = 0.5
+    max_lat_velocity = 2.0
+
+    def make_orientations(x):
+        orientation = MagicMock()
+        orientation.x = x
+        orientation.y = x
+        orientation.z = x
+        orientation.w = x
+        return orientation
+
+
+    def make_twist(x):
+        twist = MagicMock()
+        twist.x = x
+        twist.y = x
+        twist.z = x
+        return twist
+
+    # Mock timestamps and twist messages
+    timestamps = np.array([0.0, 0.5, 1.0, 1.5, 2.0])
+    twists = [make_twist(x) for x in [16.0, 15.0, 15.0, 20.0, 20.0]]
+    orientations = [make_orientations(x) for x in [16.0, 15.0, 15.0, 20.0, 20.0]]
+
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
+        mock_extract.return_value = {
+            "/guidance/plan_trajectory": (
+                np.array([0.0, 1.0, 2.0, 3.0, 4.0]),
+                [
+                    ("cooperative_lanechange"),
+                    ("cooperative_lanechange"),
+                    ("cooperative_lanechange"),
+                    ("cooperative_lanechange"),
+                    ("cooperative_lanechange")
+                ]
+            ),
+            "/localization/current_pose": (
+                np.array([0.0, 0.5, 1.0, 1.5, 2.0]),
+                orientations
+                ),
+                "/hardware_interface/vehicle/twist": (timestamps, twists)
+        }
+        check_lanechange_lateral_velocity(mock_mcap_path, min_lat_velocity, max_lat_velocity)
+
+
+@patch('guidance_scripts.Path.mkdir')
+@patch('numpy.savez')
+def test_check_time_to_begin_acceleration(mock_savez, mock_mkdir, tmp_path):
+
+    speed_limit_changes = [(5,5,10), (10, 10, 15), (15, 15, 10)]
+    response_times = [2.0, 3.0, 2.0]
+    response_thresholds = 5.0
+
+    assert check_time_to_begin_acceleration(speed_limit_changes, response_times, response_thresholds, save_stats_dir=tmp_path, save_data_dir=tmp_path) is True
+
+
+def test_check_steady_state_after_geofence(mock_mcap_path):
+
+    time_begin_acceleration_after_geofence = 2.0
+    time_end_engagement = 5.0
+    original_speed_limit_ms = 15.0
+    min_time_at_steady_state = 2.0
+    threshold_speed_limit_offset = 0.89408  # 2 mph in m/s
+
+    def make_twist(x):
+        linear = MagicMock()
+        linear.x = x
+        twist = MagicMock()
+        twist.linear = linear
+        return twist
+
+    # Mock timestamps and twist messages
+    timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+    twists = [make_twist(x) for x in [16.0, 15.0, 15.0, 20.0, 20.0]]
+
+
+    with patch("guidance_scripts.extract_mcap_data") as mock_extract:
+        mock_extract.return_value = {
+        "/hardware_interface/vehicle/twist": (timestamps, twists)
+        }
+
+        assert check_steady_state_after_geofence(mock_mcap_path, time_begin_acceleration_after_geofence, time_end_engagement, original_speed_limit_ms, min_time_at_steady_state, threshold_speed_limit_offset) is True
 
 
 def test_get_engage_time(mock_mcap_path):
@@ -348,8 +620,8 @@ def test_run_lateral_analysis(mock_json_dump, mock_file, mock_savez, mock_mkdir,
             lateral_jerk_avg,
             timestamps_out,
         ) = run_lateral_analysis(
-            mock_mcap_path, 
-            acc_threshold_to_pass=2.0, 
+            mock_mcap_path,
+            acc_threshold_to_pass=2.0,
             jerk_threshold_to_pass=2.0,
             save_stats_dir=Path(fake_save_dir),
             save_data_dir=Path(fake_save_dir),
@@ -514,7 +786,7 @@ def test_run_steering_wheel_analysis(mock_json_dump, mock_file, mock_savez, mock
         is_passed, stats, plot_figure, error_values, timestamps = (
             run_steering_wheel_analysis(
                 mock_mcap_path, error_threshold_to_pass=0.1,
-                start_time=0, 
+                start_time=0,
                 end_time=4,
                 save_stats_dir=Path(fake_save_dir),
                 save_data_dir=Path(fake_save_dir),
@@ -763,7 +1035,7 @@ def test_get_lateral_velocities(mock_mcap_path):
         start_time=0
         end_time=4
         orientation_timestamps = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
-        
+
         # Test Scenario where vehicle starts straight, lane changes left (30 degrees), moves straight, lane changes right (30 degrees), moves straight at a constant 2 m/s
         # 30 Degrees -> z = sin(30deg / 2) = 0.259, w = cos(30deg / 2) = 0.966
         orientations = [
@@ -1080,7 +1352,7 @@ def test_check_speed_limits_in_geofence(mock_savez, mock_mkdir, mock_mcap_path):
         ]
 
         passed = check_speed_limits_in_geofence(mock_mcap_path, time_enter, time_exit, advisory_speed, fake_save_dir)
-    
+
         assert passed
 
         """Test failing check_speed_limits_in_geofence() with advisory speed not matched"""
@@ -1106,7 +1378,7 @@ def test_check_speed_limits_in_geofence(mock_savez, mock_mkdir, mock_mcap_path):
         ]
 
         passed = check_speed_limits_in_geofence(mock_mcap_path, time_enter, time_exit, advisory_speed, fake_save_dir)
-    
+
         assert not passed
 
         """Test failing check_speed_limits_in_geofence() with no time enter/exit geofence"""
@@ -1132,7 +1404,7 @@ def test_check_speed_limits_in_geofence(mock_savez, mock_mkdir, mock_mcap_path):
         ]
 
         passed = check_speed_limits_in_geofence(mock_mcap_path, None, None, advisory_speed, fake_save_dir)
-    
+
         assert not passed
 
 
