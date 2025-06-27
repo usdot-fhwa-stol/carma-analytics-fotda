@@ -1,0 +1,2 @@
+pyshark==0.6
+pycrate==0.7.9
