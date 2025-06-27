@@ -10,7 +10,6 @@ pip install -r requirements.txt
 
 currentDir="$PWD"
 logsDir=$currentDir/logs
-decodedDir=$currentDir/decoded
 
 if [ ! -d "$currentDir/decoded" ]; then
   mkdir "$currentDir/decoded"
@@ -29,14 +28,14 @@ extract() {
     ls *.pcap
     read -rep "Type pcap file from list: " fileName
 
-    tshark -r $fileName --disable-protocol wsmp -Tfields -Eseparator=, -e data.data > pcap.txt
+    tshark -r "$fileName" --disable-protocol wsmp -Tfields -Eseparator=, -e data.data > pcap.txt
 }
 
 decode() {
-    python3 decodeJ2735.py $currentDir/$fileName
-    cd $currentDir
-    mv pcap.txt $logsDir
-    mv *.pcap $logsDir
+    python3 decodeJ2735.py "$currentDir"/"$fileName"
+    cd "$currentDir" || exit
+    mv pcap.txt "$logsDir"
+    mv -- *.pcap "$logsDir"
 }
 
 processing() {
