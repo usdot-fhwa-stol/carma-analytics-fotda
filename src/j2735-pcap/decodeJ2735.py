@@ -100,12 +100,15 @@ def main():
     frame = J2735_201603_2023_06_22.DSRC.MessageFrame
     msgIds = ['0012','0013','0014','001f','0020','0029'] # can be updated to include other PSIDs
     msgId_count = defaultdict(int)  # dictionary to track decoded msgId and their counts
+    successCount = 0
     fileName = formatFileName()
     fileName_csv = formatFileName_csv()
     w = open(decodedDir + '/' + fileName, 'w')
     csv_output = open(decodedDir + '/' + fileName_csv, 'w', newline='')
     i=1 # Iterator for packet number
+    packet_total_count = 0
     for line in readLines():
+        packet_total_count += 1
         for id in msgIds:
             idx = line.find(id)
             if (idx != -1):
@@ -114,18 +117,20 @@ def main():
                     try:
                         decode(data, frame, w, msgId_count, id, csv_output, i)
                         i += 1
+                        successCount += 1
                     except Exception as e:
                         print("Error decoding message: ", e)
                         continue
-            else: continue
-  
+            else: 
+                continue
 
     # Write the decoded message IDs and their counts to the output file
     writeIds(w, msgId_count)
     w.close()
     csv_output.close()
+    errorCount = packet_total_count - successCount
 
-    print('\nDecoding Complete. Check', fileName, '\n')
+    print(f"Decoding of file {fileName} Complete.  Successfully decoded {successCount} msgs, Failed to decode {errorCount}")
     sys.exit(0)
 
 if __name__=="__main__":
