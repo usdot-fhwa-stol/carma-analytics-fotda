@@ -179,7 +179,7 @@ def read_messages(reader, topics, type_map, field_extractors):
 
 
 def filter_data_with_start_and_end_time(
-    data, topics, global_start_time, start_time, end_time
+    data, topics, global_start_time, start_time, end_time, use_relative_time=True
 ):
     """
     Filter data based on the specified time range and return with relative timestamps from the global_start_time
@@ -202,8 +202,14 @@ def filter_data_with_start_and_end_time(
         timestamps = np.array(topic_data["timestamps"])
         values = np.array(topic_data["values"])
 
-        # Convert timestamps to seconds from start
-        timestamps = (timestamps - global_start_time) / 1e9
+        if use_relative_time:
+            # Convert timestamps to seconds from start
+            timestamps = (timestamps - global_start_time) / 1e9
+        else:
+            # Start and end times are relative to start. Update to global if not useing relative time
+            start_time = start_time * 1e9 + global_start_time
+            end_time = end_time *1e9 + global_start_time
+            # print(timestamps)
         # Filter based on time range if specified
         if start_time is not None or end_time is not None:
             mask = np.ones_like(timestamps, dtype=bool)
@@ -227,7 +233,7 @@ def filter_data_with_start_and_end_time(
 
 
 def extract_mcap_data(
-    mcap_path, topics, start_time=None, end_time=None, field_extractors=None
+    mcap_path, topics, start_time=None, end_time=None, field_extractors=None, use_relative_time=True
 ):
     """
     Extract data from specified topics in an MCAP file within a given time range.
@@ -268,7 +274,7 @@ def extract_mcap_data(
 
     # Filter data based on time range
     result = filter_data_with_start_and_end_time(
-        data, topics, global_start_time, start_time, end_time
+        data, topics, global_start_time, start_time, end_time, use_relative_time
     )
 
     print(f"Finished extracting the required data for topics: {topics}")
