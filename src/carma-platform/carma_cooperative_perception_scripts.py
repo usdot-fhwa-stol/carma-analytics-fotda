@@ -120,7 +120,8 @@ def run_sdsm_latency_analysis(
                     msg.sdsm_time_stamp.hour.hour,
                     msg.sdsm_time_stamp.minute.minute,
                     msg.sdsm_time_stamp.second.millisecond,
-                    msg.sdsm_time_stamp.offset.offset_minute
+                    msg.sdsm_time_stamp.offset.offset_minute,
+                    msg.objects.detected_object_data
                 ),
             
             }
@@ -136,20 +137,38 @@ def run_sdsm_latency_analysis(
         sdsm_minute = extracted_data[:,5].astype(int)
         sdsm_millisecond = extracted_data[:,6].astype(int)
         sdsm_offset = extracted_data[:,7].astype(int)
+        sdsm_objects = extracted_data[:,8]
 
         epoch_times = []
         for y, m, d, h, mi, ms in zip(sdsm_year, sdsm_month, sdsm_day, sdsm_hour, sdsm_minute, sdsm_millisecond):
             dt = datetime(int(y), int(m), int(d), int(h), int(mi), int(ms // 1000), microsecond=(int(ms) % 1000) * 1000, tzinfo=timezone.utc)
             epoch_times.append(dt.timestamp())
-        epoch_times = np.array(epoch_times) * 1e9 # Convert to nanoseconds
+        epoch_times = np.array(epoch_times) * 1e9  + sdsm_offset # Convert to nanoseconds
 
+        encoded_incoming_object_timestamp_ns = []
+        topic_timestamp_ns = []
+        for message_time, encoded_msg_time, objs in zip(msg_timestamps, epoch_times, sdsm_objects):
+            
+            if len(objs) == 0:
+                print(f"Warning: SDSM message at {message_time} has no objects. Skipping.")
+                continue
+            # Calculate total timestamp for each object
+            for obj in objs:
+                object_creation_time = obj.detected_object_common_data.measurement_time.measurement_time_offset + encoded_msg_time
+                encoded_incoming_object_timestamp_ns.append(object_creation_time)
+                topic_timestamp_ns.append(message_time)
+        
+        # Convert lists to numpy arrays
+        encoded_incoming_object_timestamp_ns = np.array(encoded_incoming_object_timestamp_ns)
+        topic_timestamp_ns = np.array(topic_timestamp_ns)
 
         # Latency: message timestamp vs encoded timestamp
-        if msg_timestamps.shape != epoch_times.shape:
+        if len(topic_timestamp_ns) != len(encoded_incoming_object_timestamp_ns):
             raise ValueError("ros message timestamps and SDSM timestamps must have the same shape")
         else:
-            latency = (msg_timestamps - epoch_times)/1e9 # Convert to seconds
-
+            print(f"Number of SDSM messages: {len(topic_timestamp_ns)}")
+            latency = (topic_timestamp_ns - encoded_incoming_object_timestamp_ns)/1e9 # Convert to seconds
+        
         # Calculate statistics
         stats = calculate_error_statistics(
             latency,
@@ -163,13 +182,13 @@ def run_sdsm_latency_analysis(
             is_passed = np.percentile(latency, threshold_percentile) < error_threshold_to_pass_seconds
 
         plt.figure(figsize=(12,6))
-        plt.xlabel('Iteration')
+        plt.xlabel('Message Receipt Timestamp (s)')
         plt.ylabel('Latency (s)')
-        plt.title('Latency per Message vs Iteration')
-        plt.plot(latency, label="SDSM Receive Latency (s)", color='blue')
-        plt.axhline(y=error_threshold_to_pass_seconds, color='red', linestyle='--', label='Error Threshold')
-        plt.axhline(y=stats['mean'], color='green', linestyle='--', label='Mean Latency')
-        plt.axhline(y=stats['median'], color='orange', linestyle='--', label='Median Latency')
+        plt.title('Latency vs Message Receipt Timestamp')
+        plt.plot(topic_timestamp_ns, latency, label="SDSM Receive Latency (s)", color='blue', linestyle="solid", linewidth=2)
+        plt.axhline(y=error_threshold_to_pass_seconds, color='red', linestyle='dashed', label='Error Threshold',linewidth=2)
+        plt.axhline(y=stats['mean'], color='green', linestyle='dashdot', label='Mean Latency',linewidth=2)
+        plt.axhline(y=stats['median'], color='orange', linestyle='dotted', label='Median Latency',linewidth=2)
         plt.grid(True, alpha=0.3)
         plt.legend()
 
@@ -184,7 +203,7 @@ def run_sdsm_latency_analysis(
         if save_data_dir:
             np.savez(
                 save_data_dir / f"sdsm_latency_data.npz",
-                timestamps=msg_timestamps,
+                timestamps=topic_timestamp_ns,
                 latency=latency,
                 stats=stats,
             )
@@ -196,7 +215,7 @@ def run_sdsm_latency_analysis(
         else:
             plt.show()
 
-        return (is_passed, stats, plt.gcf(), msg_timestamps)
+        return (is_passed, stats, plt.gcf(), topic_timestamp_ns)
 
     except Exception as e:
         print(f"Error extracting data : {e}")
@@ -273,13 +292,13 @@ def run_sdsm_approximation_latency_analysis(
 
 
         plt.figure(figsize=(10, 5))
-        plt.plot(msg_timestamps, approximation_latency_in_s, marker='o', linestyle='-', label='Approximation Latency (s)')
-        plt.xlabel('Header Timestamp (s)')
+        plt.plot(msg_timestamps, approximation_latency_in_s, marker='o', linestyle='solid',linewidth=2, label='Approximation Latency (s)')
+        plt.xlabel('Message Receipt Timestamp (s)')
         plt.ylabel('Approximation Latency (s)')
-        plt.title('Latency per Object vs Header Timestamp')
-        plt.axhline(y=error_threshold_to_pass_seconds, color='red', linestyle='--', label='Error Threshold')
-        plt.axhline(y=stats['mean'], color='green', linestyle='--', label='Mean Latency')
-        plt.axhline(y=stats['median'], color='orange', linestyle='--', label='Median Latency')
+        plt.title('Latency per Object vs Message Receipt Timestamp')
+        plt.axhline(y=error_threshold_to_pass_seconds, color='red', linestyle='dashed',linewidth=2, label='Error Threshold')
+        plt.axhline(y=stats['mean'], color='green', linestyle='dashdot',linewidth=2, label='Mean Latency')
+        plt.axhline(y=stats['median'], color='orange', linestyle='dotted',linewidth=2, label='Median Latency')
         plt.grid(True)
         plt.legend()
         plt.tight_layout()
