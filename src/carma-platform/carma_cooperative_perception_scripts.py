@@ -166,7 +166,6 @@ def run_sdsm_latency_analysis(
         if len(topic_timestamp_ns) != len(encoded_incoming_object_timestamp_ns):
             raise ValueError("ros message timestamps and SDSM timestamps must have the same shape")
         else:
-            print(f"Number of SDSM messages: {len(topic_timestamp_ns)}")
             latency = (topic_timestamp_ns - encoded_incoming_object_timestamp_ns)/1e9 # Convert to seconds
         
         # Calculate statistics
@@ -187,8 +186,8 @@ def run_sdsm_latency_analysis(
         plt.title('Latency vs Message Receipt Timestamp')
         plt.plot(topic_timestamp_ns, latency, label="SDSM Receive Latency (s)", color='blue', linestyle="solid", linewidth=2)
         plt.axhline(y=error_threshold_to_pass_seconds, color='red', linestyle='dashed', label='Error Threshold',linewidth=2)
-        plt.axhline(y=stats['mean'], color='green', linestyle='dashdot', label='Mean Latency',linewidth=2)
-        plt.axhline(y=stats['median'], color='orange', linestyle='dotted', label='Median Latency',linewidth=2)
+        plt.axhline(y=stats['mean'], color='green', linestyle='dotted', label='Mean Latency',linewidth=2)
+        plt.axhline(y=stats['median'], color='orange', linestyle='dashdot', label='Median Latency',linewidth=2)
         plt.grid(True, alpha=0.3)
         plt.legend()
 
@@ -292,7 +291,7 @@ def run_sdsm_approximation_latency_analysis(
 
 
         plt.figure(figsize=(10, 5))
-        plt.plot(msg_timestamps, approximation_latency_in_s, marker='o', linestyle='solid',linewidth=2, label='Approximation Latency (s)')
+        plt.plot(msg_timestamps, approximation_latency_in_s, linestyle='solid',linewidth=2, label='Approximation Latency (s)')
         plt.xlabel('Message Receipt Timestamp (s)')
         plt.ylabel('Approximation Latency (s)')
         plt.title('Latency per Object vs Message Receipt Timestamp')
