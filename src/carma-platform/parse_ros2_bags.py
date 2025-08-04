@@ -246,6 +246,8 @@ def extract_mcap_data(
         field_extractors (dict): Optional dictionary mapping topics to functions that extract
                                 desired fields from the message. If None, returns entire message.
                                 Example: {"/topic": lambda msg: msg.field_name}
+        use_relative_time (bool): If True, start_time and end_time are relative to the start of the recording. If False start and end time are absolute timestamps in nanoseconds.
+        Use False if comparing with other data sources.
 
     Returns:
         dict: Dictionary mapping topics to tuples of (timestamps, values)

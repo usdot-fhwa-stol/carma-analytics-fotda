@@ -4,7 +4,7 @@ from run_all_analysis import run_all_analysis
 import argparse
 import argcomplete
 from parse_ros2_bags import open_bagfile, extract_mcap_data
-from utils import calculate_error_statistics, print_stats
+from utils import calculate_error_statistics, print_stats, align_time_series
 from datetime import datetime, timezone
 import numpy as np
 import matplotlib.pyplot as plt
@@ -32,7 +32,7 @@ def analyze_mcap_file_for_cp_analysis(
     except Exception as e:
         print(f"Error getting engage time for mcap {mcap_path}: {e}")
         return None
-    
+
     all_analysis_stats = []
     intervals = [(engage_time, disengage_time)]
     for start_time, end_time in intervals:
@@ -55,10 +55,12 @@ def analyze_mcap_file_for_cp_analysis(
             )
             analysis_stats["run_sdsm_latency_analysis"] = None
 
-    
+
         try:
             is_passed, _, _, _ = run_sdsm_approximation_latency_analysis(
                 mcap_path,
+                0.2,
+                None,
                 engage_time,
                 disengage_time,
                 stats_dir,
@@ -70,10 +72,10 @@ def analyze_mcap_file_for_cp_analysis(
             print(
                 f"Error analyzing {mcap_path} for metric run_sdsm_approximation_latency_analysis: {e}"
             )
-    
+
         all_analysis_stats.append(analysis_stats)
     return all_analysis_stats
-        
+
 
 def run_sdsm_latency_analysis(
     mcap_path,
@@ -86,7 +88,7 @@ def run_sdsm_latency_analysis(
     save_plot_dir=None,
 ):
     """
-    Analyzes latency between SDSM generation and receipt.
+    Analyzes latency between SDSM generation by infrastructure and receipt.
 
     Args:
         mcap_path: Path to MCAP file
@@ -123,12 +125,12 @@ def run_sdsm_latency_analysis(
                     msg.sdsm_time_stamp.offset.offset_minute,
                     msg.objects.detected_object_data
                 ),
-            
+
             }
         )
 
         msg_timestamps, extracted_data = extracted_data[topics[0]]
-        
+
         sdsm_presence_vector = extracted_data[:,0].astype(int)
         sdsm_year = extracted_data[:,1].astype(int)
         sdsm_month = extracted_data[:,2].astype(int)
@@ -143,31 +145,31 @@ def run_sdsm_latency_analysis(
         for y, m, d, h, mi, ms in zip(sdsm_year, sdsm_month, sdsm_day, sdsm_hour, sdsm_minute, sdsm_millisecond):
             dt = datetime(int(y), int(m), int(d), int(h), int(mi), int(ms // 1000), microsecond=(int(ms) % 1000) * 1000, tzinfo=timezone.utc)
             epoch_times.append(dt.timestamp())
-        epoch_times = np.array(epoch_times) * 1e9  + sdsm_offset # Convert to nanoseconds
+        epoch_times = np.array(epoch_times) * 1e9  + sdsm_offset*60*1e9 # Convert to nanoseconds
 
-        encoded_incoming_object_timestamp_ns = []
+        incoming_object_timestamp_ns = []
         topic_timestamp_ns = []
         for message_time, encoded_msg_time, objs in zip(msg_timestamps, epoch_times, sdsm_objects):
-            
+
             if len(objs) == 0:
                 print(f"Warning: SDSM message at {message_time} has no objects. Skipping.")
                 continue
             # Calculate total timestamp for each object
             for obj in objs:
-                object_creation_time = obj.detected_object_common_data.measurement_time.measurement_time_offset + encoded_msg_time
-                encoded_incoming_object_timestamp_ns.append(object_creation_time)
+                object_creation_time = obj.detected_object_common_data.measurement_time.measurement_time_offset*1e6 + encoded_msg_time
+                incoming_object_timestamp_ns.append(object_creation_time)
                 topic_timestamp_ns.append(message_time)
-        
+
         # Convert lists to numpy arrays
-        encoded_incoming_object_timestamp_ns = np.array(encoded_incoming_object_timestamp_ns)
+        incoming_object_timestamp_ns = np.array(incoming_object_timestamp_ns)
         topic_timestamp_ns = np.array(topic_timestamp_ns)
 
         # Latency: message timestamp vs encoded timestamp
-        if len(topic_timestamp_ns) != len(encoded_incoming_object_timestamp_ns):
+        if len(topic_timestamp_ns) != len(incoming_object_timestamp_ns):
             raise ValueError("ros message timestamps and SDSM timestamps must have the same shape")
         else:
-            latency = (topic_timestamp_ns - encoded_incoming_object_timestamp_ns)/1e9 # Convert to seconds
-        
+            latency = (topic_timestamp_ns - incoming_object_timestamp_ns)/1e9 # Convert to seconds
+
         # Calculate statistics
         stats = calculate_error_statistics(
             latency,
@@ -184,7 +186,7 @@ def run_sdsm_latency_analysis(
         plt.xlabel('Message Receipt Timestamp (s)')
         plt.ylabel('Latency (s)')
         plt.title('Latency vs Message Receipt Timestamp')
-        plt.plot(topic_timestamp_ns, latency, label="SDSM Receive Latency (s)", color='blue', linestyle="solid", linewidth=2)
+        plt.plot(topic_timestamp_ns, latency, label="SDSM Receive Latency (s)", marker='o', color='blue', linestyle="solid", linewidth=2)
         plt.axhline(y=error_threshold_to_pass_seconds, color='red', linestyle='dashed', label='Error Threshold',linewidth=2)
         plt.axhline(y=stats['mean'], color='green', linestyle='dotted', label='Mean Latency',linewidth=2)
         plt.axhline(y=stats['median'], color='orange', linestyle='dashdot', label='Median Latency',linewidth=2)
@@ -223,6 +225,8 @@ def run_sdsm_latency_analysis(
 
 def run_sdsm_approximation_latency_analysis(
     mcap_path,
+    error_threshold_to_pass_seconds = 0.2,
+    threshold_percentile = None,
     start_time=None,
     end_time=None,
     save_stats_dir=None,
@@ -234,16 +238,16 @@ def run_sdsm_approximation_latency_analysis(
 
     Args:
         mcap_path: Path to MCAP file
+        error_threshold_to_pass_seconds: Threshold latency error in seconds for passing the analysis
+        threshold_percentile: Threshold percentile for passing the analysis
         start_time: Time to start the analysis
         end_time: Time to end the analysis
         save_stats_dir: Directory to save analysis stats
         save_data_dir: Directory to save extracted data
         save_plot_dir: Directory to save generated plots
     """
-    
+
     try:
-        error_threshold_to_pass_seconds = 0.2
-        threshold_percentile = None
         topics = [FUSED_SDSM_OBJECTS_TOPIC]
 
         # Extract data
@@ -267,19 +271,42 @@ def run_sdsm_approximation_latency_analysis(
         fused_header = fused_header[non_empty_mask]
         fused_objects = fused_objects[non_empty_mask]
 
+        # Filter out instances of no received SDSM messages
+        topics = [INCOMING_SDSM_TOPIC]
+        extracted_data = extract_mcap_data(
+            mcap_path,
+            topics,
+            start_time=start_time,
+            end_time=end_time,
+            use_relative_time=False,
+            field_extractors={
+                INCOMING_SDSM_TOPIC: lambda msg: (msg.msg_cnt),
+            }
+        )
+        incoming_sdsm_msg_timestamps, incoming_sdsm_extracted_data = extracted_data[topics[0]]
+        # Convert to seconds
+        incoming_sdsm_time_in_seconds = np.sort(incoming_sdsm_msg_timestamps/1e9)
+        # Remove time ranges where no SDSM messages were received
+        ranges_to_remove = detect_gap_ranges(incoming_sdsm_msg_timestamps/1e9, gap_threshold=0.1, buffer=0.0)
+
         # Calculate approximation latency (in seconds)
         approximation_latency_in_s = []
         msg_timestamps = []
+        stats_vals = []
         for msg_header, objs in zip(fused_header, fused_objects):
             msg_timestamp = msg_header.stamp.sec * 1e9 + msg_header.stamp.nanosec
-            msg_timestamps.append(msg_timestamp/1e9)
+
             for obj in objs:
                 obj_timestamp = obj.header.stamp.sec * 1e9 + obj.header.stamp.nanosec
                 approximation_latency_in_s.append( (msg_timestamp - obj_timestamp) / 1e9)
-        
+                msg_timestamps.append(msg_timestamp/1e9)
+                # Calculate statistics only for objects that are not in the removed ranges
+                if not any(start_time < obj_timestamp/1e9 < end_time for start_time, end_time in ranges_to_remove):
+                    stats_vals.append((msg_timestamp - obj_timestamp) / 1e9)
+
         # Calculate statistics
         stats = calculate_error_statistics(
-            approximation_latency_in_s,
+            stats_vals,
         )
         print_stats(stats, "SDSM Approximation Latency Analysis")
 
@@ -292,6 +319,7 @@ def run_sdsm_approximation_latency_analysis(
 
         plt.figure(figsize=(10, 5))
         plt.plot(msg_timestamps, approximation_latency_in_s, linestyle='solid',linewidth=2, label='Approximation Latency (s)')
+        plt.plot(incoming_sdsm_time_in_seconds, np.ones(len(incoming_sdsm_time_in_seconds)), '*',linestyle='None', label='Incoming SDSM Messages')
         plt.xlabel('Message Receipt Timestamp (s)')
         plt.ylabel('Approximation Latency (s)')
         plt.title('Latency per Object vs Message Receipt Timestamp')
@@ -330,6 +358,35 @@ def run_sdsm_approximation_latency_analysis(
         print(f"Error extracting data for SDSM detection analysis: {e}")
         return False, {}, None, [], []
 
+
+def detect_gap_ranges(timestamps, gap_threshold=0.1, buffer=0.00):
+    """
+    Detect gap ranges from timestamp differences
+
+    Parameters:
+    - timestamps: array of timestamps
+    - gap_threshold: minimum gap size to consider
+    - buffer: extra time to add before/after each gap
+
+    Returns:
+    - list of (start_time, end_time) tuples for gaps
+    """
+    diffs = np.diff(timestamps)
+    large_gaps = diffs > gap_threshold
+    print("Gap threshold: " + str(gap_threshold))
+    gap_indices = np.where(large_gaps)[0]
+
+    ranges_to_remove = []
+
+    for gap_idx in gap_indices:
+        # Gap is between timestamps[gap_idx] and timestamps[gap_idx + 1]
+        gap_start = timestamps[gap_idx] - buffer      # Start a bit before the gap
+        gap_end = timestamps[gap_idx + 1] + buffer    # End a bit after the gap
+
+        ranges_to_remove.append((gap_start, gap_end))
+        gap_size = diffs[gap_idx]
+
+    return ranges_to_remove
 
 
 if __name__ == "__main__":
