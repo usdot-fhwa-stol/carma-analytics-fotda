@@ -331,7 +331,6 @@ def run_sdsm_approximation_latency_analysis(
             is_passed = np.percentile(latency, threshold_percentile) < error_threshold_to_pass_seconds
 
         ax1 = plt.subplot(2, 1, 1)
-        # ax1.plt.figure(figsize=(10, 5))
         ax1.plot(msg_timestamps, approximation_latency_in_s, linestyle='solid',linewidth=2, marker='o', label='Latency approximation (s)')
         ax1.plot(incoming_sdsm_time_in_seconds, np.ones(len(incoming_sdsm_time_in_seconds)), '*',linestyle='None', label='Incoming SDSM Messages')
 
@@ -344,13 +343,13 @@ def run_sdsm_approximation_latency_analysis(
         ax1.legend()
 
         ax2 = plt.subplot(2, 1, 2, sharex=ax1)
-        ax2.plot(incoming_sdsm_time_in_seconds,objects_count, linestyle='solid',linewidth=2, label='SDSM Objects count per message')
-        ax2.plot(msg_timestamps,track_objects_count, linestyle='dashed',linewidth=2, label='Track Objects count per message')
+        ax2.plot(incoming_sdsm_time_in_seconds,objects_count, linestyle='solid',marker='o',linewidth=2, label='SDSM Objects count per message')
+        ax2.plot(msg_timestamps,track_objects_count, linestyle='dashed',linewidth=2,marker='*', label='Track Objects count per message')
         ax2.set_title('Object count per message')
+        ax2.set_ylabel('Object Count')
         ax2.set_xlabel('Message Receipt Timestamp (s)')
         ax2.grid(True)
         ax2.legend()
-        # ax2.tight_layout()
 
         # Save results
         if save_stats_dir:
