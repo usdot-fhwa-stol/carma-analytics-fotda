@@ -156,7 +156,7 @@ def run_sdsm_latency_analysis(
                 continue
             # Calculate total timestamp for each object
             for obj in objs:
-                object_creation_time = obj.detected_object_common_data.measurement_time.measurement_time_offset*1e6 + encoded_msg_time
+                object_creation_time = encoded_msg_time + obj.detected_object_common_data.measurement_time.measurement_time_offset*1e6
                 incoming_object_timestamp_ns.append(object_creation_time)
                 topic_timestamp_ns.append(message_time)
 
@@ -280,10 +280,17 @@ def run_sdsm_approximation_latency_analysis(
             end_time=end_time,
             use_relative_time=False,
             field_extractors={
-                INCOMING_SDSM_TOPIC: lambda msg: (msg.msg_cnt),
+                INCOMING_SDSM_TOPIC: lambda msg: (msg.msg_cnt,
+                                                  msg.objects.detected_object_data),
             }
         )
         incoming_sdsm_msg_timestamps, incoming_sdsm_extracted_data = extracted_data[topics[0]]
+        incoming_sdsm_objects = incoming_sdsm_extracted_data[:, 1]
+        objects_count = []
+        sdsm_object_timestamps = []
+        for obj_timestamps, obj_data in zip(incoming_sdsm_msg_timestamps, incoming_sdsm_objects):
+            objects_count.append(len(obj_data))
+
         # Convert to seconds
         incoming_sdsm_time_in_seconds = np.sort(incoming_sdsm_msg_timestamps/1e9)
         # Remove time ranges where no SDSM messages were received
@@ -293,22 +300,29 @@ def run_sdsm_approximation_latency_analysis(
         approximation_latency_in_s = []
         msg_timestamps = []
         stats_vals = []
+        max_obj_timestamp = float('-inf')
+        track_objects_count = []
         for msg_header, objs in zip(fused_header, fused_objects):
             msg_timestamp = msg_header.stamp.sec * 1e9 + msg_header.stamp.nanosec
 
             for obj in objs:
                 obj_timestamp = obj.header.stamp.sec * 1e9 + obj.header.stamp.nanosec
-                approximation_latency_in_s.append( (msg_timestamp - obj_timestamp) / 1e9)
-                msg_timestamps.append(msg_timestamp/1e9)
-                # Calculate statistics only for objects that are not in the removed ranges
-                if not any(start_time < obj_timestamp/1e9 < end_time for start_time, end_time in ranges_to_remove):
+                if obj_timestamp > max_obj_timestamp: # Take maximum object timestamp since that is closest to confirmed detection
+                    max_obj_timestamp = obj_timestamp
+            # Calculate statistics only for objects that are not in the removed ranges
+            if not any(start_time < obj_timestamp/1e9 < end_time for start_time, end_time in ranges_to_remove):
                     stats_vals.append((msg_timestamp - obj_timestamp) / 1e9)
+
+
+            track_objects_count.append(len(objs))
+            approximation_latency_in_s.append( (msg_timestamp - max_obj_timestamp) / 1e9)
+            msg_timestamps.append(msg_timestamp/1e9)
 
         # Calculate statistics
         stats = calculate_error_statistics(
             stats_vals,
         )
-        print_stats(stats, "SDSM Approximation Latency Analysis")
+        print_stats(stats, "SDSM Latency Approximation Analysis")
 
         # Pass or no pass
         if threshold_percentile == None:
@@ -316,19 +330,27 @@ def run_sdsm_approximation_latency_analysis(
         elif threshold_percentile > 0:
             is_passed = np.percentile(latency, threshold_percentile) < error_threshold_to_pass_seconds
 
+        ax1 = plt.subplot(2, 1, 1)
+        # ax1.plt.figure(figsize=(10, 5))
+        ax1.plot(msg_timestamps, approximation_latency_in_s, linestyle='solid',linewidth=2, marker='o', label='Latency approximation (s)')
+        ax1.plot(incoming_sdsm_time_in_seconds, np.ones(len(incoming_sdsm_time_in_seconds)), '*',linestyle='None', label='Incoming SDSM Messages')
 
-        plt.figure(figsize=(10, 5))
-        plt.plot(msg_timestamps, approximation_latency_in_s, linestyle='solid',linewidth=2, label='Approximation Latency (s)')
-        plt.plot(incoming_sdsm_time_in_seconds, np.ones(len(incoming_sdsm_time_in_seconds)), '*',linestyle='None', label='Incoming SDSM Messages')
-        plt.xlabel('Message Receipt Timestamp (s)')
-        plt.ylabel('Approximation Latency (s)')
-        plt.title('Latency per Object vs Message Receipt Timestamp')
-        plt.axhline(y=error_threshold_to_pass_seconds, color='red', linestyle='dashed',linewidth=2, label='Error Threshold')
-        plt.axhline(y=stats['mean'], color='green', linestyle='dashdot',linewidth=2, label='Mean Latency')
-        plt.axhline(y=stats['median'], color='orange', linestyle='dotted',linewidth=2, label='Median Latency')
-        plt.grid(True)
-        plt.legend()
-        plt.tight_layout()
+        ax1.set_ylabel('Latency approximation (s)')
+        ax1.set_title('Latency approximation per fused object')
+        ax1.axhline(y=error_threshold_to_pass_seconds, color='red', linestyle='dashed',linewidth=2, label='Error Threshold')
+        ax1.axhline(y=stats['mean'], color='green', linestyle='dashdot',linewidth=2, label='Mean Latency')
+        ax1.axhline(y=stats['median'], color='orange', linestyle='dotted',linewidth=2, label='Median Latency')
+        ax1.grid(True)
+        ax1.legend()
+
+        ax2 = plt.subplot(2, 1, 2, sharex=ax1)
+        ax2.plot(incoming_sdsm_time_in_seconds,objects_count, linestyle='solid',linewidth=2, label='SDSM Objects count per message')
+        ax2.plot(msg_timestamps,track_objects_count, linestyle='dashed',linewidth=2, label='Track Objects count per message')
+        ax2.set_title('Object count per message')
+        ax2.set_xlabel('Message Receipt Timestamp (s)')
+        ax2.grid(True)
+        ax2.legend()
+        # ax2.tight_layout()
 
         # Save results
         if save_stats_dir:
