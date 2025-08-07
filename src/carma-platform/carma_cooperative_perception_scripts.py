@@ -14,7 +14,7 @@ from guidance_scripts import (
 )
 
 # VARIOUS THRESHOLDS FOR THE METRICS
-SDSM_LATENCY_THRESHOLD_IN_S = 1.0
+SDSM_LATENCY_THRESHOLD_IN_S = 0.01
 SDSM_LATENCY_TOLERANCE_IN_S = 0.1
 INCOMING_MESSAGE_TOPIC = "/hardware_interface/comms/inbound_binary_msg"
 INCOMING_SDSM_TOPIC = "/message/incoming_sdsm"
@@ -300,23 +300,45 @@ def run_sdsm_approximation_latency_analysis(
         approximation_latency_in_s = []
         msg_timestamps = []
         stats_vals = []
+        sdsm_drops = []
         max_obj_timestamp = float('-inf')
         track_objects_count = []
+        track_objects_timestamps = []
+        prev_obj_timestamp = float('-inf')
         for msg_header, objs in zip(fused_header, fused_objects):
             msg_timestamp = msg_header.stamp.sec * 1e9 + msg_header.stamp.nanosec
 
             for obj in objs:
                 obj_timestamp = obj.header.stamp.sec * 1e9 + obj.header.stamp.nanosec
+
+                # Calculate statistics only for objects that are not in the removed ranges
+                # if obj_timestamp/1e9 < incoming_sdsm_time_in_seconds[-1] and not any(start_time < obj_timestamp/1e9 < end_time for start_time, end_time in ranges_to_remove):
+
                 if obj_timestamp > max_obj_timestamp: # Take maximum object timestamp since that is closest to confirmed detection
                     max_obj_timestamp = obj_timestamp
-            # Calculate statistics only for objects that are not in the removed ranges
-            if not any(start_time < obj_timestamp/1e9 < end_time for start_time, end_time in ranges_to_remove):
-                    stats_vals.append((msg_timestamp - obj_timestamp) / 1e9)
+
+            if max_obj_timestamp ==  prev_obj_timestamp:
+                sdsm_drops.append(msg_timestamp/1e9)
+                continue
+            latency = (msg_timestamp - max_obj_timestamp) / 1e9
+            if latency < 0:
+                print(f"Warning: Negative latency detected for object with timestamp {obj_timestamp}.")
+                exit -1
+                # return False, {}, None, [], []
+            stats_vals.append(latency)
 
 
             track_objects_count.append(len(objs))
+            track_objects_timestamps.append(msg_timestamp/1e9)
             approximation_latency_in_s.append( (msg_timestamp - max_obj_timestamp) / 1e9)
             msg_timestamps.append(msg_timestamp/1e9)
+            prev_obj_timestamp = max_obj_timestamp
+
+
+            if len(objs) == 0:
+                track_objects_count.append(0)
+                track_objects_timestamps.append(msg_timestamp/1e9)
+
 
         # Calculate statistics
         stats = calculate_error_statistics(
@@ -332,11 +354,10 @@ def run_sdsm_approximation_latency_analysis(
 
         ax1 = plt.subplot(2, 1, 1)
         ax1.plot(msg_timestamps, approximation_latency_in_s, linestyle='solid',linewidth=2, marker='o', label='Latency approximation (s)')
-        ax1.plot(incoming_sdsm_time_in_seconds, np.ones(len(incoming_sdsm_time_in_seconds)), '*',linestyle='None', label='Incoming SDSM Messages')
 
         ax1.set_ylabel('Latency approximation (s)')
         ax1.set_title('Latency approximation per fused object')
-        ax1.axhline(y=error_threshold_to_pass_seconds, color='red', linestyle='dashed',linewidth=2, label='Error Threshold')
+        ax1.plot(sdsm_drops, np.ones(len(sdsm_drops)) * -0.001, '*',linestyle='None', label='Outdated detections (Ignored)')
         ax1.axhline(y=stats['mean'], color='green', linestyle='dashdot',linewidth=2, label='Mean Latency')
         ax1.axhline(y=stats['median'], color='orange', linestyle='dotted',linewidth=2, label='Median Latency')
         ax1.grid(True)
