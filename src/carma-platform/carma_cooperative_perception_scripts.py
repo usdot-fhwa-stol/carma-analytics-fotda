@@ -73,7 +73,7 @@ def analyze_mcap_file_for_cp_analysis(
             print(
                 f"Error analyzing {mcap_path} for metric run_sdsm_approximation_latency_analysis: {e}"
             )
-
+            analysis_stats["run_sdsm_approximation_latency_analysis"] = None
         all_analysis_stats.append(analysis_stats)
     return all_analysis_stats
 
