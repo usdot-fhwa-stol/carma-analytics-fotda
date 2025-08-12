@@ -360,6 +360,7 @@ def run_sdsm_approximation_latency_analysis(
         ax1.set_ylabel('Latency approximation (s)')
         ax1.set_title('Latency approximation per fused object')
         ax1.plot(sdsm_drops, np.ones(len(sdsm_drops)) * -0.001, '*',linestyle='None', label='Outdated detections (Ignored)')
+        ax1.axhline(y=error_threshold_to_pass_seconds, color='red', linestyle='dashed',linewidth=2, label='Error Threshold')
         ax1.axhline(y=stats['mean'], color='green', linestyle='dashdot',linewidth=2, label='Mean Latency')
         ax1.axhline(y=stats['median'], color='orange', linestyle='dotted',linewidth=2, label='Median Latency')
         ax1.grid(True)
