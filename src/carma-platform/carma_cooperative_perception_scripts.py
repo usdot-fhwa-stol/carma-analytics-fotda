@@ -14,10 +14,8 @@ from guidance_scripts import (
 )
 
 # VARIOUS THRESHOLDS FOR THE METRICS
-SDSM_LATENCY_THRESHOLD_IN_S = 1.0
+SDSM_LATENCY_THRESHOLD_IN_S = 0.01
 SDSM_LATENCY_TOLERANCE_IN_S = 0.1
-LATENCY_APPROXIMATION_THRESHOLD_IN_S = 0.02
-
 INCOMING_MESSAGE_TOPIC = "/hardware_interface/comms/inbound_binary_msg"
 INCOMING_SDSM_TOPIC = "/message/incoming_sdsm"
 FUSED_SDSM_OBJECTS_TOPIC = "/environment/fused_external_objects"
@@ -61,7 +59,7 @@ def analyze_mcap_file_for_cp_analysis(
         try:
             is_passed, _, _, _ = run_sdsm_approximation_latency_analysis(
                 mcap_path,
-                LATENCY_APPROXIMATION_THRESHOLD_IN_S,
+                0.2,
                 None,
                 engage_time,
                 disengage_time,
@@ -74,6 +72,7 @@ def analyze_mcap_file_for_cp_analysis(
             print(
                 f"Error analyzing {mcap_path} for metric run_sdsm_approximation_latency_analysis: {e}"
             )
+            analysis_stats["run_sdsm_approximation_latency_analysis"] = None
 
         all_analysis_stats.append(analysis_stats)
     return all_analysis_stats
@@ -222,7 +221,7 @@ def run_sdsm_latency_analysis(
 
     except Exception as e:
         print(f"Error extracting data : {e}")
-        return False, {}, None, [], []
+        return False, {}, None, []
 
 
 def run_sdsm_approximation_latency_analysis(
@@ -360,7 +359,6 @@ def run_sdsm_approximation_latency_analysis(
         ax1.set_ylabel('Latency approximation (s)')
         ax1.set_title('Latency approximation per fused object')
         ax1.plot(sdsm_drops, np.ones(len(sdsm_drops)) * -0.001, '*',linestyle='None', label='Outdated detections (Ignored)')
-        ax1.axhline(y=error_threshold_to_pass_seconds, color='red', linestyle='dashed',linewidth=2, label='Error Threshold')
         ax1.axhline(y=stats['mean'], color='green', linestyle='dashdot',linewidth=2, label='Mean Latency')
         ax1.axhline(y=stats['median'], color='orange', linestyle='dotted',linewidth=2, label='Median Latency')
         ax1.grid(True)
@@ -401,7 +399,7 @@ def run_sdsm_approximation_latency_analysis(
 
     except Exception as e:
         print(f"Error extracting data for SDSM detection analysis: {e}")
-        return False, {}, None, [], []
+        return False, {}, None, []
 
 
 def detect_gap_ranges(timestamps, gap_threshold=0.1, buffer=0.00):
