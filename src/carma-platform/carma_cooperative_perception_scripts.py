@@ -74,7 +74,6 @@ def analyze_mcap_file_for_cp_analysis(
                 f"Error analyzing {mcap_path} for metric run_sdsm_approximation_latency_analysis: {e}"
             )
             analysis_stats["run_sdsm_approximation_latency_analysis"] = None
-
         all_analysis_stats.append(analysis_stats)
     return all_analysis_stats
 
@@ -184,6 +183,7 @@ def run_sdsm_latency_analysis(
         elif threshold_percentile > 0:
             is_passed = np.percentile(latency, threshold_percentile) < error_threshold_to_pass_seconds
 
+        is_passed = bool(is_passed)
         plt.figure(figsize=(12,6))
         plt.xlabel('Message Receipt Timestamp (s)')
         plt.ylabel('Latency (s)')
@@ -222,7 +222,7 @@ def run_sdsm_latency_analysis(
 
     except Exception as e:
         print(f"Error extracting data : {e}")
-        return False, {}, None, []
+        return (False, {}, None, [], [])
 
 
 def run_sdsm_approximation_latency_analysis(
@@ -353,7 +353,7 @@ def run_sdsm_approximation_latency_analysis(
             is_passed = float(stats["median"]) < error_threshold_to_pass_seconds
         elif threshold_percentile > 0:
             is_passed = np.percentile(latency, threshold_percentile) < error_threshold_to_pass_seconds
-
+        is_passed = bool(is_passed)
         ax1 = plt.subplot(2, 1, 1)
         ax1.plot(msg_timestamps, approximation_latency_in_s, linestyle='solid',linewidth=2, marker='o', label='Latency approximation (s)')
 
@@ -401,7 +401,7 @@ def run_sdsm_approximation_latency_analysis(
 
     except Exception as e:
         print(f"Error extracting data for SDSM detection analysis: {e}")
-        return False, {}, None, []
+        return (False, {}, None, [], [])
 
 
 def detect_gap_ranges(timestamps, gap_threshold=0.1, buffer=0.00):
