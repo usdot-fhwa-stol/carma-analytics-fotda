@@ -16,8 +16,7 @@ from guidance_scripts import (
 # VARIOUS THRESHOLDS FOR THE METRICS
 SDSM_LATENCY_THRESHOLD_IN_S = 1.0
 SDSM_LATENCY_TOLERANCE_IN_S = 0.1
-LATENCY_APPROXIMATION_THRESHOLD_IN_S = 0.02
-
+LATENCY_APPROXIMATION_THRESHOLD_IN_S = 0.2
 INCOMING_MESSAGE_TOPIC = "/hardware_interface/comms/inbound_binary_msg"
 INCOMING_SDSM_TOPIC = "/message/incoming_sdsm"
 FUSED_SDSM_OBJECTS_TOPIC = "/environment/fused_external_objects"
@@ -74,6 +73,7 @@ def analyze_mcap_file_for_cp_analysis(
             print(
                 f"Error analyzing {mcap_path} for metric run_sdsm_approximation_latency_analysis: {e}"
             )
+            analysis_stats["run_sdsm_approximation_latency_analysis"] = None
 
         all_analysis_stats.append(analysis_stats)
     return all_analysis_stats
@@ -222,7 +222,7 @@ def run_sdsm_latency_analysis(
 
     except Exception as e:
         print(f"Error extracting data : {e}")
-        return False, {}, None, [], []
+        return False, {}, None, []
 
 
 def run_sdsm_approximation_latency_analysis(
@@ -401,7 +401,7 @@ def run_sdsm_approximation_latency_analysis(
 
     except Exception as e:
         print(f"Error extracting data for SDSM detection analysis: {e}")
-        return False, {}, None, [], []
+        return False, {}, None, []
 
 
 def detect_gap_ranges(timestamps, gap_threshold=0.1, buffer=0.00):
