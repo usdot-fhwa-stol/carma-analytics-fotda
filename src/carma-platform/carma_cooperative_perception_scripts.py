@@ -16,6 +16,7 @@ from guidance_scripts import (
 # VARIOUS THRESHOLDS FOR THE METRICS
 SDSM_LATENCY_THRESHOLD_IN_S = 0.01
 SDSM_LATENCY_TOLERANCE_IN_S = 0.1
+LATENCY_APPROXIMATION_THRESHOLD_IN_S = 0.2
 INCOMING_MESSAGE_TOPIC = "/hardware_interface/comms/inbound_binary_msg"
 INCOMING_SDSM_TOPIC = "/message/incoming_sdsm"
 FUSED_SDSM_OBJECTS_TOPIC = "/environment/fused_external_objects"
@@ -59,7 +60,7 @@ def analyze_mcap_file_for_cp_analysis(
         try:
             is_passed, _, _, _ = run_sdsm_approximation_latency_analysis(
                 mcap_path,
-                0.2,
+                LATENCY_APPROXIMATION_THRESHOLD_IN_S,
                 None,
                 engage_time,
                 disengage_time,
