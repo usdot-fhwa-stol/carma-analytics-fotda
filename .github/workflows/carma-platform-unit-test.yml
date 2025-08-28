@@ -56,7 +56,7 @@ jobs:
         python -m pytest src/carma-platform/test --cov=. --cov-report=xml:./coverage.xml --junitxml=./test-results.xml --cov-context=test
 
     - name: SonarCloud Scan
-      uses: SonarSource/sonarcloud-github-action@master
+      uses: SonarSource/sonarqube-scan-action@v5
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
