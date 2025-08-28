@@ -4,7 +4,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
   push:
-    branches: [fix_ci_build, develop, master, release/*]
+    branches: [develop, master, release/*]
 
 jobs:
   test_and_sonar:
