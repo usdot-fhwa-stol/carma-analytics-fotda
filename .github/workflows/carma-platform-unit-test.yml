@@ -55,10 +55,11 @@ jobs:
         source /opt/ros/humble/setup.bash
         python -m pytest src/carma-platform/test --cov=. --cov-report=xml:./coverage.xml --junitxml=./test-results.xml --cov-context=test
 
-    - name: Run SonarScanner
-      # Run SonarScanner for code analysis
-      uses: usdot-fhwa-stol/actions/sonar-scanner@main
+    - name: SonarCloud Scan
+      uses: SonarSource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       with:
-        sonar-token: ${{ secrets.SONAR_TOKEN }}
-        working-dir: ${{ github.workspace }}
-        sonar-properties-path: .sonarqube/sonar-project.properties
+        args: >
+          -Dproject.settings=.sonarqube/sonar-project.properties
