@@ -221,7 +221,7 @@ def run_sdsm_latency_analysis(
 
     except Exception as e:
         print(f"Error extracting data : {e}")
-        return False, {}, None, [], []
+        return False, {}, None, []
 
 
 def run_sdsm_approximation_latency_analysis(
@@ -404,7 +404,7 @@ def run_sdsm_approximation_latency_analysis(
 
     except Exception as e:
         print(f"Error extracting data for SDSM detection analysis: {e}")
-        return False, {}, None, [], []
+        return False, {}, None, []
 
 
 def detect_gap_ranges(timestamps, gap_threshold=0.1, buffer=0.00):
