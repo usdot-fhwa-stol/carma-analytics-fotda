@@ -48,7 +48,7 @@ def analyze_mcap_file_for_cp_analysis(
                 data_dir,
                 plots_dir,
             )
-            analysis_stats["run_sdsm_latency_analysis"] = is_passed
+            analysis_stats["run_sdsm_latency_analysis"] = bool(is_passed)
         except Exception as e:
             print(
                 f"Error analyzing {mcap_path} for metric run_sdsm_latency_analysis: {e}"
@@ -104,6 +104,7 @@ def run_sdsm_latency_analysis(
         Msgs: carma_v2x_msgs/msg/SensorDataSharingMessage
     """
     try:
+        plt.close('all')
 
         topics = [INCOMING_SDSM_TOPIC]
 
@@ -174,7 +175,7 @@ def run_sdsm_latency_analysis(
         stats = calculate_error_statistics(
             latency,
         )
-        print_stats(stats, "SDSM Latency Analysis")
+        print_stats(stats, "SDSM Latency Analysis",decimal_places = 10)
 
         # Pass or no pass
         if threshold_percentile == None:
@@ -220,7 +221,7 @@ def run_sdsm_latency_analysis(
 
     except Exception as e:
         print(f"Error extracting data : {e}")
-        return False, {}, None, [], []
+        return False, {}, None, []
 
 
 def run_sdsm_approximation_latency_analysis(
@@ -248,6 +249,8 @@ def run_sdsm_approximation_latency_analysis(
     """
 
     try:
+        plt.close('all')
+
         topics = [FUSED_SDSM_OBJECTS_TOPIC]
 
         # Extract data
@@ -344,7 +347,7 @@ def run_sdsm_approximation_latency_analysis(
         stats = calculate_error_statistics(
             stats_vals,
         )
-        print_stats(stats, "SDSM Latency Approximation Analysis")
+        print_stats(stats, "SDSM Latency Approximation Analysis",decimal_places = 10)
 
         # Pass or no pass
         if threshold_percentile == None:
@@ -372,6 +375,9 @@ def run_sdsm_approximation_latency_analysis(
         ax2.grid(True)
         ax2.legend()
 
+        # Ensure proper formatting of output plots
+        plt.tight_layout()
+
         # Save results
         if save_stats_dir:
             stats_full_path = save_stats_dir / f"sdsm_approximation_latency.json"
@@ -398,7 +404,7 @@ def run_sdsm_approximation_latency_analysis(
 
     except Exception as e:
         print(f"Error extracting data for SDSM detection analysis: {e}")
-        return False, {}, None, [], []
+        return False, {}, None, []
 
 
 def detect_gap_ranges(timestamps, gap_threshold=0.1, buffer=0.00):
@@ -457,3 +463,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Error: {e}")
         exit(1)
+        
