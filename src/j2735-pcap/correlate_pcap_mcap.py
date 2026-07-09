@@ -35,6 +35,7 @@ Usage:
     python3 correlate_pcap_mcap.py --eth0-pcap eth0.pcap --mcap run.mcap [--label NAME] [--json-out results.json]
 """
 import sys
+import re
 import argparse
 import json
 from pathlib import Path
@@ -46,6 +47,7 @@ from mcap_ros2.decoder import DecoderFactory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import correlate_j2735_latency as base  # noqa: E402
+from correlation_plots import plot_flow, find_duplicate_content_types, windowed_count_report  # noqa: E402
 
 INBOUND_TOPIC = "/hardware_interface/comms/inbound_binary_msg"
 OUTBOUND_TOPIC = "/hardware_interface/comms/outbound_binary_msg"
@@ -216,45 +218,6 @@ def extract_mcap_binary_messages(mcap_path):
     return {"inbound": by_topic[INBOUND_TOPIC], "outbound": by_topic[OUTBOUND_TOPIC]}
 
 
-def windowed_count_report(title, tx_messages, rx_messages):
-    """Per-message-type count comparison, robust to the payload-duplication
-    problem that makes exact-match latency correlation unreliable for some
-    J2735 types: MAP (static intersection geometry) and MobilityOperation
-    (in this dataset, a fixed-content periodic broadcast) repeat one
-    byte-identical payload hundreds of times in a row, so nearest-timestamp
-    matching can't tell individual broadcast instances apart and can
-    misattribute a match across an unrelated gap elsewhere in the run
-    (confirmed: a real ~32s reception gap in one capture produced a tight
-    cluster of ~9000ms "stale" matches for MAP, which was actually just
-    every post-gap instance binding to the wrong identical-payload sibling).
-    Restricting to each side's own overlapping recording window and just
-    comparing per-type counts sidesteps that: it can't mis-time an instance,
-    it can only under- or over-count within a span both sides were actually
-    recording. BSM/SPAT/SDSM payloads are effectively unique per instance in
-    this dataset, so this is a secondary cross-check for those, but it's the
-    primary reliable signal for MAP/MobilityOperation-like fixed-content
-    types."""
-    tx_ts = [m["timestamp"] for m in tx_messages if m["timestamp"] is not None]
-    rx_ts = [m["timestamp"] for m in rx_messages if m["timestamp"] is not None]
-    print(f"\n-- {title}: windowed message-count cross-check --")
-    if not tx_ts or not rx_ts:
-        print("(nothing to compare - one side is empty)")
-        return
-    window_lo, window_hi = max(min(tx_ts), min(rx_ts)), min(max(tx_ts), max(rx_ts))
-    if window_lo > window_hi:
-        print("(no time overlap between the two captures)")
-        return
-
-    tx_types = Counter(m["msg_type"] for m in tx_messages if window_lo <= m["timestamp"] <= window_hi)
-    rx_types = Counter(m["msg_type"] for m in rx_messages if window_lo <= m["timestamp"] <= window_hi)
-    for msg_type in sorted(set(tx_types) | set(rx_types)):
-        tx_n, rx_n = tx_types.get(msg_type, 0), rx_types.get(msg_type, 0)
-        deficit = tx_n - rx_n
-        pct = f"{100*deficit/tx_n:.1f}%" if tx_n else "n/a"
-        flag = "" if deficit <= 0 else f"  <-- {pct} apparent shortfall"
-        print(f"  {msg_type}: tx={tx_n} rx={rx_n}{flag}")
-
-
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--eth0-pcap", required=True, help="Host-facing ethernet capture (e.g. run-N-eth0-*.pcap)")
@@ -262,7 +225,11 @@ def main():
     ap.add_argument("--drop-threshold-ms", type=float, default=base.DROP_LATENCY_THRESHOLD_MS)
     ap.add_argument("--label", default="")
     ap.add_argument("--json-out", type=Path, default=None)
+    ap.add_argument("--plot-dir", type=Path, default=None,
+                     help="Optional directory to write per-flow latency/drop PNG plots to")
     args = ap.parse_args()
+    if args.plot_dir:
+        args.plot_dir.mkdir(parents=True, exist_ok=True)
 
     pcap_by_dir, pcap_fail = base.extract_messages(args.eth0_pcap)
     mcap_by_dir = extract_mcap_binary_messages(args.mcap)
@@ -288,6 +255,13 @@ def main():
         "Inbound flow (eth0 pcap -> /hardware_interface/comms/inbound_binary_msg)",
         pcap_incoming_pool, mcap_by_dir["inbound"],
     )
+    if args.plot_dir:
+        plot_flow(
+            args.plot_dir / f"{base.slug(label)}_inbound.png",
+            f"{label} - inbound flow (eth0 pcap -> inbound_binary_msg)",
+            inbound_latencies, inbound_stale, inbound_drops, inbound_out_of_window,
+            args.drop_threshold_ms, duplicate_content_types=find_duplicate_content_types(pcap_incoming_pool),
+        )
 
     # Outbound flow: ROS software publishes a transmit request, then the
     # driver is expected to put it on the wire shortly after.
@@ -301,6 +275,13 @@ def main():
         "Outbound flow (/hardware_interface/comms/outbound_binary_msg -> eth0 pcap)",
         mcap_by_dir["outbound"], pcap_by_dir["outgoing"],
     )
+    if args.plot_dir:
+        plot_flow(
+            args.plot_dir / f"{base.slug(label)}_outbound.png",
+            f"{label} - outbound flow (outbound_binary_msg -> eth0 pcap)",
+            outbound_latencies, outbound_stale, outbound_drops, outbound_out_of_window,
+            args.drop_threshold_ms, duplicate_content_types=find_duplicate_content_types(mcap_by_dir["outbound"]),
+        )
 
     if args.json_out:
         from collections import Counter as C

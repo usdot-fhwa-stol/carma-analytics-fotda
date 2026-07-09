@@ -36,6 +36,7 @@ Usage:
     python3 correlate_j2735_latency.py --tx-pcap earlier.pcap --rx-pcap later.pcap
 """
 import json
+import re
 import struct
 import subprocess
 import sys
@@ -48,6 +49,7 @@ from binascii import unhexlify
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import J2735_201603_2023_06_22  # noqa: E402
+from correlation_plots import plot_flow, find_duplicate_content_types, windowed_count_report  # noqa: E402
 
 DROP_LATENCY_THRESHOLD_MS = 200  # matches v2xhub_messaging_performance_analyzer.py's threshold
 
@@ -600,6 +602,10 @@ def report_correlation(title, tx_messages, rx_messages, drop_threshold_ms, match
     return latencies, drops, stale, out_of_window, latency_stats, stale_stats
 
 
+def slug(label: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", label).strip("_")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--tx-pcap", required=True, help="Earlier capture point (e.g. radio-receive interface)")
@@ -608,7 +614,11 @@ def main():
                      help=f"Matched messages slower than this are counted as drops (default {DROP_LATENCY_THRESHOLD_MS} ms)")
     ap.add_argument("--label", default="")
     ap.add_argument("--json-out", type=Path, default=None, help="Optional path to write results as JSON")
+    ap.add_argument("--plot-dir", type=Path, default=None,
+                     help="Optional directory to write per-flow latency/drop PNG plots to")
     args = ap.parse_args()
+    if args.plot_dir:
+        args.plot_dir.mkdir(parents=True, exist_ok=True)
 
     tx_by_dir, tx_fail = extract_messages(args.tx_pcap)
     rx_by_dir, rx_fail = extract_messages(args.rx_pcap)
@@ -629,6 +639,17 @@ def main():
         "Incoming-flow correlation (radio receipt -> forwarded to host)",
         tx_incoming, rx_incoming_pool, args.drop_threshold_ms,
     )
+    windowed_count_report(
+        "Incoming-flow correlation (radio receipt -> forwarded to host)",
+        tx_incoming, rx_incoming_pool,
+    )
+    if args.plot_dir:
+        plot_flow(
+            args.plot_dir / f"{slug(label)}_incoming.png",
+            f"{label} - incoming flow (radio receipt -> forwarded to host)",
+            incoming_latencies, incoming_stale, incoming_drops, incoming_out_of_window,
+            args.drop_threshold_ms, duplicate_content_types=find_duplicate_content_types(tx_incoming),
+        )
 
     # Outgoing/request flow: the host asks the OBU to transmit something
     # (rx's "outgoing", e.g. an MQTT '/req/' publish or a request captured
@@ -650,6 +671,17 @@ def main():
             "Outgoing/request-flow correlation (host request -> over-the-air broadcast)",
             request_messages, broadcast_pool, args.drop_threshold_ms, match_mode="prefix",
         )
+        windowed_count_report(
+            "Outgoing/request-flow correlation (host request -> over-the-air broadcast)",
+            request_messages, broadcast_pool,
+        )
+        if args.plot_dir:
+            plot_flow(
+                args.plot_dir / f"{slug(label)}_outgoing.png",
+                f"{label} - outgoing/request flow (host request -> over-the-air broadcast)",
+                outgoing_latencies, outgoing_stale, outgoing_drops, outgoing_out_of_window,
+                args.drop_threshold_ms, duplicate_content_types=find_duplicate_content_types(request_messages),
+            )
     elif broadcast_pool:
         print(f"\n-- Outgoing flow (tx's own broadcast, e.g. BSM) - "
               f"no host-request-side capture to compare against, informational only --")
