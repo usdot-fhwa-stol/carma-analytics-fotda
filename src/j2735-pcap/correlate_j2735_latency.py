@@ -478,10 +478,18 @@ def correlate(tx_messages, rx_messages, drop_threshold_ms=DROP_LATENCY_THRESHOLD
     IEEE 1609.2 SignedData envelope wrapped around the unsecured content
     the host originally sent, which is longer than but starts identically
     to the pre-signing payload). Each rx message is consumed at most once.
-    Returns (latencies, drops, stale):
+    Returns (latencies, drops, stale, out_of_window):
       - latencies: matched, latency <= drop_threshold_ms - (tx_timestamp, msg_type, latency_ms)
-      - drops: no matching rx payload found at all - (tx_timestamp, msg_type, reason)
+      - drops: no matching rx payload found, tx fell within the rx capture's
+        own time window (so rx *was* recording and simply never saw a
+        match) - (tx_timestamp, msg_type, reason)
       - stale: matched, but latency > drop_threshold_ms - (tx_timestamp, msg_type, latency_ms)
+      - out_of_window: no matching rx payload found, but tx's timestamp
+        falls before the rx capture started or after it stopped - the two
+        pcaps simply weren't both recording at that moment, so this isn't
+        evidence of anything being lost. Two independent tcpdump/tshark
+        captures essentially never start and stop at exactly the same
+        instant - (tx_timestamp, msg_type, reason)
     drop_threshold_ms models periodic-message freshness (matching
     v2xhub_messaging_performance_analyzer.py's calculate_messsage_performance):
     a safety broadcast that arrives late has likely been superseded by a
@@ -494,10 +502,14 @@ def correlate(tx_messages, rx_messages, drop_threshold_ms=DROP_LATENCY_THRESHOLD
     for i, m in enumerate(rx_messages):
         rx_by_type.setdefault(m["msg_type"], []).append(i)
 
+    rx_timestamps = [m["timestamp"] for m in rx_messages if m["timestamp"] is not None]
+    rx_window = (min(rx_timestamps), max(rx_timestamps)) if rx_timestamps else None
+
     consumed = set()
-    latencies = []  # (tx_timestamp, msg_type, latency_ms)
-    drops = []      # (tx_timestamp, msg_type, reason)
-    stale = []      # (tx_timestamp, msg_type, latency_ms)
+    latencies = []      # (tx_timestamp, msg_type, latency_ms)
+    drops = []          # (tx_timestamp, msg_type, reason)
+    stale = []          # (tx_timestamp, msg_type, latency_ms)
+    out_of_window = []  # (tx_timestamp, msg_type, reason)
 
     for tx in tx_messages:
         if tx["timestamp"] is None:
@@ -518,7 +530,11 @@ def correlate(tx_messages, rx_messages, drop_threshold_ms=DROP_LATENCY_THRESHOLD
                 match_idx = i
                 break
         if match_idx is None:
-            drops.append((tx["timestamp"], tx["msg_type"], "no matching rx payload found"))
+            if rx_window and not (rx_window[0] <= tx["timestamp"] <= rx_window[1]):
+                out_of_window.append((tx["timestamp"], tx["msg_type"],
+                                       "rx capture wasn't recording yet/anymore at this timestamp"))
+            else:
+                drops.append((tx["timestamp"], tx["msg_type"], "no matching rx payload found"))
             continue
         consumed.add(match_idx)
         latency_ms = (rx_messages[match_idx]["timestamp"] - tx["timestamp"]) * 1000.0
@@ -526,7 +542,7 @@ def correlate(tx_messages, rx_messages, drop_threshold_ms=DROP_LATENCY_THRESHOLD
             stale.append((tx["timestamp"], tx["msg_type"], latency_ms))
         else:
             latencies.append((tx["timestamp"], tx["msg_type"], latency_ms))
-    return latencies, drops, stale
+    return latencies, drops, stale, out_of_window
 
 
 def summarize(latencies):
@@ -544,19 +560,24 @@ def summarize(latencies):
 
 def report_correlation(title, tx_messages, rx_messages, drop_threshold_ms, match_mode="exact"):
     """Runs correlate() and prints a summary. Returns (latencies, drops,
-    stale, latency_stats, stale_stats) for callers that also want the raw
-    numbers (e.g. for --json-out)."""
-    latencies, drops, stale = correlate(tx_messages, rx_messages, drop_threshold_ms, match_mode)
+    stale, out_of_window, latency_stats, stale_stats) for callers that also
+    want the raw numbers (e.g. for --json-out)."""
+    latencies, drops, stale, out_of_window = correlate(tx_messages, rx_messages, drop_threshold_ms, match_mode)
     n_total = len(tx_messages)
     print(f"\n-- {title} (tx candidates: {n_total}, rx pool: {len(rx_messages)}) --")
     if n_total:
         print(f"Matched (fresh): {len(latencies)}/{n_total} ({100*len(latencies)/n_total:.1f}%)")
         print(f"Matched but stale (> {drop_threshold_ms:.0f} ms): {len(stale)}/{n_total} ({100*len(stale)/n_total:.1f}%)")
-        print(f"Dropped (no match found): {len(drops)}/{n_total} ({100*len(drops)/n_total:.1f}%)")
+        print(f"Dropped (no match found, within rx's own recording window): "
+              f"{len(drops)}/{n_total} ({100*len(drops)/n_total:.1f}%)")
+        print(f"Outside rx's recording window (not a real drop - the two captures "
+              f"didn't start/stop at the same instant): {len(out_of_window)}/{n_total} "
+              f"({100*len(out_of_window)/n_total:.1f}%)")
     else:
         print("Matched (fresh): 0/0")
         print("Matched but stale: 0/0")
-        print("Dropped (no match found): 0/0")
+        print("Dropped (no match found, within rx's own recording window): 0/0")
+        print("Outside rx's recording window: 0/0")
 
     latency_stats = None
     if latencies:
@@ -576,7 +597,7 @@ def report_correlation(title, tx_messages, rx_messages, drop_threshold_ms, match
     if drops:
         print(f"Drops by message type: {dict(Counter(d[1] for d in drops))}")
 
-    return latencies, drops, stale, latency_stats, stale_stats
+    return latencies, drops, stale, out_of_window, latency_stats, stale_stats
 
 
 def main():
@@ -603,7 +624,8 @@ def main():
     # for interfaces with no direction bit like plain Ethernet, "other").
     tx_incoming = tx_by_dir["incoming"]
     rx_incoming_pool = rx_by_dir["incoming"] + rx_by_dir["other"]
-    incoming_latencies, incoming_drops, incoming_stale, incoming_stats, incoming_stale_stats = report_correlation(
+    (incoming_latencies, incoming_drops, incoming_stale, incoming_out_of_window,
+     incoming_stats, incoming_stale_stats) = report_correlation(
         "Incoming-flow correlation (radio receipt -> forwarded to host)",
         tx_incoming, rx_incoming_pool, args.drop_threshold_ms,
     )
@@ -620,9 +642,11 @@ def main():
     # what the host sent.
     request_messages = rx_by_dir["outgoing"]
     broadcast_pool = tx_by_dir["outgoing"]
-    outgoing_latencies = outgoing_drops = outgoing_stale = outgoing_stats = outgoing_stale_stats = None
+    outgoing_latencies = outgoing_drops = outgoing_stale = outgoing_out_of_window = None
+    outgoing_stats = outgoing_stale_stats = None
     if request_messages and broadcast_pool:
-        outgoing_latencies, outgoing_drops, outgoing_stale, outgoing_stats, outgoing_stale_stats = report_correlation(
+        (outgoing_latencies, outgoing_drops, outgoing_stale, outgoing_out_of_window,
+         outgoing_stats, outgoing_stale_stats) = report_correlation(
             "Outgoing/request-flow correlation (host request -> over-the-air broadcast)",
             request_messages, broadcast_pool, args.drop_threshold_ms, match_mode="prefix",
         )
@@ -644,6 +668,7 @@ def main():
                 "matched": len(incoming_latencies),
                 "stale": len(incoming_stale),
                 "dropped": len(incoming_drops),
+                "out_of_window": len(incoming_out_of_window),
                 "drops_by_type": dict(Counter(d[1] for d in incoming_drops)),
                 "latency_stats_ms": incoming_stats,
                 "stale_latency_stats_ms": incoming_stale_stats,
@@ -652,6 +677,7 @@ def main():
                 "matched": len(outgoing_latencies),
                 "stale": len(outgoing_stale),
                 "dropped": len(outgoing_drops),
+                "out_of_window": len(outgoing_out_of_window),
                 "drops_by_type": dict(Counter(d[1] for d in outgoing_drops)),
                 "latency_stats_ms": outgoing_stats,
                 "stale_latency_stats_ms": outgoing_stale_stats,

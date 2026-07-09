@@ -48,9 +48,11 @@ Different OBU vendors (and different channels on the same vendor) expose message
 > [!NOTE]
 > A message that's requested but genuinely never broadcast (e.g. a custom PSID like CARMA's `MobilityOperation` under `0xBFEE`, which some OBU hardware accepts as a request but can't actually transmit) will still show up as `Dropped (no match found)` in the outgoing/request-flow correlation — that's a real, meaningful finding when it's consistent across every run, not a script bug. Cross-check message counts on each side (printed before the correlation section) to tell the two cases apart.
 
-### Stale vs. dropped
+### Stale vs. dropped vs. outside the recording window
 
 A match with latency above `--drop-threshold-ms` (default 200ms — calibrated for periodic safety-broadcast freshness, where a late message has likely been superseded by a newer one) is reported separately as **stale**, not folded into **dropped**. A one-off/request-driven message (like a manually broadcast test message) that took 1.6 seconds to go out is a real, measurable latency worth its own stats, not evidence it was lost — dropped means no matching payload was found at all.
+
+When no match is found, it's further split by whether rx's own capture was actually recording at that moment: a tx message timestamped before rx's first packet or after rx's last packet is reported as **outside rx's recording window**, not **dropped**. Two independent `tcpdump`/`tshark` captures essentially never start and stop at exactly the same instant, so some tx messages near either edge are mechanically impossible for rx to have caught - that's not evidence of loss, it's evidence the two capture windows don't perfectly overlap. In practice this accounts for the overwhelming majority of "no match found" results on real captures - cross-check the `dropped` count specifically (not `dropped + outside window` combined) before treating a result as a real drop.
 
 Usage:
 ```
