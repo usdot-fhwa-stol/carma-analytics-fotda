@@ -383,17 +383,91 @@ def extract_mqtt_messages(pcap_path):
     return by_direction, decode_fail
 
 
+def extract_commsignia_request_messages(pcap_path):
+    """Extracts J2735 messages from a Commsignia-vendor "Tx Request"
+    channel: a plain-ASCII, newline-separated key=value UDP protocol the
+    host uses to ask the OBU to broadcast a message, distinct from the
+    1609.2-enveloped UDP traffic on the OBU's normal broadcast-forwarding
+    port. Looks like:
+
+        Version=0.7
+        Type=BSM
+        PSID=0020
+        Priority=6
+        ...
+        Payload=<hex, raw unsecured J2735 MessageFrame - no 1609.2 envelope>
+
+    Not tied to a specific port number, since it may vary by deployment -
+    detected by content (presence of 'Type=' and 'Payload=' lines) instead.
+    Always classified as 'outgoing' (a host request for the OBU to
+    transmit), the same role as an MQTT '/req/' publish. Returns
+    (by_direction, decode_fail_count), same shape as extract_udp_messages."""
+    frame_asn1 = J2735_201603_2023_06_22.DSRC.MessageFrame
+    proc = subprocess.run(
+        ["tshark", "-r", str(pcap_path), "-Y", "udp", "-Tfields", "-e", "frame.time_epoch", "-e", "data.data"],
+        capture_output=True, text=True,
+    )
+    if proc.returncode != 0:
+        print(f"WARNING: tshark exited {proc.returncode} reading {pcap_path} for Commsignia Tx Requests - "
+              f"using partial output. stderr: {proc.stderr.strip()}", file=sys.stderr)
+
+    by_direction = {"incoming": [], "outgoing": [], "other": []}
+    decode_fail = 0
+
+    for line in proc.stdout.splitlines():
+        parts = line.split('\t')
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            continue
+        ts_str, data_field = parts
+        try:
+            text = unhexlify(data_field).decode("ascii")
+        except (ValueError, UnicodeDecodeError):
+            continue
+        if "Type=" not in text or "Payload=" not in text:
+            continue
+
+        fields = {}
+        for text_line in text.splitlines():
+            key, sep, value = text_line.partition("=")
+            if sep:
+                fields[key] = value
+        message_name = fields.get("Type")
+        data_hex = fields.get("Payload", "")
+        if message_name not in J2735_MESSAGE_NAMES.values() or not data_hex:
+            continue
+        message_id = next(k for k, v in J2735_MESSAGE_NAMES.items() if v == message_name)
+
+        if message_id not in CARMA_MOBILITY_MESSAGE_IDS:
+            try:
+                frame_asn1.from_uper(unhexlify(data_hex))
+                convert_bytes(frame_asn1())
+            except Exception:
+                decode_fail += 1
+                continue
+
+        by_direction["outgoing"].append({
+            "timestamp": float(ts_str),
+            "msg_type": message_name,
+            "payload_hex": data_hex,
+        })
+
+    return by_direction, decode_fail
+
+
 def extract_messages(pcap_path):
-    """Extracts J2735 messages from a pcap, trying both the raw-UDP
-    (1609.2-enveloped) and MQTT-over-TCP extraction paths, since different
-    OBU vendors expose their ethernet-facing interface differently (e.g.
-    Commsignia: raw UDP; Ettifos: MQTT). A given file only produces results
-    from whichever protocol it actually carries - the other path harmlessly
-    finds nothing."""
+    """Extracts J2735 messages from a pcap, trying all three known
+    ethernet-facing formats, since different OBU vendors (and different
+    channels on the same vendor) expose messages differently: raw UDP with
+    a 1609.2 envelope (broadcast-forwarding), MQTT-over-TCP (Ettifos), and
+    a plain-ASCII key=value UDP "Tx Request" protocol (Commsignia's
+    host-to-OBU broadcast request channel). A given file only produces
+    results from whichever protocol(s) it actually carries - the other
+    paths harmlessly find nothing."""
     udp_by_dir, udp_fail = extract_udp_messages(pcap_path)
     mqtt_by_dir, mqtt_fail = extract_mqtt_messages(pcap_path)
-    by_direction = {key: udp_by_dir[key] + mqtt_by_dir[key] for key in udp_by_dir}
-    return by_direction, udp_fail + mqtt_fail
+    request_by_dir, request_fail = extract_commsignia_request_messages(pcap_path)
+    by_direction = {key: udp_by_dir[key] + mqtt_by_dir[key] + request_by_dir[key] for key in udp_by_dir}
+    return by_direction, udp_fail + mqtt_fail + request_fail
 
 
 def correlate(tx_messages, rx_messages, drop_threshold_ms=DROP_LATENCY_THRESHOLD_MS, match_mode="exact"):

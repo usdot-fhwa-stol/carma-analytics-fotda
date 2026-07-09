@@ -33,7 +33,24 @@ Message location is IEEE 1609.2-envelope-aware: it scans each UDP payload for th
 > [!NOTE]
 > The blind-substring approach silently misses messages: a coincidental 2-byte match elsewhere in a packet's payload gets found first and fails validation, while the real marker — only locatable by walking the actual 1609.2 envelope structure — is never reached. Confirmed on a real capture where this caused MAP messages to be missed entirely. Separately, `decodeJ2735.py`'s own CSV/text output assigns timestamps by indexing `pyshark.FileCapture(...)` with the running count of *successfully decoded* messages rather than actual packet position, so timestamps silently drift wrong whenever the capture contains packets that don't decode (background SSH/TCP traffic, etc.) — confirmed compressing reported message timestamps into ~21% of a capture's true duration. Use `correlate_j2735_latency.py` for both message detection and latency, not `decodeJ2735.py`'s own output, whenever a capture may contain non-J2735 traffic or you need MAP messages recognized.
 
-For captures with a Linux-cooked link layer (`rmnet`-style), packets are also classified `incoming` (from the infrastructure/RSU) vs. `outgoing` (the device's own broadcast, e.g. a BSM it transmits itself). Only `incoming` tx messages are matched against the rx capture — `outgoing` messages are a structurally different flow not expected to reappear downstream, and are reported separately so they don't inflate the apparent drop rate.
+For captures with a Linux-cooked link layer (`rmnet`-style), packets are also classified `incoming` (from the infrastructure/RSU) vs. `outgoing` (the device's own broadcast, e.g. a BSM it transmits itself).
+
+### Three ethernet-facing protocols, auto-detected
+
+Different OBU vendors (and different channels on the same vendor) expose messages on the host-facing interface differently. `extract_messages()` tries all three on every file; a file only produces results from whichever protocol(s) it actually carries:
+
+1. **Raw UDP, 1609.2-enveloped** — the RSU-broadcast-forwarding channel (e.g. Commsignia port 5398). Classified `incoming`/`outgoing`/`other` from the Linux-cooked SLL direction bit, or `other` on plain Ethernet.
+2. **MQTT-over-TCP** — Ettifos-vendor OBUs. Payloads are raw MessageFrame bytes with no 1609.2 envelope. Topic naming gives direction: `/ind/...` (OBU→host, an actual received/broadcast indication) → `incoming`; `/req/...` (host→OBU, asking it to transmit) → `outgoing`.
+3. **Commsignia "Tx Request" ASCII protocol** — a separate UDP channel (port varies by deployment; detected by content, not port number) the host uses to ask a Commsignia OBU to broadcast a message: plain newline-separated `Version=.../Type=.../PSID=.../Signature=.../Payload=<hex>` text, payload unsigned. Always `outgoing` by definition.
+
+**Why this matters for correlation**: `outgoing` (tx's own broadcast, or an MQTT/Commsignia request) is matched against the *other* file's `outgoing` bucket, not `incoming` — a host's request to broadcast BSM/MobilityOperation isn't the same flow as an RSU's SPAT/MAP/SDSM broadcast, and conflating them produces false "100% drop" readings (confirmed: this happened for BSM before this distinction existed). If SCMS security is enabled, match with `match_mode="prefix"` for the outgoing/request flow — the OBU wraps the host's unsecured request in a signed IEEE 1609.2 `SignedData` envelope before transmitting, so the broadcast payload is longer than, but starts identically to, what the host sent; exact-equality matching silently reports 100% drops in that case too.
+
+> [!NOTE]
+> A message that's requested but genuinely never broadcast (e.g. a custom PSID like CARMA's `MobilityOperation` under `0xBFEE`, which some OBU hardware accepts as a request but can't actually transmit) will still show up as `Dropped (no match found)` in the outgoing/request-flow correlation — that's a real, meaningful finding when it's consistent across every run, not a script bug. Cross-check message counts on each side (printed before the correlation section) to tell the two cases apart.
+
+### Stale vs. dropped
+
+A match with latency above `--drop-threshold-ms` (default 200ms — calibrated for periodic safety-broadcast freshness, where a late message has likely been superseded by a newer one) is reported separately as **stale**, not folded into **dropped**. A one-off/request-driven message (like a manually broadcast test message) that took 1.6 seconds to go out is a real, measurable latency worth its own stats, not evidence it was lost — dropped means no matching payload was found at all.
 
 Usage:
 ```
@@ -42,7 +59,6 @@ python3 correlate_j2735_latency.py --tx-pcap earlier.pcap --rx-pcap later.pcap [
 
 - `--tx-pcap`: the earlier/source capture point
 - `--rx-pcap`: the later/downstream capture point
-- A matched message with latency above `--drop-threshold-ms` (default 200ms) is counted as a drop, not a latency sample — it's stale by then.
 - Requires `tshark` and `pycrate` (see `requirements.txt`); does not require `pyshark`.
 
 ### Version
