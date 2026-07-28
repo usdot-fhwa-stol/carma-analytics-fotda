@@ -63,6 +63,58 @@ python3 correlate_j2735_latency.py --tx-pcap earlier.pcap --rx-pcap later.pcap [
 - `--rx-pcap`: the later/downstream capture point
 - Requires `tshark` and `pycrate` (see `requirements.txt`); does not require `pyshark`.
 
+## Correlating Latency Across the ROS<->Ethernet Boundary
+
+`correlate_pcap_mcap.py` correlates an OBU's host-facing `eth0` pcap against an mcap recording of the ROS2 `carma_driver_msgs/msg/ByteArray` topics the comms driver publishes/subscribes to, to check whether messages crossing that pcap<->ROS boundary keep up or get dropped:
+
+- **inbound**: `eth0` pcap → `/hardware_interface/comms/inbound_binary_msg` (message arrives over ethernet from the OBU, then the driver is expected to publish it to ROS)
+- **outbound**: `/hardware_interface/comms/outbound_binary_msg` → `eth0` pcap (ROS software asks the driver to transmit, then the driver is expected to put it on the wire)
+
+It reuses `correlate_j2735_latency.py`'s `extract_messages()` unchanged for the pcap side (same three vendor protocols, same 1609.2-envelope-aware parsing) - only the mcap side and the tx/rx matching are new. The `ByteArray.content` field is the raw J2735 MessageFrame bytes with no 1609.2 envelope, which is exactly the on-the-wire format `extract_messages()` already produces, so the two sides match byte-for-byte with no format translation.
+
+> [!NOTE]
+> Unlike `correlate_j2735_latency.py`'s `correlate()`, matching here does **not** require `rx_ts >= tx_ts`. Both timestamps come from the same onboard clock, but pcap frame-capture time and ROS message-stamp-assignment time aren't causally ordered at sub-millisecond granularity - confirmed on run-1 Commsignia, where genuinely-matching payloads showed the mcap stamp up to ~0.5ms *before* the pcap timestamp. A generous symmetric ±10s window (`MAX_ABS_MATCH_WINDOW_S`) picks whichever unconsumed candidate is closest in time either direction, rather than enforcing strict causal order.
+
+> [!NOTE]
+> mcap files are read with the low-level sequential `StreamReader` rather than `McapReader.iter_messages()`: every capture under `data/` is missing its trailing Footer/magic (the recording process was killed rather than shut down cleanly), which makes the indexed/summary-based reader fail outright. Sequential reading tolerates this the same way `read_classic_pcap` tolerates a truncated trailing packet - it stops at the first unreadable record and uses whatever was read so far, logging a warning rather than erroring out.
+
+### Static/duplicate-payload message types skew this correlation
+
+Matching is entirely payload-content-based (same `msg_type` + identical `payload_hex`) - there's no sequence number or request ID tying a specific ROS publish to a specific wire packet. That's unambiguous for types whose content is unique per instance (BSM, SPAT, SDSM all embed fresh position/time data), but breaks down for types whose payload never changes: a fixed-geometry MAP, or a custom-PSID request carrying a static test string. When every instance of a type is byte-identical, every tx event has *every* rx instance of that type as an equally-valid-looking candidate, and the algorithm falls back to "closest unconsumed one in time" - which is a guess, not a proven causal link.
+
+In practice this shows up as two very different failure signatures, confirmed on real Ettifos captures:
+
+- **A wide, scattered spread** of "matched but stale" latencies for a type → genuine matching ambiguity; treat the latency numbers for that type with caution.
+- **A tight, consistent offset** across the *entire* run (e.g. every matched pair lands within a few ms of some constant N-message shift, checked start-to-finish with no jumps) → not ambiguity noise. This is far more likely a one-time pipeline/session warm-up delay: shifting the matched series by a constant message count (equivalently, a constant number of seconds at that type's broadcast rate) collapses the residual to single-digit milliseconds for the whole run, which random duplicate-picking would not produce. Confirmed on Ettifos run-1 (`MobilityOperation`, outbound, ~7s/70-message constant offset) and run-3/run-4 (`MAP`, inbound, ~2-3s/2-3-message constant offset) - present on some runs and completely absent on others, consistent with "how long this particular session's connection took to come up" rather than a fixed protocol timer or per-message network latency.
+
+Use `find_duplicate_content_types()` (in `correlation_plots.py`) to flag which message types in a given capture/mcap pair are static before trusting their latency numbers at face value.
+
+Usage:
+```
+python3 correlate_pcap_mcap.py --eth0-pcap eth0.pcap --mcap run.mcap [--label NAME] [--drop-threshold-ms 200] [--json-out results.json] [--plot-dir plots/]
+```
+
+- `--eth0-pcap`: host-facing ethernet capture (e.g. `run-N-eth0-*.pcap`)
+- `--mcap`: mcap recording covering the same time window
+- `--plot-dir`: optional directory to write per-flow latency/drop PNGs to (via `correlation_plots.plot_flow`)
+- Requires `tshark`, `pycrate`, `mcap`, and `mcap_ros2` (see `requirements.txt`); does not require `pyshark`.
+
+## Aggregating Latency Across Multiple Runs and OBU Vendors
+
+`aggregate_boundary_latency.py` pools `correlate_pcap_mcap.py`'s per-run results across every run for one or more OBU vendor directories, so the combined mean/median/p95/p99/max are computed over the actual pooled sample set rather than approximated from each run's own summary stats.
+
+Runs are discovered automatically within each vendor directory by pairing `run-N-eth0-*.pcap` with whichever `run-N*.mcap` exists alongside it - mcap naming isn't fully consistent across recordings (e.g. one run's mcap carries an extra descriptive suffix, another vendor's run-4 mcap is missing its usual `-<vendor>` suffix), so pairing is done by run number, not exact filename.
+
+Output is three tables: per-run detail, a pooled-per-OBU summary (inbound/outbound each), and pooled latency broken down by message type - the last one flagged with the same duplicate/static-payload caveat described above, so a MAP or custom-PSID-request latency number isn't mistaken for the same kind of measurement as a BSM/SPAT/SDSM one.
+
+Usage:
+```
+python3 aggregate_boundary_latency.py --vendor Ettifos=/path/to/ettifos --vendor Commsignia=/path/to/commsignia-v2 [--drop-threshold-ms 200]
+```
+
+- `--vendor NAME=DIR`: repeatable; a vendor label and the directory containing its `run-N-eth0-*.pcap`/`run-N*.mcap` pairs
+- Requires the same dependencies as `correlate_pcap_mcap.py`
+
 ### Version
 Version 1.0 - June 27, 2025
 

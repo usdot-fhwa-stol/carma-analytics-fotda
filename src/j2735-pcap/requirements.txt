@@ -1,2 +1,5 @@
 pyshark==0.6
 pycrate==0.7.9
+mcap==1.4.0
+mcap-ros2-support==0.5.7
+matplotlib==3.10.7
