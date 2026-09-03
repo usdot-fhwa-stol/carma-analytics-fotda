@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import pyplot as plt
 import json
-from utils import calculate_error_statistics, print_stats
+from utils import calculate_error_statistics, print_stats, extract_and_plot_message_intervals
 import re
 import os
 from datetime import datetime
@@ -14,6 +14,11 @@ TIME_SECONDS_LABEL_STRING = "Time (seconds)"
 INCOMING_GEOFENCE_CONTROL_TOPIC = "/message/incoming_geofence_control"
 OUTGOING_GEOFENCE_REQUEST_TOPIC = "/message/outgoing_geofence_request"
 OUTGOING_MOBILITY_OPERATION_TOPIC = "/message/outgoing_mobility_operation"
+INCOMING_SDSM_TOPIC = "/message/incoming_sdsm"
+INCOMING_BINARY_MSG_TOPIC = "/hardware_interface/comms/inbound_binary_msg"
+
+# carma_driver_msgs/msg/ByteArray.message_type values, for filtering INCOMING_BINARY_MSG_TOPIC
+BINARY_MSG_TYPE_CHOICES = ["SensorDataSharingMessage", "BSM", "SPAT", "MAP"]
 
 def check_message_broadcast_rate(
     mcap_path,
@@ -268,6 +273,49 @@ def check_message_broadcast_rate(
         plt.show()
 
     return is_passed, stats, fig, broadcast_intervals, timestamps
+
+def plot_message_time_intervals(
+    mcap_path,
+    topic_name,
+    message_type=None,
+    expected_interval_sec=0.1,
+    interval_tolerance_pct=0.1,
+    save_plot_dir=None,
+):
+    """
+    Plots the number of seconds between consecutive messages on a given topic, highlighting
+    intervals outside of an expected tolerance band. If message_type is given, messages are
+    first filtered to those whose message_type field matches - useful for topics like
+    INCOMING_BINARY_MSG_TOPIC (carma_driver_msgs/msg/ByteArray) that carry multiple message
+    types (see BINARY_MSG_TYPE_CHOICES) on one topic.
+
+    Args:
+        mcap_path: Path to MCAP file
+        topic_name: Name of the ROS topic to analyze (e.g., INCOMING_SDSM_TOPIC)
+        message_type: Optional value to filter the topic's message_type field on (optional)
+        expected_interval_sec: Expected number of seconds between consecutive messages (default: 0.1)
+        interval_tolerance_pct: Tolerance percentage around the expected interval (default: 0.1 = 10%)
+        save_plot_dir: Directory to save generated plot (optional)
+
+    Returns:
+        Tuple containing:
+        - figure: Matplotlib figure object
+        - timestamps: Array of message timestamps (seconds from start of recording)
+        - intervals: Array of seconds between consecutive messages
+
+    Deps:
+        Topics: [topic_name]
+        Msgs: carma_driver_msgs/msg/ByteArray if message_type is given, otherwise any ROS message type
+    """
+    output_file = None
+    if save_plot_dir:
+        safe_topic_name = topic_name.replace("/", "_").replace(" ", "_")
+        suffix = f"_{message_type}" if message_type else ""
+        output_file = save_plot_dir / f"{safe_topic_name}{suffix}_message_intervals.png"
+
+    return extract_and_plot_message_intervals(
+        mcap_path, topic_name, message_type, expected_interval_sec, interval_tolerance_pct, output_file
+    )
 
 def process_cc_logs_for_tcr_tcm_data(
     cc_data_path,
@@ -910,7 +958,15 @@ def main():
     Main function to run the analysis scritps.
     """
     # Example usage of the functions
-    mcap_path = "/path/to/your/mcap_file.mcap"
+    mcap_path = "/workspaces/carma_ws/src/carma-analytics-fotda/3rd-data.mcap"
+    check_message_broadcast_rate(
+        mcap_path=mcap_path,
+        topic_name=INCOMING_SDSM_TOPIC,
+        expected_rate_hz=10.0)
+    plot_message_time_intervals(
+        mcap_path=mcap_path,
+        topic_name=INCOMING_SDSM_TOPIC)
+
 
 
 if __name__ == "__main__":
