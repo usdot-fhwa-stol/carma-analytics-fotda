@@ -1,7 +1,10 @@
+import json
+import re
+
 import numpy as np
 import matplotlib.pyplot as plt
 
-from parse_ros2_bags import extract_mcap_data
+from parse_ros2_bags import extract_mcap_data, open_bagfile
 
 def calculate_error_statistics(error_values: np.array, start_time=None, end_time=None) -> dict:
     """
@@ -47,12 +50,85 @@ def print_stats(stats: dict, title: str, decimal_places: int = 4) -> None:
         else:
             print(f"{key}: {value:.{decimal_places}f}")
 
+def parse_kafka_log_records(kafka_log_path):
+    """
+    Parses a Kafka console-consumer log file into a list of message records. Each
+    record is expected to start a new line of the form `CreateTime:<epoch_ms>\t{json}`;
+    JSON bodies that wrap onto following lines are accumulated until the next `CreateTime`
+    line is seen.
+
+    Args:
+        kafka_log_path: Path to the Kafka log file
+
+    Returns:
+        List of dicts, one per parsed log message, in file order. Each dict is the
+        message's JSON body plus a "create_time_ms" key holding that record's Kafka
+        CreateTime (epoch milliseconds).
+    """
+    records = []
+    skipped_messages = 0
+    pending_message = ""
+    create_time_ms = None
+
+    def flush_pending_message():
+        nonlocal pending_message, skipped_messages
+        if not pending_message:
+            return
+        try:
+            msg = json.loads(pending_message)
+            msg["create_time_ms"] = create_time_ms
+            records.append(msg)
+        except json.JSONDecodeError as e:
+            print(f"Error {e.msg} extracting json from Kafka log message. Skipping message.")
+            skipped_messages += 1
+        pending_message = ""
+
+    with open(kafka_log_path, encoding="utf8", errors="ignore") as log_file:
+        for line in log_file:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("CreateTime"):
+                flush_pending_message()
+                create_time_ms = int(re.sub(r"[^0-9]", "", line.split(":", 1)[1].split("\t", 1)[0]))
+                json_start = line.find("{")
+                pending_message = line[json_start:] if json_start != -1 else ""
+            else:
+                pending_message += line
+        flush_pending_message()
+
+    if skipped_messages > 0:
+        print(f"WARNING: Skipped {skipped_messages} Kafka log message(s) due to JSON decoding errors.")
+
+    return records
+
+
+def parse_kafka_log_timestamps(kafka_log_path, timestamp_field="timestamp"):
+    """
+    Parses a Kafka console-consumer log file into an array of message timestamps.
+    See `parse_kafka_log_records` for the expected log format.
+
+    Args:
+        kafka_log_path: Path to the Kafka log file
+        timestamp_field: JSON field to read each message's timestamp from. Falls back to
+            the record's CreateTime if the field is missing from a message (default: "timestamp")
+
+    Returns:
+        np.array of epoch millisecond timestamps, sorted, one per parsed log message
+    """
+    records = parse_kafka_log_records(kafka_log_path)
+    timestamps = [record.get(timestamp_field, record["create_time_ms"]) for record in records]
+
+    return np.sort(np.array(timestamps, dtype=float))
+
+
 def plot_message_intervals(
     title,
     timestamps,
     expected_interval_sec=0.1,
     interval_tolerance_pct=0.1,
     max_view_sec=0.5,
+    detection_timestamps=None,
     output_file=None,
 ):
     """
@@ -66,6 +142,11 @@ def plot_message_intervals(
         expected_interval_sec: Expected number of seconds between consecutive messages (default: 0.1)
         interval_tolerance_pct: Tolerance percentage around the expected interval (default: 0.1 = 10%)
         max_view_sec: Y-axis view limit in seconds; intervals beyond this are shaded red and annotated (default: 0.5)
+        detection_timestamps: Optional array of object detection timestamps (seconds from start of
+            recording, same time base as `timestamps`), e.g. from a Kafka object detection log. Gaps
+            between consecutive detections that exceed `max_view_sec` are shaded green to show that a
+            large message interval coincides with there simply being nothing detected to report, rather
+            than a missed/dropped message.
         output_file: Optional path to save the plot to. If not given, the plot is shown interactively.
 
     Returns:
@@ -103,6 +184,22 @@ def plot_message_intervals(
             fontsize=7,
             color="darkred",
         )
+
+    if detection_timestamps is not None:
+        detection_timestamps = np.sort(np.array(detection_timestamps))
+        if len(detection_timestamps) >= 2:
+            detection_intervals = np.diff(detection_timestamps)
+            no_detection_gaps = np.flatnonzero(detection_intervals > max_view_sec)
+            for i, idx in enumerate(no_detection_gaps):
+                ax.axvspan(
+                    detection_timestamps[idx], detection_timestamps[idx + 1],
+                    color="green", alpha=0.2,
+                    label=f"No Object Detected > {max_view_sec} s" if i == 0 else None
+                )
+            print(
+                f"Object detection gaps > {max_view_sec} s: {len(no_detection_gaps)} "
+                f"(out of {len(detection_timestamps)} detection log messages)"
+            )
 
     ax.plot(timestamps[1:], intervals, ".-", markersize=4, linewidth=1, label="Seconds Since Previous Message")
     ax.axhline(y=np.median(intervals), color="r", linestyle="--", label="Median")
@@ -149,6 +246,8 @@ def extract_and_plot_message_intervals(
     message_type=None,
     expected_interval_sec=0.1,
     interval_tolerance_pct=0.1,
+    detection_log_path=None,
+    detection_log_timestamp_field="timestamp",
     output_file=None,
 ):
     """
@@ -163,6 +262,12 @@ def extract_and_plot_message_intervals(
         message_type: Optional value to filter the topic's message_type field on
         expected_interval_sec: Expected number of seconds between consecutive messages (default: 0.1)
         interval_tolerance_pct: Tolerance percentage around the expected interval (default: 0.1 = 10%)
+        detection_log_path: Optional path to a Kafka object detection log (e.g. from
+            v2xhub_sim_sensor_detected_object). When given, gaps between consecutive object
+            detections are shaded green on the plot to distinguish "nothing was detected" from
+            an actual missed/dropped message.
+        detection_log_timestamp_field: JSON field to read each detection's timestamp from
+            (default: "timestamp")
         output_file: Optional path to save the plot to. If not given, the plot is shown interactively.
 
     Returns:
@@ -185,11 +290,29 @@ def extract_and_plot_message_intervals(
         timestamps, _ = extracted_data[topic]
         title = f"Time Between Messages - {topic}"
 
+    detection_timestamps = None
+    if detection_log_path:
+        detection_timestamps_ms = parse_kafka_log_timestamps(
+            detection_log_path, timestamp_field=detection_log_timestamp_field
+        )
+        # Recording start time (ns since epoch) so the log's absolute timestamps can be
+        # placed on the same "seconds from start of recording" axis as `timestamps`.
+        _, _, global_start_time_ns = open_bagfile(str(mcap_path))
+        detection_timestamps = (detection_timestamps_ms * 1e6 - global_start_time_ns) / 1e9
+
+        # Kafka logs are often a running record spanning many separate recordings/days, so
+        # only keep detections that fall within this mcap's time range.
+        recording_start, recording_end = np.min(timestamps), np.max(timestamps)
+        detection_timestamps = detection_timestamps[
+            (detection_timestamps >= recording_start) & (detection_timestamps <= recording_end)
+        ]
+
     return plot_message_intervals(
         title=title,
         timestamps=timestamps,
         expected_interval_sec=expected_interval_sec,
         interval_tolerance_pct=interval_tolerance_pct,
+        detection_timestamps=detection_timestamps,
         output_file=output_file,
     )
 

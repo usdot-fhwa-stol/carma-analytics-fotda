@@ -4,7 +4,7 @@ from run_all_analysis import run_all_analysis
 import argparse
 import argcomplete
 from parse_ros2_bags import open_bagfile, extract_mcap_data
-from utils import calculate_error_statistics, print_stats, align_time_series
+from utils import calculate_error_statistics, print_stats, align_time_series, parse_kafka_log_records
 from datetime import datetime, timezone
 import numpy as np
 import matplotlib.pyplot as plt
@@ -19,6 +19,10 @@ SDSM_LATENCY_TOLERANCE_IN_S = 0.1
 INCOMING_MESSAGE_TOPIC = "/hardware_interface/comms/inbound_binary_msg"
 INCOMING_SDSM_TOPIC = "/message/incoming_sdsm"
 FUSED_SDSM_OBJECTS_TOPIC = "/environment/fused_external_objects"
+
+# CP-02: Raw detection to SDSM drop rate should be less than 2%
+SDSM_DROP_RATE_THRESHOLD_PCT = 2.0
+SDSM_DROP_RATE_MATCH_TOLERANCE_IN_S = 0.15
 
 
 
@@ -405,6 +409,274 @@ def run_sdsm_approximation_latency_analysis(
     except Exception as e:
         print(f"Error extracting data for SDSM detection analysis: {e}")
         return False, {}, None, []
+
+
+def _decode_sdsm_object_detections(mcap_path, start_time=None, end_time=None):
+    """
+    Extracts every detected object reported across all SDSM messages in an MCAP file,
+    decoding each object's absolute detection time from the message's sdsm_time_stamp
+    plus the object's measurement_time_offset (same approach as run_sdsm_latency_analysis).
+
+    Args:
+        mcap_path: Path to MCAP file
+        start_time: Time to start the analysis (seconds from start of recording)
+        end_time: Time to end the analysis (seconds from start of recording)
+
+    Returns:
+        Tuple containing:
+        - object_ids: Array of detected_id.object_id values, one per detected object instance
+        - object_times_sec: Array of each object's absolute detection time (epoch seconds)
+    """
+    extracted_data = extract_mcap_data(
+        mcap_path,
+        [INCOMING_SDSM_TOPIC],
+        start_time=start_time,
+        end_time=end_time,
+        field_extractors={
+            INCOMING_SDSM_TOPIC: lambda msg: (
+                msg.sdsm_time_stamp.year.year,
+                msg.sdsm_time_stamp.month.month,
+                msg.sdsm_time_stamp.day.day,
+                msg.sdsm_time_stamp.hour.hour,
+                msg.sdsm_time_stamp.minute.minute,
+                msg.sdsm_time_stamp.second.millisecond,
+                msg.sdsm_time_stamp.offset.offset_minute,
+                msg.objects.detected_object_data,
+            ),
+        },
+    )
+    _, extracted_data = extracted_data[INCOMING_SDSM_TOPIC]
+
+    sdsm_year = extracted_data[:, 0].astype(int)
+    sdsm_month = extracted_data[:, 1].astype(int)
+    sdsm_day = extracted_data[:, 2].astype(int)
+    sdsm_hour = extracted_data[:, 3].astype(int)
+    sdsm_minute = extracted_data[:, 4].astype(int)
+    sdsm_millisecond = extracted_data[:, 5].astype(int)
+    sdsm_offset = extracted_data[:, 6].astype(int)
+    sdsm_objects = extracted_data[:, 7]
+
+    object_ids = []
+    object_times_sec = []
+    for y, m, d, h, mi, ms, off, objs in zip(
+        sdsm_year, sdsm_month, sdsm_day, sdsm_hour, sdsm_minute, sdsm_millisecond, sdsm_offset, sdsm_objects
+    ):
+        dt = datetime(
+            int(y), int(m), int(d), int(h), int(mi), int(ms // 1000),
+            microsecond=(int(ms) % 1000) * 1000, tzinfo=timezone.utc,
+        )
+        msg_time_sec = dt.timestamp() + off * 60
+
+        for obj in objs:
+            common_data = obj.detected_object_common_data
+            object_ids.append(common_data.detected_id.object_id)
+            object_times_sec.append(msg_time_sec + common_data.measurement_time.measurement_time_offset * 1e-3)
+
+    return np.array(object_ids), np.array(object_times_sec)
+
+
+def _match_detections_to_sdsm(raw_times_sec, sdsm_times_sec, match_tolerance_sec):
+    """
+    Greedily matches each raw detection time to the closest not-yet-used SDSM detection
+    time (of the same object ID - both arrays are expected to already be filtered down to
+    a single object ID) within match_tolerance_sec. Both inputs are expected to be roughly
+    periodic and time-ordered, so a single forward pass over each array is sufficient.
+
+    Args:
+        raw_times_sec: Sorted array of raw detection times (epoch seconds) for one object ID
+        sdsm_times_sec: Sorted array of SDSM-reported detection times (epoch seconds) for the same object ID
+        match_tolerance_sec: Maximum time difference to consider a raw/SDSM pair matched
+
+    Returns:
+        Tuple containing:
+        - matched_count: Number of raw detections matched to an SDSM detection
+        - dropped_times_sec: Array of raw detection times with no matching SDSM detection
+    """
+    sdsm_idx = 0
+    n_sdsm = len(sdsm_times_sec)
+    matched_count = 0
+    dropped_times_sec = []
+
+    for raw_time in raw_times_sec:
+        while sdsm_idx < n_sdsm and sdsm_times_sec[sdsm_idx] < raw_time - match_tolerance_sec:
+            sdsm_idx += 1
+
+        if sdsm_idx < n_sdsm and abs(sdsm_times_sec[sdsm_idx] - raw_time) <= match_tolerance_sec:
+            matched_count += 1
+            sdsm_idx += 1
+        else:
+            dropped_times_sec.append(raw_time)
+
+    return matched_count, np.array(dropped_times_sec)
+
+
+def run_sdsm_detection_drop_rate_analysis(
+    mcap_path,
+    detection_log_path,
+    max_drop_rate_pct=SDSM_DROP_RATE_THRESHOLD_PCT,
+    match_tolerance_sec=SDSM_DROP_RATE_MATCH_TOLERANCE_IN_S,
+    start_time=None,
+    end_time=None,
+    save_stats_dir=None,
+    save_data_dir=None,
+    save_plot_dir=None,
+):
+    """
+    CP-02: Verifies that fewer than max_drop_rate_pct of the raw object detections logged by
+    v2xhub (the v2xhub_sim_sensor_detected_object Kafka topic) fail to appear in any SDSM
+    broadcast received by the vehicle (INCOMING_SDSM_TOPIC).
+
+    Each raw detection's "objectId" is the same temporary ID reported as an SDSM object's
+    detected_id, so raw detections and SDSM-reported detections are grouped by that ID, then
+    each raw detection is matched to the closest not-yet-matched SDSM detection of the same ID
+    within match_tolerance_sec (see _match_detections_to_sdsm). Raw detections with no match are
+    counted as dropped between the sensor and the vehicle's outgoing SDSM.
+
+    Args:
+        mcap_path: Path to MCAP file containing INCOMING_SDSM_TOPIC
+        detection_log_path: Path to the v2xhub_sim_sensor_detected_object Kafka log corresponding
+            to mcap_path
+        max_drop_rate_pct: Maximum allowed percentage of raw detections missing from SDSM for the
+            analysis to pass (default: 2.0)
+        match_tolerance_sec: Maximum time difference to consider a raw detection matched to an
+            SDSM-reported detection of the same object ID (default: 0.15 s)
+        start_time: Time to start the analysis (seconds from start of recording)
+        end_time: Time to end the analysis (seconds from start of recording)
+        save_stats_dir: Directory to save analysis stats
+        save_data_dir: Directory to save extracted data
+        save_plot_dir: Directory to save generated plots
+
+    Returns:
+        Tuple containing:
+        - is_passed: Boolean - True if the overall drop rate is below max_drop_rate_pct
+        - stats: Dictionary with overall and per-object-ID drop rate statistics
+        - figure: Matplotlib figure object
+        - dropped_detections: Array of (object_id, epoch_time_sec) for unmatched raw detections
+
+    Deps:
+        Topics: [/message/incoming_sdsm]
+        Msgs: carma_v2x_msgs/msg/SensorDataSharingMessage
+    """
+    plt.close('all')
+
+    sdsm_object_ids, sdsm_object_times_sec = _decode_sdsm_object_detections(mcap_path, start_time, end_time)
+
+    # Bound raw detections to this mcap's recording window (a Kafka log is often a running
+    # record spanning many separate recordings/days).
+    _, _, global_start_time_ns = open_bagfile(str(mcap_path))
+    topic_timestamps_sec, _ = extract_mcap_data(mcap_path, [INCOMING_SDSM_TOPIC])[INCOMING_SDSM_TOPIC]
+    recording_start_sec = (np.min(topic_timestamps_sec) * 1e9 + global_start_time_ns) / 1e9
+    recording_end_sec = (np.max(topic_timestamps_sec) * 1e9 + global_start_time_ns) / 1e9
+
+    detection_records = parse_kafka_log_records(detection_log_path)
+    raw_object_ids = []
+    raw_times_sec = []
+    for record in detection_records:
+        time_sec = record.get("timestamp", record["create_time_ms"]) / 1e3
+        if recording_start_sec - match_tolerance_sec <= time_sec <= recording_end_sec + match_tolerance_sec:
+            raw_object_ids.append(record.get("objectId"))
+            raw_times_sec.append(time_sec)
+    raw_object_ids = np.array(raw_object_ids)
+    raw_times_sec = np.array(raw_times_sec)
+
+    if len(raw_times_sec) == 0:
+        print(f"Error: No raw detections found in {detection_log_path} within the mcap's recording window")
+        return False, {}, None, []
+
+    total_matched = 0
+    dropped_detections = []
+    per_object_stats = {}
+    for object_id in np.unique(raw_object_ids):
+        object_mask = raw_object_ids == object_id
+        object_raw_times = np.sort(raw_times_sec[object_mask])
+        object_sdsm_times = np.sort(sdsm_object_times_sec[sdsm_object_ids == object_id])
+
+        matched_count, dropped_times_sec = _match_detections_to_sdsm(
+            object_raw_times, object_sdsm_times, match_tolerance_sec
+        )
+        total_matched += matched_count
+        dropped_detections.extend((int(object_id), t) for t in dropped_times_sec)
+
+        per_object_stats[str(int(object_id))] = {
+            "raw_detections": len(object_raw_times),
+            "matched": matched_count,
+            "dropped": len(dropped_times_sec),
+            "drop_rate_pct": (len(dropped_times_sec) / len(object_raw_times)) * 100,
+        }
+
+    total_raw = len(raw_times_sec)
+    total_dropped = total_raw - total_matched
+    drop_rate_pct = (total_dropped / total_raw) * 100
+    is_passed = bool(drop_rate_pct < max_drop_rate_pct)
+
+    print(f"\n=== CP-02: Raw Detection to SDSM Drop Rate Analysis ===")
+    print(f"Total raw detections: {total_raw}")
+    print(f"Matched to an SDSM broadcast: {total_matched}")
+    print(f"Dropped (no matching SDSM detection): {total_dropped}")
+    print(f"Drop rate: {drop_rate_pct:.2f}% (threshold: < {max_drop_rate_pct}%)")
+    print(f"Result: {'PASSED' if is_passed else 'FAILED'}")
+
+    stats = {
+        "total_raw_detections": total_raw,
+        "total_matched": total_matched,
+        "total_dropped": total_dropped,
+        "drop_rate_pct": float(drop_rate_pct),
+        "max_drop_rate_pct": max_drop_rate_pct,
+        "match_tolerance_sec": match_tolerance_sec,
+        "is_passed": is_passed,
+        "per_object_id": per_object_stats,
+    }
+
+    # Visualize matched vs. dropped raw detections over time
+    dropped_times_sec = np.array([t for _, t in dropped_detections])
+    matched_times_sec = np.setdiff1d(raw_times_sec, dropped_times_sec)
+
+    fig, ax = plt.subplots(figsize=(12, 4))
+    ax.plot(
+        matched_times_sec - recording_start_sec, np.ones(len(matched_times_sec)),
+        ".", color="green", markersize=4, label=f"Matched to SDSM ({total_matched})"
+    )
+    if len(dropped_times_sec) > 0:
+        ax.plot(
+            dropped_times_sec - recording_start_sec, np.ones(len(dropped_times_sec)),
+            "x", color="red", markersize=6, label=f"Dropped ({total_dropped})"
+        )
+    ax.set_title(f"CP-02: Raw Detection to SDSM Match Status (Drop Rate: {drop_rate_pct:.2f}%)")
+    ax.set_xlabel(TIME_SECONDS_LABEL_STRING if "TIME_SECONDS_LABEL_STRING" in dir() else "Time (seconds)")
+    ax.set_yticks([])
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="upper right")
+    plt.tight_layout()
+
+    if save_stats_dir:
+        save_stats_dir = Path(save_stats_dir)
+        save_stats_dir.mkdir(parents=True, exist_ok=True)
+        stats_full_path = save_stats_dir / "sdsm_detection_drop_rate.json"
+        with open(stats_full_path, "w") as f:
+            json.dump(stats, f, indent=2)
+        print(f"\nStats saved to: {stats_full_path}")
+
+    if save_data_dir:
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
+        np.savez(
+            save_data_dir / "sdsm_detection_drop_rate_data.npz",
+            raw_object_ids=raw_object_ids,
+            raw_times_sec=raw_times_sec,
+            dropped_detections=np.array(dropped_detections, dtype=object),
+            stats=stats,
+        )
+        print(f"Data saved to: {save_data_dir}")
+
+    if save_plot_dir:
+        save_plot_dir = Path(save_plot_dir)
+        save_plot_dir.mkdir(parents=True, exist_ok=True)
+        plt.savefig(save_plot_dir / "sdsm_detection_drop_rate_analysis.png", dpi=300)
+        print(f"Plot saved to: {save_plot_dir}")
+    else:
+        plt.show()
+
+    return is_passed, stats, plt.gcf(), np.array(dropped_detections, dtype=object)
 
 
 def detect_gap_ranges(timestamps, gap_threshold=0.1, buffer=0.00):

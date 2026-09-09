@@ -280,6 +280,7 @@ def plot_message_time_intervals(
     message_type=None,
     expected_interval_sec=0.1,
     interval_tolerance_pct=0.1,
+    detection_log_path=None,
     save_plot_dir=None,
 ):
     """
@@ -289,12 +290,19 @@ def plot_message_time_intervals(
     INCOMING_BINARY_MSG_TOPIC (carma_driver_msgs/msg/ByteArray) that carry multiple message
     types (see BINARY_MSG_TYPE_CHOICES) on one topic.
 
+    If detection_log_path is given (e.g. the v2xhub_sim_sensor_detected_object Kafka log
+    corresponding to mcap_path), gaps in object detection are shaded green on the plot. This
+    distinguishes SDSM message gaps caused by there being nothing to detect from actual missed
+    SDSM broadcasts (shaded red).
+
     Args:
         mcap_path: Path to MCAP file
         topic_name: Name of the ROS topic to analyze (e.g., INCOMING_SDSM_TOPIC)
         message_type: Optional value to filter the topic's message_type field on (optional)
         expected_interval_sec: Expected number of seconds between consecutive messages (default: 0.1)
         interval_tolerance_pct: Tolerance percentage around the expected interval (default: 0.1 = 10%)
+        detection_log_path: Optional path to the Kafka object detection log corresponding to
+            mcap_path (optional)
         save_plot_dir: Directory to save generated plot (optional)
 
     Returns:
@@ -314,7 +322,13 @@ def plot_message_time_intervals(
         output_file = save_plot_dir / f"{safe_topic_name}{suffix}_message_intervals.png"
 
     return extract_and_plot_message_intervals(
-        mcap_path, topic_name, message_type, expected_interval_sec, interval_tolerance_pct, output_file
+        mcap_path,
+        topic_name,
+        message_type,
+        expected_interval_sec,
+        interval_tolerance_pct,
+        detection_log_path=detection_log_path,
+        output_file=output_file,
     )
 
 def process_cc_logs_for_tcr_tcm_data(
@@ -958,14 +972,16 @@ def main():
     Main function to run the analysis scritps.
     """
     # Example usage of the functions
-    mcap_path = "/workspaces/carma_ws/src/carma-analytics-fotda/3rd-data.mcap"
-    check_message_broadcast_rate(
-        mcap_path=mcap_path,
-        topic_name=INCOMING_SDSM_TOPIC,
-        expected_rate_hz=10.0)
+    mcap_path = "/workspaces/carma_ws/src/data/rosbag2_2026-09-03_142436_0.mcap"
+    detection_log_path = "/workspaces/carma_ws/src/data/kafka-logs/v2xhub_sim_sensor_detected_object_kafka.log"
+    # check_message_broadcast_rate(
+    #     mcap_path=mcap_path,
+    #     topic_name=INCOMING_SDSM_TOPIC,
+    #     expected_rate_hz=10.0)
     plot_message_time_intervals(
         mcap_path=mcap_path,
-        topic_name=INCOMING_SDSM_TOPIC)
+        topic_name=INCOMING_SDSM_TOPIC,
+        detection_log_path=detection_log_path)
 
 
 
