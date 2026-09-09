@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib import pyplot as plt
 import json
 from utils import calculate_error_statistics, print_stats, extract_and_plot_message_intervals
+from carma_cooperative_perception_scripts import run_sdsm_detection_drop_rate_analysis
 import re
 import os
 from datetime import datetime
@@ -981,6 +982,10 @@ def main():
     plot_message_time_intervals(
         mcap_path=mcap_path,
         topic_name=INCOMING_SDSM_TOPIC,
+        detection_log_path=detection_log_path)
+    # CP-02: Raw detection to SDSM drop rate should be less than 2%
+    run_sdsm_detection_drop_rate_analysis(
+        mcap_path=mcap_path,
         detection_log_path=detection_log_path)
 
 
