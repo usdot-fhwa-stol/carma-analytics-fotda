@@ -5,6 +5,7 @@ import argcomplete
 from run_all_analysis import run_all_analysis
 from message_scripts import plot_message_time_intervals, INCOMING_SDSM_TOPIC
 from carma_cooperative_perception_scripts import run_sdsm_detection_drop_rate_analysis
+from guidance_scripts import get_engage_time
 
 # Raw v2xhub object detection Kafka log. A single log is a running record across every MCAP
 # recording in a dt_wz (pedestrian detection) test session, so the same path is used for every
@@ -18,6 +19,12 @@ def analyze_mcap_file_for_dt_wz_analysis(
     mcap_path: Path, output_dir: Path, stats_dir: Path, data_dir: Path, plots_dir: Path
 ) -> list:
     """Extract single MCAP file and run all dt_wz (pedestrian detection to SDSM) analysis on it"""
+    try:
+        engage_time, disengage_time = get_engage_time(mcap_path)
+    except Exception as e:
+        print(f"Error getting engage time for mcap {mcap_path}: {e}")
+        return None
+
     analysis_stats = {}
 
     # CP-01: SDSM message interval plot, shaded with raw-detection gaps for context
@@ -26,6 +33,8 @@ def analyze_mcap_file_for_dt_wz_analysis(
             mcap_path=mcap_path,
             topic_name=INCOMING_SDSM_TOPIC,
             detection_log_path=DETECTION_LOG_PATH,
+            start_time=engage_time,
+            end_time=disengage_time,
             save_plot_dir=plots_dir,
         )
         analysis_stats["CP01_sdsm_message_intervals"] = True
@@ -38,6 +47,8 @@ def analyze_mcap_file_for_dt_wz_analysis(
         is_passed, _, _, _ = run_sdsm_detection_drop_rate_analysis(
             mcap_path=mcap_path,
             detection_log_path=DETECTION_LOG_PATH,
+            start_time=engage_time,
+            end_time=disengage_time,
             save_stats_dir=stats_dir,
             save_data_dir=data_dir,
             save_plot_dir=plots_dir,

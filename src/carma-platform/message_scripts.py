@@ -282,6 +282,8 @@ def plot_message_time_intervals(
     expected_interval_sec=0.1,
     interval_tolerance_pct=0.1,
     detection_log_path=None,
+    start_time=None,
+    end_time=None,
     save_plot_dir=None,
 ):
     """
@@ -304,6 +306,8 @@ def plot_message_time_intervals(
         interval_tolerance_pct: Tolerance percentage around the expected interval (default: 0.1 = 10%)
         detection_log_path: Optional path to the Kafka object detection log corresponding to
             mcap_path (optional)
+        start_time: Time to start the analysis (seconds from start of recording)
+        end_time: Time to end the analysis (seconds from start of recording)
         save_plot_dir: Directory to save generated plot (optional)
 
     Returns:
@@ -329,6 +333,8 @@ def plot_message_time_intervals(
         expected_interval_sec,
         interval_tolerance_pct,
         detection_log_path=detection_log_path,
+        start_time=start_time,
+        end_time=end_time,
         output_file=output_file,
     )
 
@@ -979,10 +985,10 @@ def main():
     #     mcap_path=mcap_path,
     #     topic_name=INCOMING_SDSM_TOPIC,
     #     expected_rate_hz=10.0)
-    plot_message_time_intervals(
-        mcap_path=mcap_path,
-        topic_name=INCOMING_SDSM_TOPIC,
-        detection_log_path=detection_log_path)
+    # plot_message_time_intervals(
+    #     mcap_path=mcap_path,
+    #     topic_name=INCOMING_SDSM_TOPIC,
+    #     detection_log_path=detection_log_path)
     # CP-02: Raw detection to SDSM drop rate should be less than 2%
     run_sdsm_detection_drop_rate_analysis(
         mcap_path=mcap_path,

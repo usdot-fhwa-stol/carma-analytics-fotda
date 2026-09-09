@@ -22,7 +22,10 @@ FUSED_SDSM_OBJECTS_TOPIC = "/environment/fused_external_objects"
 
 # CP-02: Raw detection to SDSM drop rate should be less than 2%
 SDSM_DROP_RATE_THRESHOLD_PCT = 2.0
-SDSM_DROP_RATE_MATCH_TOLERANCE_IN_S = 0.15
+# Object times are decoded to within ~1ms (sdsm_time_stamp only carries millisecond
+# resolution), so a real match lands well inside this; anything wider risks bridging over
+# a genuine drop (raw detections are ~100ms apart in the sample data).
+SDSM_DROP_RATE_MATCH_TOLERANCE_IN_S = 0.05
 
 
 
@@ -414,8 +417,9 @@ def run_sdsm_approximation_latency_analysis(
 def _decode_sdsm_object_detections(mcap_path, start_time=None, end_time=None):
     """
     Extracts every detected object reported across all SDSM messages in an MCAP file,
-    decoding each object's absolute detection time from the message's sdsm_time_stamp
-    plus the object's measurement_time_offset (same approach as run_sdsm_latency_analysis).
+    decoding each object's absolute detection time as the message's sdsm_time_stamp minus
+    the object's measurement_time_offset (carma_v2x_msgs/MeasurementTimeOffset is already in
+    seconds - how long before the message was generated the object was actually measured).
 
     Args:
         mcap_path: Path to MCAP file
@@ -476,7 +480,7 @@ def _decode_sdsm_object_detections(mcap_path, start_time=None, end_time=None):
         for obj in objs:
             common_data = obj.detected_object_common_data
             object_ids.append(common_data.detected_id.object_id)
-            object_times_sec.append(msg_time_sec + common_data.measurement_time.measurement_time_offset * 1e-3)
+            object_times_sec.append(msg_time_sec - common_data.measurement_time.measurement_time_offset)
 
     return np.array(object_ids), np.array(object_times_sec), global_start_time_ns, msg_times_sec
 
@@ -565,9 +569,12 @@ def run_sdsm_detection_drop_rate_analysis(
     """
     plt.close('all')
 
-    sdsm_object_ids, sdsm_object_times_sec, _, msg_times_sec = _decode_sdsm_object_detections(
+    sdsm_object_ids, sdsm_object_times_sec, global_start_time_ns, msg_times_sec = _decode_sdsm_object_detections(
         mcap_path, start_time, end_time
     )
+    # Same time origin as plot_message_time_intervals's x-axis (seconds since the MCAP
+    # recording started), so the two plots can be stacked and compared directly.
+    recording_origin_sec = global_start_time_ns / 1e9
 
     # Bound raw detections to this mcap's (possibly start_time/end_time restricted) analysis
     # window - a Kafka log is often a running record spanning many separate recordings/days.
@@ -639,12 +646,12 @@ def run_sdsm_detection_drop_rate_analysis(
 
     fig, ax = plt.subplots(figsize=(12, 4))
     ax.plot(
-        matched_times_sec - recording_start_sec, np.ones(len(matched_times_sec)),
+        matched_times_sec - recording_origin_sec, np.ones(len(matched_times_sec)),
         ".", color="green", markersize=4, label=f"Matched to SDSM ({total_matched})"
     )
     if len(dropped_times_sec) > 0:
         ax.plot(
-            dropped_times_sec - recording_start_sec, np.ones(len(dropped_times_sec)),
+            dropped_times_sec - recording_origin_sec, np.ones(len(dropped_times_sec)),
             "x", color="red", markersize=6, label=f"Dropped ({total_dropped})"
         )
     ax.set_title(f"CP-02: Raw Detection to SDSM Match Status (Drop Rate: {drop_rate_pct:.2f}%)")

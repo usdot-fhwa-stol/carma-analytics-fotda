@@ -248,6 +248,8 @@ def extract_and_plot_message_intervals(
     interval_tolerance_pct=0.1,
     detection_log_path=None,
     detection_log_timestamp_field="timestamp",
+    start_time=None,
+    end_time=None,
     output_file=None,
 ):
     """
@@ -268,6 +270,8 @@ def extract_and_plot_message_intervals(
             an actual missed/dropped message.
         detection_log_timestamp_field: JSON field to read each detection's timestamp from
             (default: "timestamp")
+        start_time: Time to start the analysis (seconds from start of recording)
+        end_time: Time to end the analysis (seconds from start of recording)
         output_file: Optional path to save the plot to. If not given, the plot is shown interactively.
 
     Returns:
@@ -278,7 +282,8 @@ def extract_and_plot_message_intervals(
     """
     if message_type:
         extracted_data = extract_mcap_data(
-            mcap_path, [topic], field_extractors={topic: lambda msg: msg.message_type}
+            mcap_path, [topic], start_time=start_time, end_time=end_time,
+            field_extractors={topic: lambda msg: msg.message_type}
         )
         timestamps, message_types = extracted_data[topic]
         timestamps = np.array(timestamps)[np.array(message_types) == message_type]
@@ -286,7 +291,7 @@ def extract_and_plot_message_intervals(
             raise ValueError(f"Insufficient '{message_type}' messages on topic {topic} to compute intervals")
         title = f"Time Between Messages - {topic} ({message_type})"
     else:
-        extracted_data = extract_mcap_data(mcap_path, [topic])
+        extracted_data = extract_mcap_data(mcap_path, [topic], start_time=start_time, end_time=end_time)
         timestamps, _ = extracted_data[topic]
         title = f"Time Between Messages - {topic}"
 
