@@ -426,7 +426,12 @@ def _decode_sdsm_object_detections(mcap_path, start_time=None, end_time=None):
         Tuple containing:
         - object_ids: Array of detected_id.object_id values, one per detected object instance
         - object_times_sec: Array of each object's absolute detection time (epoch seconds)
+        - global_start_time_ns: Recording start time (ns since epoch), for placing other time
+            sources (e.g. a Kafka log's absolute timestamps) on the same time base
+        - msg_times_sec: Array of each SDSM message's receipt time (epoch seconds)
     """
+    _, _, global_start_time_ns = open_bagfile(str(mcap_path))
+
     extracted_data = extract_mcap_data(
         mcap_path,
         [INCOMING_SDSM_TOPIC],
@@ -445,7 +450,8 @@ def _decode_sdsm_object_detections(mcap_path, start_time=None, end_time=None):
             ),
         },
     )
-    _, extracted_data = extracted_data[INCOMING_SDSM_TOPIC]
+    msg_times_sec, extracted_data = extracted_data[INCOMING_SDSM_TOPIC]
+    msg_times_sec = (msg_times_sec * 1e9 + global_start_time_ns) / 1e9
 
     sdsm_year = extracted_data[:, 0].astype(int)
     sdsm_month = extracted_data[:, 1].astype(int)
@@ -472,7 +478,7 @@ def _decode_sdsm_object_detections(mcap_path, start_time=None, end_time=None):
             object_ids.append(common_data.detected_id.object_id)
             object_times_sec.append(msg_time_sec + common_data.measurement_time.measurement_time_offset * 1e-3)
 
-    return np.array(object_ids), np.array(object_times_sec)
+    return np.array(object_ids), np.array(object_times_sec), global_start_time_ns, msg_times_sec
 
 
 def _match_detections_to_sdsm(raw_times_sec, sdsm_times_sec, match_tolerance_sec):
@@ -559,14 +565,14 @@ def run_sdsm_detection_drop_rate_analysis(
     """
     plt.close('all')
 
-    sdsm_object_ids, sdsm_object_times_sec = _decode_sdsm_object_detections(mcap_path, start_time, end_time)
+    sdsm_object_ids, sdsm_object_times_sec, _, msg_times_sec = _decode_sdsm_object_detections(
+        mcap_path, start_time, end_time
+    )
 
-    # Bound raw detections to this mcap's recording window (a Kafka log is often a running
-    # record spanning many separate recordings/days).
-    _, _, global_start_time_ns = open_bagfile(str(mcap_path))
-    topic_timestamps_sec, _ = extract_mcap_data(mcap_path, [INCOMING_SDSM_TOPIC])[INCOMING_SDSM_TOPIC]
-    recording_start_sec = (np.min(topic_timestamps_sec) * 1e9 + global_start_time_ns) / 1e9
-    recording_end_sec = (np.max(topic_timestamps_sec) * 1e9 + global_start_time_ns) / 1e9
+    # Bound raw detections to this mcap's (possibly start_time/end_time restricted) analysis
+    # window - a Kafka log is often a running record spanning many separate recordings/days.
+    recording_start_sec = np.min(msg_times_sec)
+    recording_end_sec = np.max(msg_times_sec)
 
     detection_records = parse_kafka_log_records(detection_log_path)
     raw_object_ids = []
@@ -642,7 +648,7 @@ def run_sdsm_detection_drop_rate_analysis(
             "x", color="red", markersize=6, label=f"Dropped ({total_dropped})"
         )
     ax.set_title(f"CP-02: Raw Detection to SDSM Match Status (Drop Rate: {drop_rate_pct:.2f}%)")
-    ax.set_xlabel(TIME_SECONDS_LABEL_STRING if "TIME_SECONDS_LABEL_STRING" in dir() else "Time (seconds)")
+    ax.set_xlabel("Time (seconds)")
     ax.set_yticks([])
     ax.grid(True, alpha=0.3)
     ax.legend(loc="upper right")
