@@ -53,7 +53,7 @@ python3 measurement_time_metric.py  --csv-dir sdsm_kafka_30HZ_R1  --plots-dir sd
 ```
 ![Alt text](docs/measurement_time_metric.png)
 
-## Detection Drop Characterization
+## CP-01 Detection Drop Characterization
 The `detection_drop_characterization.py` script characterizes how many detection frames were dropped on the detected object Kafka topic (`v2xhub_sim_sensor_detected_object`) while a pedestrian stood in the detection zone for a known duration. Recorded entry times only need to be approximate: each run's window starts at the first detection at or after its entry time and spans that run's duration. Unique frames received in the window are compared against `duration * rate` expected frames. The script writes a per-run CSV and a plot of each run's drop percentage and where in the run frames were dropped.
 
 Record entry times early rather than late: a late entry time starts the window mid-run, so frames expected after the pedestrian actually left are counted as dropped.

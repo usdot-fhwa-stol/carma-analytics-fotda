@@ -130,6 +130,7 @@ def plot_message_intervals(
     max_view_sec=0.5,
     detection_timestamps=None,
     output_file=None,
+    ax=None,
 ):
     """
     Plots the number of seconds between consecutive message timestamps, highlighting
@@ -148,6 +149,8 @@ def plot_message_intervals(
             large message interval coincides with there simply being nothing detected to report, rather
             than a missed/dropped message.
         output_file: Optional path to save the plot to. If not given, the plot is shown interactively.
+        ax: Optional matplotlib Axes to draw into (e.g. one panel of a combined figure). When given,
+            the caller owns the figure's layout and saving, so output_file is ignored.
 
     Returns:
         Tuple containing:
@@ -164,7 +167,11 @@ def plot_message_intervals(
     interval_lower_bound = expected_interval_sec * (1 - interval_tolerance_pct)
     interval_upper_bound = expected_interval_sec * (1 + interval_tolerance_pct)
 
-    fig, ax = plt.subplots(figsize=(12, 5))
+    own_figure = ax is None
+    if own_figure:
+        fig, ax = plt.subplots(figsize=(12, 5))
+    else:
+        fig = ax.figure
 
     over_max_view = np.flatnonzero(intervals > max_view_sec)
     for i, idx in enumerate(over_max_view):
@@ -216,7 +223,8 @@ def plot_message_intervals(
     ax.set_ylim(0, max_view_sec)
     ax.grid(True, alpha=0.3)
     ax.legend()
-    plt.tight_layout()
+    if own_figure:
+        fig.tight_layout()
 
     stats = calculate_error_statistics(intervals)
     print_stats(stats, f"{title} Interval Statistics (seconds)")
@@ -231,11 +239,12 @@ def plot_message_intervals(
         f"{intervals_within_tolerance}/{len(intervals)} ({percentage_within_tolerance:.1f}%)"
     )
 
-    if output_file:
-        plt.savefig(output_file, dpi=300)
-        print(f"Plot saved to: {output_file}")
-    else:
-        plt.show()
+    if own_figure:
+        if output_file:
+            fig.savefig(output_file, dpi=300)
+            print(f"Plot saved to: {output_file}")
+        else:
+            plt.show()
 
     return fig, timestamps, intervals
 
@@ -251,6 +260,7 @@ def extract_and_plot_message_intervals(
     start_time=None,
     end_time=None,
     output_file=None,
+    ax=None,
 ):
     """
     Extracts message timestamps for a topic from an MCAP file and plots the seconds
@@ -273,6 +283,8 @@ def extract_and_plot_message_intervals(
         start_time: Time to start the analysis (seconds from start of recording)
         end_time: Time to end the analysis (seconds from start of recording)
         output_file: Optional path to save the plot to. If not given, the plot is shown interactively.
+        ax: Optional matplotlib Axes to draw into (e.g. one panel of a combined figure). When given,
+            the caller owns the figure's layout and saving, so output_file is ignored.
 
     Returns:
         Tuple containing:
@@ -319,6 +331,7 @@ def extract_and_plot_message_intervals(
         interval_tolerance_pct=interval_tolerance_pct,
         detection_timestamps=detection_timestamps,
         output_file=output_file,
+        ax=ax,
     )
 
 

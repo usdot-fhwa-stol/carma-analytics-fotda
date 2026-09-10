@@ -4,10 +4,16 @@ import json
 import sys
 
 import argcomplete
+from matplotlib import pyplot as plt
 
 from run_all_analysis import run_all_analysis
 from message_scripts import plot_message_time_intervals, INCOMING_SDSM_TOPIC
-from carma_cooperative_perception_scripts import run_sdsm_detection_drop_rate_analysis
+from carma_cooperative_perception_scripts import (
+    DETECTION_TO_SDSM_RECEIPT_LATENCY_THRESHOLD_IN_S,
+    run_sdsm_latency_analysis,
+    run_sdsm_detection_drop_rate_analysis,
+    run_rsu_sdsm_transmission_drop_rate_analysis,
+)
 from guidance_scripts import get_engage_time
 
 # carma-streets is a hyphenated directory, not an importable package
@@ -21,6 +27,10 @@ from sdsm_location_spoofing_verification import verify_location_spoofing
 DETECTION_LOG_PATH = Path(
     "/workspaces/carma_ws/src/data-verification-initial/dth-flir-camera-laptop-kafka-logs/v2xhub_sim_sensor_detected_object_kafka.log"
 )
+
+# CP-03: RSU captures of the session's SDSM broadcasts. Every pcap is checked against every MCAP - each
+# MCAP only uses the broadcasts that fall within its own analysis window.
+RSU_PCAP_DIR = Path("/workspaces/carma_ws/src/data-verification-initial/rsu-files")
 
 # CP-01: manually recorded pedestrian entry times (one per run, America/New_York) and how long
 # the pedestrian stayed in the detection zone for each run (not exit - entry, which includes walking
@@ -41,6 +51,11 @@ CS03_MCAP_PATH = Path(
 )
 CS03_OUTPUT_SUBDIR = "cs03_sdsm_location_spoofing"
 
+# CP-helper (SDSM message intervals), CP-02 (detection match status) and CP-03 (RSU broadcast receipt status)
+# are drawn as panels of one figure sharing a time axis, so SDSM interval gaps line up exactly with dropped
+# detections and dropped RSU transmissions.
+CP_HELPER_CP02_CP03_PLOT_NAME = "cp_helper_cp02_cp03_combined.png"
+
 
 def analyze_mcap_file_for_dt_wz_analysis(
     mcap_path: Path, output_dir: Path, stats_dir: Path, data_dir: Path, plots_dir: Path
@@ -53,6 +68,9 @@ def analyze_mcap_file_for_dt_wz_analysis(
         return None
 
     analysis_stats = {}
+    fig, (interval_ax, drop_rate_ax, transmission_ax) = plt.subplots(
+        3, 1, sharex=True, figsize=(12, 12), gridspec_kw={"height_ratios": [5, 3, 3]}
+    )
 
     # CP-helper: SDSM message interval plot, shaded with raw-detection gaps for context
     try:
@@ -62,7 +80,7 @@ def analyze_mcap_file_for_dt_wz_analysis(
             detection_log_path=DETECTION_LOG_PATH,
             start_time=engage_time,
             end_time=disengage_time,
-            save_plot_dir=plots_dir,
+            ax=interval_ax,
         )
         analysis_stats["CP_helper_sdsm_message_intervals"] = True
     except Exception as e:
@@ -78,12 +96,59 @@ def analyze_mcap_file_for_dt_wz_analysis(
             end_time=disengage_time,
             save_stats_dir=stats_dir,
             save_data_dir=data_dir,
-            save_plot_dir=plots_dir,
+            ax=drop_rate_ax,
         )
         analysis_stats["CP02_sdsm_detection_drop_rate"] = is_passed
     except Exception as e:
         print(f"Error analyzing {mcap_path} for metric CP02_sdsm_detection_drop_rate: {e}")
         analysis_stats["CP02_sdsm_detection_drop_rate"] = None
+
+    # CP-03: SDSMs broadcast by the RSU but never received by CARMA Platform should be less than 2%
+    try:
+        is_passed, _, _ = run_rsu_sdsm_transmission_drop_rate_analysis(
+            mcap_path=mcap_path,
+            rsu_pcap_paths=sorted(RSU_PCAP_DIR.glob("*.pcap")),
+            start_time=engage_time,
+            end_time=disengage_time,
+            save_stats_dir=stats_dir,
+            ax=transmission_ax,
+        )
+        analysis_stats["CP03_rsu_sdsm_transmission_drop_rate"] = is_passed
+    except Exception as e:
+        print(f"Error analyzing {mcap_path} for metric CP03_rsu_sdsm_transmission_drop_rate: {e}")
+        analysis_stats["CP03_rsu_sdsm_transmission_drop_rate"] = None
+
+    # DT-05: Median latency from object detection until CARMA Platform receives it in an SDSM should be < 0.2 s
+    try:
+        is_passed, _, _, _ = run_sdsm_latency_analysis(
+            mcap_path,
+            error_threshold_to_pass_seconds=DETECTION_TO_SDSM_RECEIPT_LATENCY_THRESHOLD_IN_S,
+            start_time=engage_time,
+            end_time=disengage_time,
+            save_stats_dir=stats_dir,
+            save_data_dir=data_dir,
+            save_plot_dir=plots_dir,
+        )
+        analysis_stats["DT05_detection_to_sdsm_receipt_latency"] = bool(is_passed)
+    except Exception as e:
+        print(f"Error analyzing {mcap_path} for metric DT05_detection_to_sdsm_receipt_latency: {e}")
+        analysis_stats["DT05_detection_to_sdsm_receipt_latency"] = None
+
+    # plot_message_time_intervals is generic across topics, so name what this panel shows here
+    interval_ax.set_title(
+        "CP-helper: SDSM Receive Intervals on CARMA Platform (/message/incoming_sdsm)\n"
+        "Shaded green: no FLIR detection in the v2xhub_sim_sensor_detected_object Kafka log",
+        pad=20,
+    )
+    interval_ax.set_ylabel("Time Since Previous SDSM Received (s)")
+    # The shared x-axis is labeled once, under the bottom panel
+    interval_ax.set_xlabel("")
+    drop_rate_ax.set_xlabel("")
+    transmission_ax.set_xlabel("Time Since Start of Recording (seconds)")
+    fig.tight_layout()
+    fig.savefig(plots_dir / CP_HELPER_CP02_CP03_PLOT_NAME, dpi=300)
+    plt.close(fig)
+    print(f"Combined CP-helper/CP-02/CP-03 plot saved to: {plots_dir / CP_HELPER_CP02_CP03_PLOT_NAME}")
 
     return [analysis_stats]
 
@@ -96,6 +161,7 @@ def run_session_analysis(output_dir: Path) -> None:
       (characterization only)
     - CS-03: SDSMs received in one run should place the spoofed pedestrian at the reference
       (mean position error < 0.2 m, mean heading error < 1 deg)
+    - CP-03 total: the per-MCAP RSU SDSM transmission drop counts pooled into one session drop rate
     """
     session_metrics = {}
 
@@ -139,13 +205,32 @@ def run_session_analysis(output_dir: Path) -> None:
         print(f"Error analyzing metric CS03_sdsm_location_spoofing: {e}")
         session_metrics["CS03_sdsm_location_spoofing"] = None
 
+    # CP-03 pooled over every MCAP's RSU SDSM broadcasts, for the session's overall transmission drop rate
+    cp03_stats = [
+        json.loads(stats_path.read_text())
+        for stats_path in sorted(output_dir.glob("*/stats/rsu_sdsm_transmission_drop_rate.json"))
+    ]
+    if cp03_stats:
+        checked = sum(stats["total_broadcasts_checked"] for stats in cp03_stats)
+        dropped = sum(stats["total_dropped"] for stats in cp03_stats)
+        session_metrics["CP03_rsu_sdsm_transmission_drop_rate"] = {
+            "mcaps": len(cp03_stats),
+            "broadcasts_checked": checked,
+            "received": sum(stats["total_received"] for stats in cp03_stats),
+            "received_late": sum(stats["total_received_late"] for stats in cp03_stats),
+            "dropped": dropped,
+            "drop_rate": f"{dropped / checked * 100:.2f}%",
+        }
+        print(f"CP-03 session drop rate: {dropped}/{checked} RSU SDSM broadcasts not received "
+              f"({dropped / checked * 100:.2f}%) across {len(cp03_stats)} MCAPs")
+
     summary_path = output_dir / "analysis_summary.json"
     with open(summary_path) as f:
         summary = json.load(f)
     summary["session_metrics"] = session_metrics
     with open(summary_path, "w") as f:
         json.dump(summary, f, indent=2)
-    print(f"Session metrics (CP-01, CS-03) added to: {summary_path}")
+    print(f"Session metrics (CP-01, CS-03, CP-03 total) added to: {summary_path}")
 
 
 if __name__ == "__main__":

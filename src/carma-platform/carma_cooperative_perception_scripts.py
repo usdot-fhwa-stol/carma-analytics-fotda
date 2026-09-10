@@ -1,4 +1,6 @@
+from functools import lru_cache
 from pathlib import Path
+import sys
 from typing import Dict
 from run_all_analysis import run_all_analysis
 import argparse
@@ -20,12 +22,22 @@ INCOMING_MESSAGE_TOPIC = "/hardware_interface/comms/inbound_binary_msg"
 INCOMING_SDSM_TOPIC = "/message/incoming_sdsm"
 FUSED_SDSM_OBJECTS_TOPIC = "/environment/fused_external_objects"
 
+# DT-05: Median latency from object detection (by the infrastructure sensor) to CARMA Platform receiving it
+# in an SDSM should be less than 0.2 s
+DETECTION_TO_SDSM_RECEIPT_LATENCY_THRESHOLD_IN_S = 0.2
+
 # CP-02: Raw detection to SDSM drop rate should be less than 2%
 SDSM_DROP_RATE_THRESHOLD_PCT = 2.0
 # Object times are decoded to within ~1ms (sdsm_time_stamp only carries millisecond
 # resolution), so a real match lands well inside this; anything wider risks bridging over
 # a genuine drop (raw detections are ~100ms apart in the sample data).
 SDSM_DROP_RATE_MATCH_TOLERANCE_IN_S = 0.05
+
+# CP-03: SDSMs broadcast by the RSU (RSU pcap) that CARMA Platform never receives
+# (/hardware_interface/comms/inbound_binary_msg) should be less than 2%
+RSU_SDSM_TRANSMISSION_DROP_RATE_THRESHOLD_PCT = 2.0
+# pcap <-> mcap correlator (correlate_pcap_mcap.py) - j2735-pcap is a hyphenated directory, not a package
+J2735_PCAP_TOOLS_DIR = Path(__file__).resolve().parent.parent / "j2735-pcap"
 
 
 
@@ -95,7 +107,14 @@ def run_sdsm_latency_analysis(
     save_plot_dir=None,
 ):
     """
-    Analyzes latency between SDSM generation by infrastructure and receipt.
+    Analyzes latency from each object's detection by the infrastructure sensor until CARMA Platform receives
+    it in an SDSM (DT-05).
+
+    An SDSM object's detection time is its SDSM's sdsm_time_stamp minus the object's measurement_time_offset
+    (carma_v2x_msgs/MeasurementTimeOffset, already in seconds): the offset is how long before the SDSM was
+    generated that the object was detected. Receipt time is when INCOMING_SDSM_TOPIC was recorded on the
+    vehicle, so the latency spans the whole detection -> SDSM generation -> broadcast -> receipt pipeline, and
+    assumes the infrastructure and vehicle clocks are synchronized.
 
     Args:
         mcap_path: Path to MCAP file
@@ -153,7 +172,8 @@ def run_sdsm_latency_analysis(
         for y, m, d, h, mi, ms in zip(sdsm_year, sdsm_month, sdsm_day, sdsm_hour, sdsm_minute, sdsm_millisecond):
             dt = datetime(int(y), int(m), int(d), int(h), int(mi), int(ms // 1000), microsecond=(int(ms) % 1000) * 1000, tzinfo=timezone.utc)
             epoch_times.append(dt.timestamp())
-        epoch_times = np.array(epoch_times) * 1e9  + sdsm_offset*60*1e9 # Convert to nanoseconds
+        # DDateTime offset is the local time's offset from UTC in minutes, so subtract it to get UTC
+        epoch_times = np.array(epoch_times) * 1e9 - sdsm_offset*60*1e9 # Convert to nanoseconds
 
         incoming_object_timestamp_ns = []
         topic_timestamp_ns = []
@@ -162,9 +182,9 @@ def run_sdsm_latency_analysis(
             if len(objs) == 0:
                 print(f"Warning: SDSM message at {message_time} has no objects. Skipping.")
                 continue
-            # Calculate total timestamp for each object
+            # Detection time of each object: measurement_time_offset (s) is how long before the SDSM it was detected
             for obj in objs:
-                object_creation_time = encoded_msg_time + obj.detected_object_common_data.measurement_time.measurement_time_offset*1e6
+                object_creation_time = encoded_msg_time - obj.detected_object_common_data.measurement_time.measurement_time_offset*1e9
                 incoming_object_timestamp_ns.append(object_creation_time)
                 topic_timestamp_ns.append(message_time)
 
@@ -182,7 +202,7 @@ def run_sdsm_latency_analysis(
         stats = calculate_error_statistics(
             latency,
         )
-        print_stats(stats, "SDSM Latency Analysis",decimal_places = 10)
+        print_stats(stats, "DT-05: Detection to CARMA Platform SDSM Receipt Latency Analysis",decimal_places = 10)
 
         # Pass or no pass
         if threshold_percentile == None:
@@ -190,12 +210,14 @@ def run_sdsm_latency_analysis(
         elif threshold_percentile > 0:
             is_passed = np.percentile(latency, threshold_percentile) < error_threshold_to_pass_seconds
 
+        # Same x-axis as the other dt_wz plots: seconds since the MCAP recording started
+        _, _, global_start_time_ns = open_bagfile(str(mcap_path))
         plt.figure(figsize=(12,6))
-        plt.xlabel('Message Receipt Timestamp (s)')
+        plt.xlabel('Time Since Start of Recording (seconds)')
         plt.ylabel('Latency (s)')
-        plt.title('Latency vs Message Receipt Timestamp')
-        plt.plot(topic_timestamp_ns, latency, label="SDSM Receive Latency (s)", marker='o', color='blue', linestyle="solid", linewidth=2)
-        plt.axhline(y=error_threshold_to_pass_seconds, color='red', linestyle='dashed', label='Error Threshold',linewidth=2)
+        plt.title('DT-05: Latency from Object Detection to CARMA Platform SDSM Receipt')
+        plt.plot((topic_timestamp_ns - global_start_time_ns) / 1e9, latency, label="Detection to SDSM Receipt Latency (s)", marker='o', color='blue', linestyle="solid", linewidth=2)
+        plt.axhline(y=error_threshold_to_pass_seconds, color='red', linestyle='dashed', label=f'Threshold ({error_threshold_to_pass_seconds} s)',linewidth=2)
         plt.axhline(y=stats['mean'], color='green', linestyle='dotted', label='Mean Latency',linewidth=2)
         plt.axhline(y=stats['median'], color='orange', linestyle='dashdot', label='Median Latency',linewidth=2)
         plt.grid(True, alpha=0.3)
@@ -530,6 +552,7 @@ def run_sdsm_detection_drop_rate_analysis(
     save_stats_dir=None,
     save_data_dir=None,
     save_plot_dir=None,
+    ax=None,
 ):
     """
     CP-02: Verifies that fewer than max_drop_rate_pct of the raw object detections logged by
@@ -555,6 +578,8 @@ def run_sdsm_detection_drop_rate_analysis(
         save_stats_dir: Directory to save analysis stats
         save_data_dir: Directory to save extracted data
         save_plot_dir: Directory to save generated plots
+        ax: Optional matplotlib Axes to draw into (e.g. one panel of a combined figure). When given,
+            the caller owns the figure's layout and saving, so save_plot_dir is ignored.
 
     Returns:
         Tuple containing:
@@ -567,7 +592,9 @@ def run_sdsm_detection_drop_rate_analysis(
         Topics: [/message/incoming_sdsm]
         Msgs: carma_v2x_msgs/msg/SensorDataSharingMessage
     """
-    plt.close('all')
+    own_figure = ax is None
+    if own_figure:
+        plt.close('all')
 
     sdsm_object_ids, sdsm_object_times_sec, global_start_time_ns, msg_times_sec = _decode_sdsm_object_detections(
         mcap_path, start_time, end_time
@@ -622,7 +649,7 @@ def run_sdsm_detection_drop_rate_analysis(
     drop_rate_pct = (total_dropped / total_raw) * 100
     is_passed = bool(drop_rate_pct < max_drop_rate_pct)
 
-    print(f"\n=== CP-02: Raw Detection to SDSM Drop Rate Analysis ===")
+    print(f"\n=== CP-02: FLIR Detection to CARMA Platform SDSM Drop Rate Analysis ===")
     print(f"Total raw detections: {total_raw}")
     print(f"Matched to an SDSM broadcast: {total_matched}")
     print(f"Dropped (no matching SDSM detection): {total_dropped}")
@@ -644,22 +671,29 @@ def run_sdsm_detection_drop_rate_analysis(
     dropped_times_sec = np.array([t for _, t in dropped_detections])
     matched_times_sec = np.setdiff1d(raw_times_sec, dropped_times_sec)
 
-    fig, ax = plt.subplots(figsize=(12, 4))
+    if own_figure:
+        fig, ax = plt.subplots(figsize=(12, 4))
+    else:
+        fig = ax.figure
     ax.plot(
         matched_times_sec - recording_origin_sec, np.ones(len(matched_times_sec)),
-        ".", color="green", markersize=4, label=f"Matched to SDSM ({total_matched})"
+        ".", color="green", markersize=4, label=f"Received in SDSM ({total_matched})"
     )
     if len(dropped_times_sec) > 0:
         ax.plot(
             dropped_times_sec - recording_origin_sec, np.ones(len(dropped_times_sec)),
-            "x", color="red", markersize=6, label=f"Dropped ({total_dropped})"
+            "x", color="red", markersize=6, label=f"Not received ({total_dropped})"
         )
-    ax.set_title(f"CP-02: Raw Detection to SDSM Match Status (Drop Rate: {drop_rate_pct:.2f}%)")
+    ax.set_title(
+        "CP-02: FLIR Camera Detections Received as SDSM by CARMA Platform\n"
+        f"(end to end via V2X-Hub, TENA and RSU broadcast) - Drop Rate {drop_rate_pct:.2f}%"
+    )
     ax.set_xlabel("Time (seconds)")
     ax.set_yticks([])
     ax.grid(True, alpha=0.3)
     ax.legend(loc="upper right")
-    plt.tight_layout()
+    if own_figure:
+        fig.tight_layout()
 
     if save_stats_dir:
         save_stats_dir = Path(save_stats_dir)
@@ -681,15 +715,178 @@ def run_sdsm_detection_drop_rate_analysis(
         )
         print(f"Data saved to: {save_data_dir}")
 
-    if save_plot_dir:
-        save_plot_dir = Path(save_plot_dir)
-        save_plot_dir.mkdir(parents=True, exist_ok=True)
-        plt.savefig(save_plot_dir / "sdsm_detection_drop_rate_analysis.png", dpi=300)
-        print(f"Plot saved to: {save_plot_dir}")
-    else:
-        plt.show()
+    if own_figure:
+        if save_plot_dir:
+            save_plot_dir = Path(save_plot_dir)
+            save_plot_dir.mkdir(parents=True, exist_ok=True)
+            fig.savefig(save_plot_dir / "sdsm_detection_drop_rate_analysis.png", dpi=300)
+            print(f"Plot saved to: {save_plot_dir}")
+        else:
+            plt.show()
 
-    return is_passed, stats, plt.gcf(), np.array(dropped_detections, dtype=object)
+    return is_passed, stats, fig, np.array(dropped_detections, dtype=object)
+
+
+def _import_pcap_mcap_correlator():
+    """Import the j2735-pcap correlator modules on first use, so their extra dependencies
+    (tshark, pycrate, mcap, mcap_ros2) are only needed by analyses that use them."""
+    if str(J2735_PCAP_TOOLS_DIR) not in sys.path:
+        sys.path.insert(0, str(J2735_PCAP_TOOLS_DIR))
+    import correlate_j2735_latency
+    import correlate_pcap_mcap
+    return correlate_j2735_latency, correlate_pcap_mcap
+
+
+@lru_cache(maxsize=None)
+def _extract_rsu_sdsm_broadcasts(rsu_pcap_path):
+    """SDSMs an RSU broadcast (outgoing direction) in an RSU pcap, as correlator message dicts.
+    Cached since one session's RSU pcaps are checked against every MCAP in the session."""
+    pcap_base, _ = _import_pcap_mcap_correlator()
+    messages_by_direction, _ = pcap_base.extract_messages(rsu_pcap_path)
+    return tuple(
+        message for message in messages_by_direction["outgoing"]
+        if message["msg_type"] == "SDSM" and message["timestamp"] is not None
+    )
+
+
+def run_rsu_sdsm_transmission_drop_rate_analysis(
+    mcap_path,
+    rsu_pcap_paths,
+    max_drop_rate_pct=RSU_SDSM_TRANSMISSION_DROP_RATE_THRESHOLD_PCT,
+    start_time=None,
+    end_time=None,
+    save_stats_dir=None,
+    save_plot_dir=None,
+    ax=None,
+):
+    """
+    CP-03: Verifies that fewer than max_drop_rate_pct of the SDSMs broadcast by the RSU fail to be
+    received by CARMA Platform, i.e. the drop rate of the RSU -> OBU -> CARMA Platform transmission.
+
+    Uses the j2735-pcap correlator (correlate_pcap_mcap.py): the RSU pcap's outgoing SDSMs are matched
+    byte-for-byte against the J2735 SDSMs CARMA Platform received on INCOMING_MESSAGE_TOPIC, each to the
+    closest-in-time unconsumed identical payload within the correlator's match window. Broadcasts that
+    match nothing are dropped; matches later than the correlator's drop latency threshold (200 ms) are
+    counted as received late rather than dropped. Broadcasts outside the MCAP's recording window can't
+    be checked and are excluded.
+
+    Args:
+        mcap_path: Path to MCAP file containing INCOMING_MESSAGE_TOPIC
+        rsu_pcap_paths: RSU pcaps to take SDSM broadcasts from. Only broadcasts within this MCAP's analysis
+            window are used, so every RSU pcap in a session can be passed for every MCAP.
+        max_drop_rate_pct: Maximum allowed percentage of RSU SDSM broadcasts not received for the analysis to
+            pass (default: 2.0)
+        start_time: Time to start the analysis (seconds from start of recording)
+        end_time: Time to end the analysis (seconds from start of recording)
+        save_stats_dir: Directory to save analysis stats
+        save_plot_dir: Directory to save generated plots
+        ax: Optional matplotlib Axes to draw into (e.g. one panel of a combined figure). When given,
+            the caller owns the figure's layout and saving, so save_plot_dir is ignored.
+
+    Returns:
+        Tuple containing:
+        - is_passed: Boolean - True if the drop rate is below max_drop_rate_pct
+        - stats: Dictionary with drop rate and receive latency statistics
+        - figure: Matplotlib figure object
+
+    Deps:
+        Topics: [/hardware_interface/comms/inbound_binary_msg]
+        Msgs: carma_driver_msgs/msg/ByteArray
+        Tools: tshark, and the j2735-pcap requirements (pycrate, mcap, mcap-ros2-support)
+    """
+    pcap_base, pcap_mcap = _import_pcap_mcap_correlator()
+
+    # Same time origin as the other dt_wz plots' x-axis (seconds since the MCAP recording started)
+    _, _, global_start_time_ns = open_bagfile(str(mcap_path))
+    recording_origin_sec = global_start_time_ns / 1e9
+    window_start_sec = recording_origin_sec + start_time if start_time is not None else -np.inf
+    window_end_sec = recording_origin_sec + end_time if end_time is not None else np.inf
+
+    broadcasts = [
+        message
+        for rsu_pcap_path in rsu_pcap_paths
+        for message in _extract_rsu_sdsm_broadcasts(str(rsu_pcap_path))
+        if window_start_sec <= message["timestamp"] <= window_end_sec
+    ]
+    if not broadcasts:
+        raise ValueError(f"No RSU SDSM broadcasts in {[str(p) for p in rsu_pcap_paths]} within {mcap_path}'s analysis window")
+
+    received_messages = pcap_mcap.extract_mcap_binary_messages(mcap_path)["inbound"]
+    received, dropped, received_late, out_of_window = pcap_mcap.correlate_across_boundary(
+        broadcasts, received_messages, pcap_base.DROP_LATENCY_THRESHOLD_MS
+    )
+
+    total_checked = len(received) + len(received_late) + len(dropped)
+    if total_checked == 0:
+        raise ValueError(f"No RSU SDSM broadcasts fall within {mcap_path}'s recording window")
+    drop_rate_pct = len(dropped) / total_checked * 100
+    is_passed = bool(drop_rate_pct < max_drop_rate_pct)
+
+    print(f"\n=== CP-03: RSU SDSM Broadcast to CARMA Platform Receipt Drop Rate Analysis ===")
+    print(f"RSU SDSM broadcasts checked: {total_checked} "
+          f"(plus {len(out_of_window)} outside the mcap's recording window, not counted)")
+    print(f"Received by CARMA Platform: {len(received)}")
+    print(f"Received late (> {pcap_base.DROP_LATENCY_THRESHOLD_MS} ms): {len(received_late)}")
+    print(f"Dropped (never received): {len(dropped)}")
+    print(f"Drop rate: {drop_rate_pct:.2f}% (threshold: < {max_drop_rate_pct}%)")
+    print(f"Result: {'PASSED' if is_passed else 'FAILED'}")
+
+    stats = {
+        "rsu_pcaps": [str(p) for p in rsu_pcap_paths],
+        "total_broadcasts_checked": total_checked,
+        "total_received": len(received),
+        "total_received_late": len(received_late),
+        "total_dropped": len(dropped),
+        "total_outside_recording_window": len(out_of_window),
+        "drop_rate_pct": float(drop_rate_pct),
+        "max_drop_rate_pct": max_drop_rate_pct,
+        "late_threshold_ms": pcap_base.DROP_LATENCY_THRESHOLD_MS,
+        "receive_latency_ms": pcap_base.summarize(received) if received else None,
+        "is_passed": is_passed,
+    }
+
+    own_figure = ax is None
+    if own_figure:
+        fig, ax = plt.subplots(figsize=(12, 4))
+    else:
+        fig = ax.figure
+    for events, marker, color, markersize, label in (
+        (received, ".", "green", 4, f"Received ({len(received)})"),
+        (received_late, "^", "orange", 6, f"Received late > {pcap_base.DROP_LATENCY_THRESHOLD_MS} ms ({len(received_late)})"),
+        (dropped, "x", "red", 6, f"Not received ({len(dropped)})"),
+    ):
+        if events:
+            times = np.array([event[0] for event in events]) - recording_origin_sec
+            ax.plot(times, np.ones(len(times)), marker, color=color, markersize=markersize, linestyle="none", label=label)
+    ax.set_title(
+        "CP-03: SDSMs Broadcast by RSU Received by CARMA Platform\n"
+        f"(RSU pcap -> OBU -> {INCOMING_MESSAGE_TOPIC}) - Drop Rate {drop_rate_pct:.2f}%"
+    )
+    ax.set_xlabel("Time (seconds)")
+    ax.set_yticks([])
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="upper right")
+    if own_figure:
+        fig.tight_layout()
+
+    if save_stats_dir:
+        save_stats_dir = Path(save_stats_dir)
+        save_stats_dir.mkdir(parents=True, exist_ok=True)
+        stats_full_path = save_stats_dir / "rsu_sdsm_transmission_drop_rate.json"
+        with open(stats_full_path, "w") as f:
+            json.dump(stats, f, indent=2)
+        print(f"\nStats saved to: {stats_full_path}")
+
+    if own_figure:
+        if save_plot_dir:
+            save_plot_dir = Path(save_plot_dir)
+            save_plot_dir.mkdir(parents=True, exist_ok=True)
+            fig.savefig(save_plot_dir / "rsu_sdsm_transmission_drop_rate_analysis.png", dpi=300)
+            print(f"Plot saved to: {save_plot_dir}")
+        else:
+            plt.show()
+
+    return is_passed, stats, fig
 
 
 def detect_gap_ranges(timestamps, gap_threshold=0.1, buffer=0.00):

@@ -285,6 +285,7 @@ def plot_message_time_intervals(
     start_time=None,
     end_time=None,
     save_plot_dir=None,
+    ax=None,
 ):
     """
     Plots the number of seconds between consecutive messages on a given topic, highlighting
@@ -309,6 +310,8 @@ def plot_message_time_intervals(
         start_time: Time to start the analysis (seconds from start of recording)
         end_time: Time to end the analysis (seconds from start of recording)
         save_plot_dir: Directory to save generated plot (optional)
+        ax: Optional matplotlib Axes to draw into (e.g. one panel of a combined figure). When given,
+            the caller owns the figure's layout and saving, so save_plot_dir is ignored.
 
     Returns:
         Tuple containing:
@@ -336,6 +339,7 @@ def plot_message_time_intervals(
         start_time=start_time,
         end_time=end_time,
         output_file=output_file,
+        ax=ax,
     )
 
 def process_cc_logs_for_tcr_tcm_data(
