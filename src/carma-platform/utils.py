@@ -261,6 +261,7 @@ def extract_and_plot_message_intervals(
     end_time=None,
     output_file=None,
     ax=None,
+    max_view_sec=0.5,
 ):
     """
     Extracts message timestamps for a topic from an MCAP file and plots the seconds
@@ -285,6 +286,8 @@ def extract_and_plot_message_intervals(
         output_file: Optional path to save the plot to. If not given, the plot is shown interactively.
         ax: Optional matplotlib Axes to draw into (e.g. one panel of a combined figure). When given,
             the caller owns the figure's layout and saving, so output_file is ignored.
+        max_view_sec: Y-axis view limit in seconds; intervals (and detection gaps) beyond this are shaded
+            (default: 0.5)
 
     Returns:
         Tuple containing:
@@ -332,6 +335,7 @@ def extract_and_plot_message_intervals(
         detection_timestamps=detection_timestamps,
         output_file=output_file,
         ax=ax,
+        max_view_sec=max_view_sec,
     )
 
 

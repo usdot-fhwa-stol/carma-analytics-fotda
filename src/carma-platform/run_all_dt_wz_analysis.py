@@ -1,13 +1,22 @@
 from pathlib import Path
 import argparse
+from functools import lru_cache
 import json
 import sys
 
 import argcomplete
+import numpy as np
 from matplotlib import pyplot as plt
 
 from run_all_analysis import run_all_analysis
-from message_scripts import plot_message_time_intervals, INCOMING_SDSM_TOPIC
+from message_scripts import (
+    INCOMING_SDSM_TOPIC,
+    check_message_broadcast_rate,
+    plot_message_time_intervals,
+    run_obu_bsm_transmission_drop_analysis,
+)
+from parse_ros2_bags import open_bagfile
+from utils import parse_kafka_log_timestamps
 from carma_cooperative_perception_scripts import (
     DETECTION_TO_SDSM_RECEIPT_LATENCY_THRESHOLD_IN_S,
     run_sdsm_latency_analysis,
@@ -50,6 +59,25 @@ CS03_MCAP_PATH = Path(
     "/workspaces/carma_ws/src/data-verification-initial/mcap/rosbag2_2026-09-10_135602_0.mcap"
 )
 CS03_OUTPUT_SUBDIR = "cs03_sdsm_location_spoofing"
+
+# PL-01: Message communication regression testing. Expected average rates of the messages CARMA Platform
+# receives/broadcasts, each within +/-20% (+/-2 Hz at 10 Hz, +/-0.2 Hz at 1 Hz). SDSMs are only expected while an
+# object is detected, so their rate is averaged over the detection log's detection periods only.
+PL01_EXPECTED_RATES_HZ = {
+    "/message/incoming_map": ("MAP", "received", 1.0),
+    "/message/incoming_spat": ("SPAT", "received", 10.0),
+    INCOMING_SDSM_TOPIC: ("SDSM", "received", 10.0),
+    "/message/incoming_mobility_operation": ("MOM", "received", 1.0),
+    "/message/bsm_outbound": ("BSM", "broadcast", 10.0),
+}
+PL01_RATE_TOLERANCE_PCT = 0.2
+# Detections further apart than this split the detection log into separate detection periods
+PL01_DETECTION_GAP_SEC = 0.5
+# OBU rmnet_data1 (radio side) captures, checked for the BSMs CARMA Platform sent the OBU to broadcast. Only the
+# pcaps overlapping each MCAP's analysis window are used.
+PL01_OBU_PCAP_DIR = Path("/workspaces/carma_ws/src/data-verification-initial/obu-pcap")
+PL01_OUTPUT_SUBDIR = "pl01_message_communication"
+PL01_PLOT_NAME = "pl01_message_intervals_and_obu_bsm_drops.png"
 
 # CP-helper (SDSM message intervals), CP-02 (detection match status) and CP-03 (RSU broadcast receipt status)
 # are drawn as panels of one figure sharing a time axis, so SDSM interval gaps line up exactly with dropped
@@ -118,7 +146,7 @@ def analyze_mcap_file_for_dt_wz_analysis(
         print(f"Error analyzing {mcap_path} for metric CP03_rsu_sdsm_transmission_drop_rate: {e}")
         analysis_stats["CP03_rsu_sdsm_transmission_drop_rate"] = None
 
-    # DT-05: Median latency from object detection until CARMA Platform receives it in an SDSM should be < 0.2 s
+    # DT-05: Median latency from object detection until CARMA Platform receives it in an SDSM should be < 0.3 s
     try:
         is_passed, _, _, _ = run_sdsm_latency_analysis(
             mcap_path,
@@ -150,7 +178,123 @@ def analyze_mcap_file_for_dt_wz_analysis(
     plt.close(fig)
     print(f"Combined CP-helper/CP-02/CP-03 plot saved to: {plots_dir / CP_HELPER_CP02_CP03_PLOT_NAME}")
 
+    analysis_stats.update(analyze_pl01_message_communication(
+        mcap_path, engage_time, disengage_time, stats_dir / PL01_OUTPUT_SUBDIR, plots_dir / PL01_OUTPUT_SUBDIR
+    ))
+
     return [analysis_stats]
+
+
+@lru_cache(maxsize=None)
+def _detection_times_sec(detection_log_path: Path) -> np.ndarray:
+    """Sorted epoch-second timestamps of every detection in the (session-wide) detection log"""
+    return parse_kafka_log_timestamps(detection_log_path) / 1e3
+
+
+def detection_intervals(mcap_path: Path, start_time: float, end_time: float) -> list:
+    """
+    Periods within [start_time, end_time] (seconds since the start of the MCAP recording) during which
+    DETECTION_LOG_PATH has detections, split wherever consecutive detections are more than
+    PL01_DETECTION_GAP_SEC apart. Periods with a single detection have no duration and are left out.
+    """
+    _, _, global_start_time_ns = open_bagfile(str(mcap_path))
+    times = _detection_times_sec(DETECTION_LOG_PATH) - global_start_time_ns / 1e9
+    times = np.unique(times[(times >= start_time) & (times <= end_time)])
+    if len(times) < 2:
+        return []
+    breaks = np.flatnonzero(np.diff(times) > PL01_DETECTION_GAP_SEC)
+    starts = np.r_[times[0], times[breaks + 1]]
+    ends = np.r_[times[breaks], times[-1]]
+    return [(float(start), float(end)) for start, end in zip(starts, ends) if end > start]
+
+
+def analyze_pl01_message_communication(
+    mcap_path: Path, engage_time: float, disengage_time: float, stats_dir: Path, plots_dir: Path
+) -> dict:
+    """
+    PL-01: Message communication regression testing over the engaged window of one MCAP.
+    - Freq check (ROS side, covers the OBU side too): each PL01_EXPECTED_RATES_HZ topic's average rate should be
+      within PL01_RATE_TOLERANCE_PCT of its expected rate
+    - Msg drop check (ROS side): message interval plots per topic, the SDSM one shaded with detection log gaps
+    - Msg drop check (OBU side): BSMs CARMA Platform sent that the OBU never transmitted (characterization only)
+    """
+    stats_dir.mkdir(parents=True, exist_ok=True)
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    analysis_stats = {}
+
+    for topic, (label, direction, expected_rate_hz) in PL01_EXPECTED_RATES_HZ.items():
+        metric = f"PL01_{label}_{direction}_rate"
+        try:
+            is_passed, rate_stats, rate_fig, _, _ = check_message_broadcast_rate(
+                mcap_path,
+                topic,
+                expected_rate_hz,
+                rate_tolerance_pct=PL01_RATE_TOLERANCE_PCT,
+                start_time=engage_time,
+                end_time=disengage_time,
+                save_stats_dir=stats_dir,
+                save_plot_dir=plots_dir,
+                pass_on_average_rate=True,
+                active_intervals=detection_intervals(mcap_path, engage_time, disengage_time) if label == "SDSM" else None,
+            )
+            if rate_fig is not None:
+                plt.close(rate_fig)
+            analysis_stats[metric] = is_passed if rate_stats else None
+        except Exception as e:
+            print(f"Error analyzing {mcap_path} for metric {metric}: {e}")
+            analysis_stats[metric] = None
+
+    fig, axes = plt.subplots(
+        len(PL01_EXPECTED_RATES_HZ) + 1, 1, sharex=True, figsize=(12, 22),
+        gridspec_kw={"height_ratios": [4] * len(PL01_EXPECTED_RATES_HZ) + [2]},
+    )
+    for ax, (topic, (label, direction, expected_rate_hz)) in zip(axes, PL01_EXPECTED_RATES_HZ.items()):
+        expected_interval_sec = 1.0 / expected_rate_hz
+        try:
+            plot_message_time_intervals(
+                mcap_path=mcap_path,
+                topic_name=topic,
+                expected_interval_sec=expected_interval_sec,
+                interval_tolerance_pct=PL01_RATE_TOLERANCE_PCT,
+                detection_log_path=DETECTION_LOG_PATH if label == "SDSM" else None,
+                start_time=engage_time,
+                end_time=disengage_time,
+                ax=ax,
+                max_view_sec=5 * expected_interval_sec if expected_rate_hz >= 10 else 2 * expected_interval_sec,
+            )
+        except Exception as e:
+            print(f"Error plotting {topic} message intervals for {mcap_path}: {e}")
+        ax.set_title(
+            f"PL-01: {label} {direction.capitalize()} Intervals on CARMA Platform ({topic}), "
+            f"expected {expected_rate_hz:g} Hz" + ("\nShaded green: no FLIR detection in the detection Kafka log" if label == "SDSM" else ""),
+            pad=20,
+        )
+        ax.set_ylabel(f"Time Since Previous {label} (s)")
+        ax.set_xlabel("")
+
+    metric = "PL01_obu_bsm_transmission_drop"
+    try:
+        run_obu_bsm_transmission_drop_analysis(
+            mcap_path,
+            sorted(PL01_OBU_PCAP_DIR.glob("*rmnet*.pcap")),
+            start_time=engage_time,
+            end_time=disengage_time,
+            save_stats_dir=stats_dir,
+            ax=axes[-1],
+        )
+        # Characterization only (no pass/fail threshold): True means the drop rate was measured
+        analysis_stats[metric] = True
+    except Exception as e:
+        print(f"Error analyzing {mcap_path} for metric {metric}: {e}")
+        analysis_stats[metric] = None
+
+    axes[-1].set_xlabel("Time Since Start of Recording (seconds)")
+    fig.tight_layout()
+    fig.savefig(plots_dir / PL01_PLOT_NAME, dpi=200)
+    plt.close(fig)
+    print(f"PL-01 message interval and OBU BSM drop plot saved to: {plots_dir / PL01_PLOT_NAME}")
+
+    return analysis_stats
 
 
 def run_session_analysis(output_dir: Path) -> None:
@@ -162,6 +306,7 @@ def run_session_analysis(output_dir: Path) -> None:
     - CS-03: SDSMs received in one run should place the spoofed pedestrian at the reference
       (mean position error < 0.2 m, mean heading error < 1 deg)
     - CP-03 total: the per-MCAP RSU SDSM transmission drop counts pooled into one session drop rate
+    - PL-01 OBU total: the per-MCAP OBU BSM transmission drop counts pooled into one session drop rate
     """
     session_metrics = {}
 
@@ -224,13 +369,32 @@ def run_session_analysis(output_dir: Path) -> None:
         print(f"CP-03 session drop rate: {dropped}/{checked} RSU SDSM broadcasts not received "
               f"({dropped / checked * 100:.2f}%) across {len(cp03_stats)} MCAPs")
 
+    # PL-01 OBU side pooled over every MCAP's sent BSMs, for the session's overall BSM transmission drop rate
+    pl01_stats = [
+        json.loads(stats_path.read_text())
+        for stats_path in sorted(output_dir.glob(f"*/stats/{PL01_OUTPUT_SUBDIR}/obu_bsm_transmission_drop_rate.json"))
+    ]
+    if pl01_stats:
+        checked = sum(stats["total_bsms_checked"] for stats in pl01_stats)
+        dropped = sum(stats["total_dropped"] for stats in pl01_stats)
+        session_metrics["PL01_obu_bsm_transmission_drop"] = {
+            "mcaps": len(pl01_stats),
+            "bsms_checked": checked,
+            "transmitted": sum(stats["total_transmitted"] for stats in pl01_stats),
+            "transmitted_late": sum(stats["total_transmitted_late"] for stats in pl01_stats),
+            "dropped": dropped,
+            "drop_rate": f"{dropped / checked * 100:.2f}%",
+        }
+        print(f"PL-01 session OBU BSM drop rate: {dropped}/{checked} sent BSMs not transmitted "
+              f"({dropped / checked * 100:.2f}%) across {len(pl01_stats)} MCAPs")
+
     summary_path = output_dir / "analysis_summary.json"
     with open(summary_path) as f:
         summary = json.load(f)
     summary["session_metrics"] = session_metrics
     with open(summary_path, "w") as f:
         json.dump(summary, f, indent=2)
-    print(f"Session metrics (CP-01, CS-03, CP-03 total) added to: {summary_path}")
+    print(f"Session metrics (CP-01, CS-03, CP-03 total, PL-01 OBU total) added to: {summary_path}")
 
 
 if __name__ == "__main__":

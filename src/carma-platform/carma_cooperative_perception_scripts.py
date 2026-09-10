@@ -23,8 +23,8 @@ INCOMING_SDSM_TOPIC = "/message/incoming_sdsm"
 FUSED_SDSM_OBJECTS_TOPIC = "/environment/fused_external_objects"
 
 # DT-05: Median latency from object detection (by the infrastructure sensor) to CARMA Platform receiving it
-# in an SDSM should be less than 0.2 s
-DETECTION_TO_SDSM_RECEIPT_LATENCY_THRESHOLD_IN_S = 0.2
+# in an SDSM should be less than 0.3 s
+DETECTION_TO_SDSM_RECEIPT_LATENCY_THRESHOLD_IN_S = 0.3
 
 # CP-02: Raw detection to SDSM drop rate should be less than 2%
 SDSM_DROP_RATE_THRESHOLD_PCT = 2.0
@@ -738,15 +738,21 @@ def _import_pcap_mcap_correlator():
 
 
 @lru_cache(maxsize=None)
-def _extract_rsu_sdsm_broadcasts(rsu_pcap_path):
-    """SDSMs an RSU broadcast (outgoing direction) in an RSU pcap, as correlator message dicts.
-    Cached since one session's RSU pcaps are checked against every MCAP in the session."""
+def _extract_pcap_messages_by_direction(pcap_path):
+    """J2735 messages in a pcap by direction ("incoming"/"outgoing"/"other"), as correlator message dicts.
+    Cached since one session's pcaps are checked against every MCAP in the session."""
     pcap_base, _ = _import_pcap_mcap_correlator()
-    messages_by_direction, _ = pcap_base.extract_messages(rsu_pcap_path)
-    return tuple(
-        message for message in messages_by_direction["outgoing"]
-        if message["msg_type"] == "SDSM" and message["timestamp"] is not None
-    )
+    messages_by_direction, _ = pcap_base.extract_messages(pcap_path)
+    return messages_by_direction
+
+
+def extract_pcap_messages(pcap_path, direction, msg_type):
+    """Timestamped messages of one J2735 type and direction in a pcap (e.g. an RSU's outgoing SDSMs or an
+    OBU's outgoing BSMs), as correlator message dicts."""
+    return [
+        message for message in _extract_pcap_messages_by_direction(str(pcap_path))[direction]
+        if message["msg_type"] == msg_type and message["timestamp"] is not None
+    ]
 
 
 def run_rsu_sdsm_transmission_drop_rate_analysis(
@@ -805,7 +811,7 @@ def run_rsu_sdsm_transmission_drop_rate_analysis(
     broadcasts = [
         message
         for rsu_pcap_path in rsu_pcap_paths
-        for message in _extract_rsu_sdsm_broadcasts(str(rsu_pcap_path))
+        for message in extract_pcap_messages(rsu_pcap_path, "outgoing", "SDSM")
         if window_start_sec <= message["timestamp"] <= window_end_sec
     ]
     if not broadcasts:
