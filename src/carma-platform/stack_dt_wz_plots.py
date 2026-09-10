@@ -1,9 +1,14 @@
 from pathlib import Path
 import argparse
 import os
+import sys
 
 import argcomplete
 from PIL import Image
+
+# carma-streets is a hyphenated directory, not an importable package
+sys.path.append(str(Path(__file__).resolve().parent.parent / "carma-streets"))
+from detection_drop_characterization import characterize_detection_drops
 
 # The two per-mcap plots produced by run_all_dt_wz_analysis.py (CP01, CP02) that this script
 # stacks together so gaps in the interval plot (CP01) can be visually compared against
@@ -11,6 +16,30 @@ from PIL import Image
 CP01_INTERVAL_PLOT_NAME = "_message_incoming_sdsm_message_intervals.png"
 CP02_DROP_RATE_PLOT_NAME = "sdsm_detection_drop_rate_analysis.png"
 STACKED_PLOT_NAME = "cp01_cp02_stacked.png"
+
+# CP01-1: manually recorded pedestrian entry times (one per run, America/New_York) and how long
+# the pedestrian stayed in the detection zone for each run. The entry times below are dummies
+# picked from detection bursts in the sample log - replace them with the recorded times.
+CP01_1_DETECTION_LOG_PATH = Path(
+    "/workspaces/carma_ws/src/data/kafka-logs/v2xhub_sim_sensor_detected_object_kafka.log"
+)
+CP01_1_RUN_ENTRY_TIMES = [
+    "2026-08-28 09:52:24", "2026-08-28 09:52:36", "2026-08-28 10:35:34", "2026-08-28 10:35:46", "2026-08-28 10:35:56",
+    "2026-08-28 10:42:26", "2026-08-28 10:42:43", "2026-08-28 10:42:58", "2026-08-28 10:47:01", "2026-08-28 10:47:18",
+    "2026-08-28 10:47:33", "2026-08-28 10:51:13", "2026-08-28 10:51:35", "2026-08-28 10:51:55", "2026-08-28 12:11:49",
+    "2026-08-28 12:12:11", "2026-08-28 12:12:36", "2026-08-28 12:21:56", "2026-08-28 12:22:23", "2026-08-28 12:22:48",
+    "2026-08-28 12:25:20", "2026-08-28 12:25:47", "2026-08-28 12:26:12", "2026-08-28 12:30:24", "2026-08-28 12:30:51",
+    "2026-08-28 12:31:16", "2026-09-03 13:56:15", "2026-09-03 14:03:19", "2026-09-03 14:03:46", "2026-09-03 14:04:11",
+]
+CP01_1_RUN_DURATIONS_SEC = [
+    5, 5, 5, 5, 5,
+    10, 10, 10, 10, 10,
+    15, 15, 15, 15, 15,
+    20, 20, 20, 20, 20,
+    20, 20, 20, 20, 20,
+    20, 20, 20, 20, 20,
+]
+CP01_1_OUTPUT_SUBDIR = "cp01_1_detection_drop_characterization"
 
 
 def stack_plots_vertically(top_image_path: Path, bottom_image_path: Path, output_path: Path) -> None:
@@ -68,7 +97,8 @@ def stack_all_dt_wz_plots(analysis_dir: Path) -> list:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Stack the CP01 SDSM message interval plot and CP02 drop rate plot for "
-        "each analyzed MCAP so drops can be visually checked against interval gaps/latency"
+        "each analyzed MCAP so drops can be visually checked against interval gaps/latency, "
+        "and run the CP01-1 detection drop characterization over the recorded runs"
     )
     parser.add_argument(
         "--analysis-dir",
@@ -81,6 +111,14 @@ if __name__ == "__main__":
 
     try:
         stack_all_dt_wz_plots(args.analysis_dir)
+
+        # CP-01-1: Detection drop characterization over runs of known duration (characterization only)
+        characterize_detection_drops(
+            CP01_1_DETECTION_LOG_PATH,
+            CP01_1_RUN_ENTRY_TIMES,
+            CP01_1_RUN_DURATIONS_SEC,
+            plots_dir=args.analysis_dir / CP01_1_OUTPUT_SUBDIR,
+        )
     except Exception as e:
         print(f"Error: {e}")
         exit(1)

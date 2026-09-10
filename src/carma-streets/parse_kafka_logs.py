@@ -76,6 +76,12 @@ def parse_kafka_logs_as_type(input_file_path: Path, message_type: KafkaLogMessag
                     kafka_message += line[json_beg_index:]
                 else:
                     kafka_message += line
+            if kafka_message:
+                try:
+                    msgs.append(KafkaLogMessage(create_time, json.loads(kafka_message), message_type))
+                except json.JSONDecodeError as e:
+                    print(f'Error {e.msg} extracting json info for message: {kafka_message}. Skipping message.')
+                    skipped_messages += 1
 
             if skipped_messages > 0 :
                 print(f'WARNING: Skipped {skipped_messages} due to JSON decoding errors. Please inspect logs.')

@@ -52,3 +52,45 @@ options:
 python3 measurement_time_metric.py  --csv-dir sdsm_kafka_30HZ_R1  --plots-dir sdsm_kafka_30HZ_R1_plots
 ```
 ![Alt text](docs/measurement_time_metric.png)
+
+## Detection Drop Characterization
+The `detection_drop_characterization.py` script characterizes how many detection frames were dropped on the detected object Kafka topic (`v2xhub_sim_sensor_detected_object`) while a pedestrian stood in the detection zone for a known duration. Recorded entry times only need to be approximate: each run's window starts at the first detection at or after its entry time and spans that run's duration. Unique frames received in the window are compared against `duration * rate` expected frames. The script writes a per-run CSV and a plot of each run's drop percentage and where in the run frames were dropped.
+
+Record entry times early rather than late: a late entry time starts the window mid-run, so frames expected after the pedestrian actually left are counted as dropped.
+```
+usage: detection_drop_characterization.py [-h] --kafka-log-dir KAFKA_LOG_DIR
+                                          --entry-times ENTRY_TIMES
+                                          [ENTRY_TIMES ...] --durations
+                                          DURATIONS [DURATIONS ...]
+                                          --plots-dir PLOTS_DIR
+                                          [--rate-hz RATE_HZ]
+                                          [--timezone TIMEZONE]
+                                          [--max-first-detection-delay MAX_FIRST_DETECTION_DELAY]
+
+Script to characterize dropped detection frames from a CARMA Streets detected
+object Kafka log, over runs where a pedestrian stood in the detection zone for
+a known duration.
+
+options:
+  -h, --help            show this help message and exit
+  --kafka-log-dir KAFKA_LOG_DIR
+                        Directory containing Kafka Log files.
+  --entry-times ENTRY_TIMES [ENTRY_TIMES ...]
+                        Recorded time the pedestrian entered the detection
+                        zone for each run, as epoch seconds or datetime
+                        strings (e.g. "2026-09-03 14:03:21").
+  --durations DURATIONS [DURATIONS ...]
+                        Seconds the pedestrian stayed in the detection zone,
+                        one per entry time.
+  --plots-dir PLOTS_DIR
+                        Directory to save generated plot and per-run csv.
+  --rate-hz RATE_HZ     Expected detection frame rate.
+  --timezone TIMEZONE   Timezone of naive entry time strings.
+  --max-first-detection-delay MAX_FIRST_DETECTION_DELAY
+                        Seconds after an entry time to look for the run's
+                        first detection before treating the run as undetected.
+```
+### Example usage
+```
+python3 detection_drop_characterization.py --kafka-log-dir kafka-logs --entry-times "2026-09-03 14:03:19" "2026-09-03 14:03:51" --durations 25 25 --plots-dir detection_drop_plots
+```
