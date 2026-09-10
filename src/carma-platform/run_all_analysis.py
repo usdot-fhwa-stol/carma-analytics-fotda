@@ -139,7 +139,7 @@ def run_all_analysis(
     analysis_func: Callable[[Path, Path, Path, Path], Dict[str, Optional[bool]]],
     output_base_dir: Optional[Path] = None,
     analysis_name: str = "analysis",
-) -> None:
+) -> Path:
     """
     Run analysis on all MCAP files in the input directory using a custom analysis function.
     Creates separate directories for each MCAP file.
@@ -151,6 +151,9 @@ def run_all_analysis(
                                 Should return List[Dict[str, Optional[bool]]] where True means pass, None is error
         output_base_dir (Optional[Path]): Base directory for saving results
         analysis_name (str): Name of the analysis for directory naming
+
+    Returns:
+        Path: The timestamped output directory holding per-file results and analysis_summary.json
     """
     # Find all MCAP files
     mcap_files = find_mcap_files(input_dir)
@@ -177,3 +180,4 @@ def run_all_analysis(
 
     # Create summary report
     create_summary(mcap_files, results, metrics_results, analysis_name, output_dir)
+    return output_dir
