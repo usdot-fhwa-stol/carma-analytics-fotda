@@ -11,7 +11,7 @@ from guidance_scripts import get_engage_time
 # recording in a dt_wz (pedestrian detection) test session, so the same path is used for every
 # MCAP file - each analysis below windows the log down to that MCAP's own recording span.
 DETECTION_LOG_PATH = Path(
-    "/workspaces/carma_ws/src/data/kafka-logs/v2xhub_sim_sensor_detected_object_kafka.log"
+    "/workspaces/carma_ws/src/data-verification-initial/dth-flir-camera-laptop-kafka-logs/v2xhub_sim_sensor_detected_object_kafka.log"
 )
 
 
@@ -69,7 +69,7 @@ if __name__ == "__main__":
         "--input-dir",
         type=Path,
         help="Directory containing MCAP files to analyze",
-        default=Path("/workspaces/carma_ws/src/data"),
+        default=Path("/workspaces/carma_ws/src/data-verification-initial"),
     )
     parser.add_argument(
         "--output-dir",

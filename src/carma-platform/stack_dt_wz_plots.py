@@ -18,27 +18,15 @@ CP02_DROP_RATE_PLOT_NAME = "sdsm_detection_drop_rate_analysis.png"
 STACKED_PLOT_NAME = "cp01_cp02_stacked.png"
 
 # CP01-1: manually recorded pedestrian entry times (one per run, America/New_York) and how long
-# the pedestrian stayed in the detection zone for each run. The entry times below are dummies
-# picked from detection bursts in the sample log - replace them with the recorded times.
+# the pedestrian stayed in the detection zone for each run (not exit - entry, which includes walking
+# in and out). These are the valid runs recorded during the 2026-09-10 data-verification-initial session.
 CP01_1_DETECTION_LOG_PATH = Path(
-    "/workspaces/carma_ws/src/data/kafka-logs/v2xhub_sim_sensor_detected_object_kafka.log"
+    "/workspaces/carma_ws/src/data-verification-initial/dth-flir-camera-laptop-kafka-logs/v2xhub_sim_sensor_detected_object_kafka.log"
 )
 CP01_1_RUN_ENTRY_TIMES = [
-    "2026-08-28 09:52:24", "2026-08-28 09:52:36", "2026-08-28 10:35:34", "2026-08-28 10:35:46", "2026-08-28 10:35:56",
-    "2026-08-28 10:42:26", "2026-08-28 10:42:43", "2026-08-28 10:42:58", "2026-08-28 10:47:01", "2026-08-28 10:47:18",
-    "2026-08-28 10:47:33", "2026-08-28 10:51:13", "2026-08-28 10:51:35", "2026-08-28 10:51:55", "2026-08-28 12:11:49",
-    "2026-08-28 12:12:11", "2026-08-28 12:12:36", "2026-08-28 12:21:56", "2026-08-28 12:22:23", "2026-08-28 12:22:48",
-    "2026-08-28 12:25:20", "2026-08-28 12:25:47", "2026-08-28 12:26:12", "2026-08-28 12:30:24", "2026-08-28 12:30:51",
-    "2026-08-28 12:31:16", "2026-09-03 13:56:15", "2026-09-03 14:03:19", "2026-09-03 14:03:46", "2026-09-03 14:04:11",
+    "2026-09-10 13:43:22", "2026-09-10 13:46:32", "2026-09-10 13:49:51", "2026-09-10 13:53:39", "2026-09-10 13:57:56",
 ]
-CP01_1_RUN_DURATIONS_SEC = [
-    5, 5, 5, 5, 5,
-    10, 10, 10, 10, 10,
-    15, 15, 15, 15, 15,
-    20, 20, 20, 20, 20,
-    20, 20, 20, 20, 20,
-    20, 20, 20, 20, 20,
-]
+CP01_1_RUN_DURATIONS_SEC = [5, 5, 10, 20, 20]
 CP01_1_OUTPUT_SUBDIR = "cp01_1_detection_drop_characterization"
 
 

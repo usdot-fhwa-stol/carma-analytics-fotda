@@ -979,8 +979,8 @@ def main():
     Main function to run the analysis scritps.
     """
     # Example usage of the functions
-    mcap_path = "/workspaces/carma_ws/src/data/rosbag2_2026-09-03_142436_0.mcap"
-    detection_log_path = "/workspaces/carma_ws/src/data/kafka-logs/v2xhub_sim_sensor_detected_object_kafka.log"
+    mcap_path = "/workspaces/carma_ws/src/data-verification-initial/mcap/rosbag2_2026-09-10_131927_0.mcap"
+    detection_log_path = "/workspaces/carma_ws/src/data-verification-initial/dth-flir-camera-laptop-kafka-logs/v2xhub_sim_sensor_detected_object_kafka.log"
     # check_message_broadcast_rate(
     #     mcap_path=mcap_path,
     #     topic_name=INCOMING_SDSM_TOPIC,
