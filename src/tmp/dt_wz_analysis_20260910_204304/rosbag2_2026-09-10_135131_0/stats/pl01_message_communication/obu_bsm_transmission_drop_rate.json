@@ -1,0 +1,20 @@
+{
+  "obu_pcaps": [
+    "/workspaces/carma_ws/src/data-verification-initial/obu-pcap/20s-r4-rmnet.pcap"
+  ],
+  "total_bsms_checked": 460,
+  "total_transmitted": 460,
+  "total_transmitted_late": 0,
+  "total_dropped": 0,
+  "total_outside_recording_window": 0,
+  "drop_rate_pct": 0.0,
+  "late_threshold_ms": 200,
+  "transmit_latency_ms": {
+    "min": -0.8611679077148438,
+    "mean": 0.5919497946034307,
+    "median": -0.3314018249511719,
+    "p95": 5.385875701904297,
+    "p99": 9.267568588256836,
+    "max": 11.704444885253906
+  }
+}

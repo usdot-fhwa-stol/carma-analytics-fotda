@@ -1,0 +1,34 @@
+{
+  "topic_name": "/message/incoming_spat",
+  "expected_rate_hz": 10.0,
+  "rate_tolerance_pct": 0.2,
+  "total_messages": 421,
+  "analysis_duration": 42.766899451000015,
+  "instantaneous_rates": {
+    "minimum": 0.8668826663180358,
+    "maximum": 2330.698090683772,
+    "median": 10.9998988465729,
+    "std_dev": 288.1622088214168,
+    "mean": 103.55466899207747,
+    "sample_count": 420,
+    "rms": 306.2042260696226,
+    "start_time_since_recording": 95.233558789,
+    "end_time_since_recording": 138.136555368
+  },
+  "rolling_window_rates": {
+    "minimum": 1.0,
+    "maximum": 19.0,
+    "median": 10.0,
+    "std_dev": 2.123733296651507,
+    "mean": 10.249406175771972,
+    "sample_count": 421,
+    "rms": 10.467118518066895,
+    "start_time_since_recording": 95.233558789,
+    "end_time_since_recording": 138.136555368
+  },
+  "percentage_within_tolerance": 86.93586698337292,
+  "average_rate_hz": 9.820679202643932,
+  "active_duration": null,
+  "pass_criterion": "average rate within tolerance",
+  "is_passed": true
+}

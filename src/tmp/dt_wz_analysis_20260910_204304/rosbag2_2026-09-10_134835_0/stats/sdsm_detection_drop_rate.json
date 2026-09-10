@@ -1,0 +1,17 @@
+{
+  "total_raw_detections": 97,
+  "total_matched": 89,
+  "total_dropped": 8,
+  "drop_rate_pct": 8.24742268041237,
+  "max_drop_rate_pct": 2.0,
+  "match_tolerance_sec": 0.05,
+  "is_passed": false,
+  "per_object_id": {
+    "54": {
+      "raw_detections": 97,
+      "matched": 89,
+      "dropped": 8,
+      "drop_rate_pct": 8.24742268041237
+    }
+  }
+}
