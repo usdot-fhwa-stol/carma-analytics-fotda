@@ -2,7 +2,9 @@ from pathlib import Path
 import argparse
 from functools import lru_cache
 import json
+import re
 import sys
+import textwrap
 
 import argcomplete
 import numpy as np
@@ -22,6 +24,7 @@ from carma_cooperative_perception_scripts import (
     run_sdsm_latency_analysis,
     run_sdsm_detection_drop_rate_analysis,
     run_rsu_sdsm_transmission_drop_rate_analysis,
+    run_detection_to_kafka_latency_analysis,
 )
 from guidance_scripts import get_engage_time
 
@@ -79,10 +82,19 @@ PL01_OBU_PCAP_DIR = Path("/workspaces/carma_ws/src/data-verification-initial/obu
 PL01_OUTPUT_SUBDIR = "pl01_message_communication"
 PL01_PLOT_NAME = "pl01_message_intervals_and_obu_bsm_drops.png"
 
-# CP-helper (SDSM message intervals), CP-02 (detection match status) and CP-03 (RSU broadcast receipt status)
-# are drawn as panels of one figure sharing a time axis, so SDSM interval gaps line up exactly with dropped
-# detections and dropped RSU transmissions.
-CP_HELPER_CP02_CP03_PLOT_NAME = "cp_helper_cp02_cp03_combined.png"
+# CP-helper (SDSM message intervals), CP-02 (detection match status), CP-03 (RSU broadcast receipt status) and
+# CP-04 (detection to Kafka latency) are drawn as panels of one figure sharing a time axis, so SDSM interval gaps
+# line up exactly with dropped detections, dropped RSU transmissions and late detections.
+CP_COMBINED_PLOT_NAME = "cp_helper_cp02_cp03_cp04_combined.png"
+
+
+def _mark_panel_unavailable(ax, metric: str, error: Exception) -> None:
+    """Label a combined-figure panel whose analysis couldn't run, rather than leaving an empty axis"""
+    # File names are enough to explain the error here; full paths are in the console output
+    message = textwrap.fill(re.sub(r"/(?:[^/\s',\]]+/)+", "", str(error)), width=110)
+    ax.set_title(f"{metric}: not available")
+    ax.text(0.5, 0.5, message, transform=ax.transAxes, ha="center", va="center", fontsize=8, color="dimgray")
+    ax.set_yticks([])
 
 
 def analyze_mcap_file_for_dt_wz_analysis(
@@ -96,8 +108,8 @@ def analyze_mcap_file_for_dt_wz_analysis(
         return None
 
     analysis_stats = {}
-    fig, (interval_ax, drop_rate_ax, transmission_ax) = plt.subplots(
-        3, 1, sharex=True, figsize=(12, 12), gridspec_kw={"height_ratios": [5, 3, 3]}
+    fig, (interval_ax, drop_rate_ax, transmission_ax, kafka_latency_ax) = plt.subplots(
+        4, 1, sharex=True, figsize=(12, 15), gridspec_kw={"height_ratios": [5, 3, 3, 3]}
     )
 
     # CP-helper: SDSM message interval plot, shaded with raw-detection gaps for context
@@ -114,6 +126,7 @@ def analyze_mcap_file_for_dt_wz_analysis(
     except Exception as e:
         print(f"Error analyzing {mcap_path} for metric CP_helper_sdsm_message_intervals: {e}")
         analysis_stats["CP_helper_sdsm_message_intervals"] = None
+        _mark_panel_unavailable(interval_ax, "CP_helper_sdsm_message_intervals", e)
 
     # CP-02: Raw detection to SDSM drop rate should be less than 2%
     try:
@@ -130,6 +143,7 @@ def analyze_mcap_file_for_dt_wz_analysis(
     except Exception as e:
         print(f"Error analyzing {mcap_path} for metric CP02_sdsm_detection_drop_rate: {e}")
         analysis_stats["CP02_sdsm_detection_drop_rate"] = None
+        _mark_panel_unavailable(drop_rate_ax, "CP02_sdsm_detection_drop_rate", e)
 
     # CP-03: SDSMs broadcast by the RSU but never received by CARMA Platform should be less than 2%
     try:
@@ -145,6 +159,24 @@ def analyze_mcap_file_for_dt_wz_analysis(
     except Exception as e:
         print(f"Error analyzing {mcap_path} for metric CP03_rsu_sdsm_transmission_drop_rate: {e}")
         analysis_stats["CP03_rsu_sdsm_transmission_drop_rate"] = None
+        _mark_panel_unavailable(transmission_ax, "CP03_rsu_sdsm_transmission_drop_rate", e)
+
+    # CP-04: Detection to Kafka message creation latency should average < 0.5 s with < 2% of detections late (> 0.1 s)
+    try:
+        is_passed, _, _ = run_detection_to_kafka_latency_analysis(
+            mcap_path,
+            DETECTION_LOG_PATH,
+            start_time=engage_time,
+            end_time=disengage_time,
+            save_stats_dir=stats_dir,
+            save_data_dir=data_dir,
+            ax=kafka_latency_ax,
+        )
+        analysis_stats["CP04_detection_to_kafka_latency"] = is_passed
+    except Exception as e:
+        print(f"Error analyzing {mcap_path} for metric CP04_detection_to_kafka_latency: {e}")
+        analysis_stats["CP04_detection_to_kafka_latency"] = None
+        _mark_panel_unavailable(kafka_latency_ax, "CP04_detection_to_kafka_latency", e)
 
     # DT-05: Median latency from object detection until CARMA Platform receives it in an SDSM should be < 0.3 s
     try:
@@ -163,20 +195,22 @@ def analyze_mcap_file_for_dt_wz_analysis(
         analysis_stats["DT05_detection_to_sdsm_receipt_latency"] = None
 
     # plot_message_time_intervals is generic across topics, so name what this panel shows here
-    interval_ax.set_title(
-        "CP-helper: SDSM Receive Intervals on CARMA Platform (/message/incoming_sdsm)\n"
-        "Shaded green: no FLIR detection in the v2xhub_sim_sensor_detected_object Kafka log",
-        pad=20,
-    )
-    interval_ax.set_ylabel("Time Since Previous SDSM Received (s)")
+    if analysis_stats["CP_helper_sdsm_message_intervals"] is not None:
+        interval_ax.set_title(
+            "CP-helper: SDSM Receive Intervals on CARMA Platform (/message/incoming_sdsm)\n"
+            "Shaded green: no FLIR detection in the v2xhub_sim_sensor_detected_object Kafka log",
+            pad=20,
+        )
+        interval_ax.set_ylabel("Time Since Previous SDSM Received (s)")
     # The shared x-axis is labeled once, under the bottom panel
     interval_ax.set_xlabel("")
     drop_rate_ax.set_xlabel("")
-    transmission_ax.set_xlabel("Time Since Start of Recording (seconds)")
+    transmission_ax.set_xlabel("")
+    kafka_latency_ax.set_xlabel("Time Since Start of Recording (seconds)")
     fig.tight_layout()
-    fig.savefig(plots_dir / CP_HELPER_CP02_CP03_PLOT_NAME, dpi=300)
+    fig.savefig(plots_dir / CP_COMBINED_PLOT_NAME, dpi=300)
     plt.close(fig)
-    print(f"Combined CP-helper/CP-02/CP-03 plot saved to: {plots_dir / CP_HELPER_CP02_CP03_PLOT_NAME}")
+    print(f"Combined CP-helper/CP-02/CP-03/CP-04 plot saved to: {plots_dir / CP_COMBINED_PLOT_NAME}")
 
     analysis_stats.update(analyze_pl01_message_communication(
         mcap_path, engage_time, disengage_time, stats_dir / PL01_OUTPUT_SUBDIR, plots_dir / PL01_OUTPUT_SUBDIR

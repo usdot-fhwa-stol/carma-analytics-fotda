@@ -36,6 +36,12 @@ SDSM_DROP_RATE_MATCH_TOLERANCE_IN_S = 0.05
 # CP-03: SDSMs broadcast by the RSU (RSU pcap) that CARMA Platform never receives
 # (/hardware_interface/comms/inbound_binary_msg) should be less than 2%
 RSU_SDSM_TRANSMISSION_DROP_RATE_THRESHOLD_PCT = 2.0
+# CP-04: Latency from object detection to its v2xhub_sim_sensor_detected_object Kafka message being created should
+# average less than 0.5 s, and fewer than 2% of detections should be late/dropped - later than one 10 Hz frame (0.1 s)
+DETECTION_TO_KAFKA_MEAN_LATENCY_THRESHOLD_IN_S = 0.5
+DETECTION_TO_KAFKA_LATE_THRESHOLD_IN_S = 0.1
+DETECTION_TO_KAFKA_MAX_LATE_PCT = 2.0
+
 # pcap <-> mcap correlator (correlate_pcap_mcap.py) - j2735-pcap is a hyphenated directory, not a package
 J2735_PCAP_TOOLS_DIR = Path(__file__).resolve().parent.parent / "j2735-pcap"
 
@@ -888,6 +894,141 @@ def run_rsu_sdsm_transmission_drop_rate_analysis(
             save_plot_dir = Path(save_plot_dir)
             save_plot_dir.mkdir(parents=True, exist_ok=True)
             fig.savefig(save_plot_dir / "rsu_sdsm_transmission_drop_rate_analysis.png", dpi=300)
+            print(f"Plot saved to: {save_plot_dir}")
+        else:
+            plt.show()
+
+    return is_passed, stats, fig
+
+
+def run_detection_to_kafka_latency_analysis(
+    mcap_path,
+    detection_log_path,
+    max_mean_latency_s=DETECTION_TO_KAFKA_MEAN_LATENCY_THRESHOLD_IN_S,
+    late_threshold_s=DETECTION_TO_KAFKA_LATE_THRESHOLD_IN_S,
+    max_late_pct=DETECTION_TO_KAFKA_MAX_LATE_PCT,
+    start_time=None,
+    end_time=None,
+    save_stats_dir=None,
+    save_data_dir=None,
+    save_plot_dir=None,
+    ax=None,
+):
+    """
+    CP-04: Analyzes the latency from each object detection (the detection's own "timestamp") until its message was
+    created on the v2xhub_sim_sensor_detected_object Kafka topic (the log's CreateTime), for the detections within
+    this MCAP's analysis window. Passes if the mean latency is below max_mean_latency_s and fewer than max_late_pct
+    of detections are late - later than late_threshold_s, one frame at the camera's 10 Hz, after which a detection
+    is effectively dropped.
+
+    Args:
+        mcap_path: Path to MCAP file, used for its recording window and time origin
+        detection_log_path: Path to the v2xhub_sim_sensor_detected_object Kafka log
+        max_mean_latency_s: Maximum mean latency for the analysis to pass (default: 0.5 s)
+        late_threshold_s: Latency above which a detection counts as late/dropped (default: 0.1 s)
+        max_late_pct: Maximum percentage of late detections for the analysis to pass (default: 2%)
+        start_time: Time to start the analysis (seconds from start of recording)
+        end_time: Time to end the analysis (seconds from start of recording)
+        save_stats_dir: Directory to save analysis stats
+        save_data_dir: Directory to save extracted data
+        save_plot_dir: Directory to save generated plots
+        ax: Optional matplotlib Axes to draw into (e.g. one panel of a combined figure). When given,
+            the caller owns the figure's layout and saving, so save_plot_dir is ignored.
+
+    Returns:
+        Tuple containing:
+        - is_passed: Boolean - True if both the mean latency and late percentage are below their thresholds
+        - stats: Dictionary with latency statistics and late counts
+        - figure: Matplotlib figure object
+    """
+    # Same time origin as the other dt_wz plots' x-axis (seconds since the MCAP recording started)
+    _, _, global_start_time_ns = open_bagfile(str(mcap_path))
+    recording_origin_sec = global_start_time_ns / 1e9
+    window_start_sec = recording_origin_sec + start_time if start_time is not None else -np.inf
+    window_end_sec = recording_origin_sec + end_time if end_time is not None else np.inf
+
+    detection_times_sec = []
+    create_times_sec = []
+    for record in parse_kafka_log_records(detection_log_path):
+        detection_time_sec = record["timestamp"] / 1e3
+        if window_start_sec <= detection_time_sec <= window_end_sec:
+            detection_times_sec.append(detection_time_sec)
+            create_times_sec.append(record["create_time_ms"] / 1e3)
+    if not detection_times_sec:
+        raise ValueError(f"No detections in {detection_log_path} within {mcap_path}'s analysis window")
+    detection_times_sec = np.array(detection_times_sec)
+    latency_s = np.array(create_times_sec) - detection_times_sec
+
+    late = latency_s > late_threshold_s
+    late_pct = float(np.mean(late) * 100)
+    mean_latency_s = float(np.mean(latency_s))
+    is_passed = bool(mean_latency_s < max_mean_latency_s and late_pct < max_late_pct)
+
+    stats = calculate_error_statistics(latency_s)
+    print_stats(stats, "CP-04: Detection to Kafka Message Creation Latency (s)", decimal_places=4)
+    print(f"Late detections (> {late_threshold_s} s): {int(np.sum(late))}/{len(latency_s)} ({late_pct:.2f}%, "
+          f"threshold: < {max_late_pct}%)")
+    print(f"Mean latency: {mean_latency_s:.4f} s (threshold: < {max_mean_latency_s} s)")
+    print(f"Result: {'PASSED' if is_passed else 'FAILED'}")
+
+    stats = {
+        "latency_s": stats,
+        "total_detections": len(latency_s),
+        "late_detections": int(np.sum(late)),
+        "late_pct": late_pct,
+        "mean_latency_s": mean_latency_s,
+        "max_mean_latency_s": max_mean_latency_s,
+        "late_threshold_s": late_threshold_s,
+        "max_late_pct": max_late_pct,
+        "is_passed": is_passed,
+    }
+
+    own_figure = ax is None
+    if own_figure:
+        fig, ax = plt.subplots(figsize=(12, 4))
+    else:
+        fig = ax.figure
+    times = detection_times_sec - recording_origin_sec
+    ax.plot(times[~late], latency_s[~late], ".", color="green", markersize=4,
+            label=f"On time ({int(np.sum(~late))})")
+    if np.any(late):
+        ax.plot(times[late], latency_s[late], "x", color="red", markersize=6,
+                label=f"Late > {late_threshold_s} s ({int(np.sum(late))})")
+    ax.axhline(late_threshold_s, color="red", linestyle="--", linewidth=1, label=f"Late threshold ({late_threshold_s} s)")
+    ax.axhline(mean_latency_s, color="purple", linestyle="-.", linewidth=1, label=f"Mean ({mean_latency_s * 1e3:.1f} ms)")
+    ax.set_title(
+        "CP-04: FLIR Detection to Kafka Message Creation Latency (v2xhub_sim_sensor_detected_object)\n"
+        f"Mean {mean_latency_s * 1e3:.1f} ms (< {max_mean_latency_s} s), Late {late_pct:.2f}% (< {max_late_pct}%) - "
+        f"{'PASSED' if is_passed else 'FAILED'}"
+    )
+    ax.set_xlabel("Time (seconds)")
+    ax.set_ylabel("Latency (s)")
+    ax.set_ylim(0, max(late_threshold_s * 1.5, float(np.max(latency_s)) * 1.1))
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="upper right")
+    if own_figure:
+        fig.tight_layout()
+
+    if save_stats_dir:
+        save_stats_dir = Path(save_stats_dir)
+        save_stats_dir.mkdir(parents=True, exist_ok=True)
+        stats_full_path = save_stats_dir / "detection_to_kafka_latency.json"
+        with open(stats_full_path, "w") as f:
+            json.dump(stats, f, indent=2)
+        print(f"\nStats saved to: {stats_full_path}")
+
+    if save_data_dir:
+        save_data_dir = Path(save_data_dir)
+        save_data_dir.mkdir(parents=True, exist_ok=True)
+        np.savez(save_data_dir / "detection_to_kafka_latency_data.npz",
+                 detection_times_sec=detection_times_sec, latency_s=latency_s, stats=stats)
+        print(f"Data saved to: {save_data_dir}")
+
+    if own_figure:
+        if save_plot_dir:
+            save_plot_dir = Path(save_plot_dir)
+            save_plot_dir.mkdir(parents=True, exist_ok=True)
+            fig.savefig(save_plot_dir / "detection_to_kafka_latency_analysis.png", dpi=300)
             print(f"Plot saved to: {save_plot_dir}")
         else:
             plt.show()
