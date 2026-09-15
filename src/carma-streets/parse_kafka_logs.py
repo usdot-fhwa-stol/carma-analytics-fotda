@@ -32,6 +32,12 @@ class KafkaLogMessage:
     created_time: int
     json_message: dict
     msg_type: KafkaLogMessageType
+# Epoch-ms value of a "CreateTime:<ms>" record header, anchored so it stops at
+# whichever delimiter follows (tab, pipe or space) regardless of which
+# kafka-console-consumer print options produced the dump.
+CREATE_TIME_PATTERN = re.compile(r'CreateTime:\s*(\d{10,13})')
+
+
 def get_create_time(line: str) -> int:
     """Read CreateTime from line in Kafka Log file.
 
@@ -39,9 +45,15 @@ def get_create_time(line: str) -> int:
         line (str): line in Kafka log file
 
     Returns:
-        int: timestamp
+        int: epoch millisecond timestamp
+
+    Raises:
+        ValueError: if the line carries no parseable CreateTime header
     """
-    return re.sub('[^0-9]', '', line.split(':')[1])
+    match = CREATE_TIME_PATTERN.search(line)
+    if match is None:
+        raise ValueError(f'No CreateTime timestamp in Kafka log line: {line[:80]}')
+    return int(match.group(1))
 
 def parse_kafka_logs_as_type(input_file_path: Path, message_type: KafkaLogMessageType)-> list:
     """Parse Kafka Topic Logs into a list of KafkaLogMessages of the type provided.

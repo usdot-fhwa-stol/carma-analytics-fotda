@@ -1,8 +1,25 @@
-import rosbag2_py
+"""Read MCAP recordings, through rosbag2_py where available.
+
+When ROS 2 is not installed this module transparently falls back to
+``portable.mcap_backend``, which decodes CDR using the ros2msg schema text stored
+inside the MCAP itself. The public names below keep the same signatures and
+return shapes either way, so callers need not know which path they got. Set
+``USE_PORTABLE_BACKEND`` to see which one is live.
+"""
+
 import numpy as np
 import os
-from rosidl_runtime_py.utilities import get_message
-from rclpy.serialization import deserialize_message
+
+try:
+    import rosbag2_py
+    from rosidl_runtime_py.utilities import get_message
+    from rclpy.serialization import deserialize_message
+
+    USE_PORTABLE_BACKEND = False
+except ImportError:  # no ROS 2 on this machine
+    from portable import mcap_backend as _portable
+
+    USE_PORTABLE_BACKEND = True
 
 def get_rosbag_options(path, serialization_format="cdr", storage_id="sqlite3"):
     """
@@ -63,6 +80,11 @@ def open_bagfile(path, topics=[], serialization_format="cdr", storage_id="mcap")
     Raises:
         ValueError: If the bag file cannot be opened or if there are issues with the topics.
     """
+    if USE_PORTABLE_BACKEND:
+        return _portable.open_bagfile(
+            path, topics=topics, serialization_format=serialization_format, storage_id=storage_id
+        )
+
     storage_options, converter_options = get_rosbag_options(
         path, serialization_format=serialization_format, storage_id=storage_id
     )
@@ -163,8 +185,13 @@ def read_messages(reader, topics, type_map, field_extractors):
     while reader.has_next():
         topic, msg_data, timestamp = reader.read_next()
         if topic in topics:
-            msg_type = type_map[topic]
-            msg = deserialize_message(msg_data, get_message(msg_type))
+            if USE_PORTABLE_BACKEND:
+                # The portable reader decodes as it reads -- it holds the schema
+                # table -- so msg_data is already a message, not raw bytes.
+                msg = msg_data
+            else:
+                msg_type = type_map[topic]
+                msg = deserialize_message(msg_data, get_message(msg_type))
 
             try:
                 extracted_value = field_extractors[topic](msg)

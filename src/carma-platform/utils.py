@@ -50,12 +50,30 @@ def print_stats(stats: dict, title: str, decimal_places: int = 4) -> None:
         else:
             print(f"{key}: {value:.{decimal_places}f}")
 
+# Epoch-ms value of a "CreateTime:<ms>" record header. Anchored and bounded so it
+# stops at whatever delimiter follows -- tab, pipe, space or the JSON body itself.
+CREATE_TIME_PATTERN = re.compile(r"CreateTime:\s*(\d{10,13})")
+
+
 def parse_kafka_log_records(kafka_log_path):
     """
     Parses a Kafka console-consumer log file into a list of message records. Each
-    record is expected to start a new line of the form `CreateTime:<epoch_ms>\t{json}`;
-    JSON bodies that wrap onto following lines are accumulated until the next `CreateTime`
-    line is seen.
+    record starts a new line whose header is `CreateTime:<epoch_ms>` followed by the
+    JSON body; JSON bodies that wrap onto following lines are accumulated until the
+    next `CreateTime` line is seen.
+
+    Both delimiter styles that kafka-console-consumer emits are accepted:
+
+        CreateTime:1757520202123\t{json}                              (tab)
+        CreateTime:1788530425666|Partition:0|Offset:46063|null|{json} (pipe)
+
+    The pipe form appears once print.partition/print.offset/print.key are enabled.
+    The timestamp is read with an anchored pattern rather than by splitting on a
+    single assumed delimiter: splitting on a tab that a pipe-delimited line does not
+    contain leaves the whole line in play, and stripping non-digits from it
+    concatenates the partition, the offset and every digit of the JSON onto the
+    timestamp -- a 36-digit value instead of 13, which corrupts silently rather than
+    raising.
 
     Args:
         kafka_log_path: Path to the Kafka log file
@@ -89,8 +107,12 @@ def parse_kafka_log_records(kafka_log_path):
             if not line:
                 continue
             if line.startswith("CreateTime"):
+                header_match = CREATE_TIME_PATTERN.match(line)
+                if header_match is None:
+                    print(f"WARNING: unparseable CreateTime header, skipping: {line[:80]}")
+                    continue
                 flush_pending_message()
-                create_time_ms = int(re.sub(r"[^0-9]", "", line.split(":", 1)[1].split("\t", 1)[0]))
+                create_time_ms = int(header_match.group(1))
                 json_start = line.find("{")
                 pending_message = line[json_start:] if json_start != -1 else ""
             else:
