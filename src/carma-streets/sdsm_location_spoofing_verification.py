@@ -439,6 +439,9 @@ def verify_location_spoofing(
 
 
 HISTOGRAM_BINS = 20
+# The heading error is quantised to the 0.0125 deg SDSM encoding step, so its
+# histogram uses a fixed bin width rather than a fixed bin count.
+HEADING_BIN_WIDTH_DEG = 0.001
 
 
 def _frame_axes(axis, x_values, y_values, margin: float = 1.1):
@@ -457,6 +460,25 @@ def _frame_axes(axis, x_values, y_values, margin: float = 1.1):
         middle = (values.max() + values.min()) / 2.0
         half = ((values.max() - values.min()) / 2.0 or 1.0) * margin
         setter(middle - half, middle + half)
+
+
+def _fixed_width_bins(values, width: float):
+    """Bin edges of exactly ``width``, covering the data and aligned to multiples of it.
+
+    Used for the heading error, whose values are quantised to the 0.0125 deg
+    encoding step of the SDSM heading field. A fixed bin count rescales with the
+    data and hides that structure; a fixed width keeps every plot on the same
+    scale, so a change in the spread is visible between runs.
+    """
+    values = np.asarray(values, dtype=float)
+    if values.size == 0:
+        return np.array([0.0, width])
+    low = np.floor(values.min() / width) * width
+    high = np.ceil(values.max() / width) * width
+    if high <= low:
+        high = low + width
+    # +1.5 so the final edge is always included despite floating-point drift.
+    return np.arange(low, high + width * 1.5, width)
 
 
 def _threshold_marker(axis, values, threshold, label, signed=False):
@@ -540,14 +562,18 @@ def plot_verification(rows: list, results: dict, max_mean_position_error_m: floa
     position_ax.grid(True, axis="y", alpha=0.3)
     position_ax.legend(fontsize=8)
 
+    heading_bins = _fixed_width_bins(
+        [v for values, _c, _l in heading_errors for v in values] or [0.0],
+        HEADING_BIN_WIDTH_DEG,
+    )
     for values, color, label in heading_errors:
-        heading_ax.hist(values, bins=HISTOGRAM_BINS, color=color, alpha=0.8,
+        heading_ax.hist(values, bins=heading_bins, color=color, alpha=0.8,
                         edgecolor="white", linewidth=0.5, label=label)
     _threshold_marker(heading_ax, [v for values, _c, _l in heading_errors for v in values] or [0.0],
                       max_mean_heading_error_deg,
                       f"Mean threshold (±{max_mean_heading_error_deg:g} deg)", signed=True)
     heading_ax.set_title("SDSM Heading Error (moving detections)")
-    heading_ax.set_xlabel("Heading Error (deg)")
+    heading_ax.set_xlabel("Heading Error (deg), {:g} deg bins".format(HEADING_BIN_WIDTH_DEG))
     heading_ax.set_ylabel("SDSM objects")
     heading_ax.grid(True, axis="y", alpha=0.3)
     heading_ax.legend(fontsize=8)

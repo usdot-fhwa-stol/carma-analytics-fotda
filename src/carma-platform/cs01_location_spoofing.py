@@ -38,6 +38,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent / "carma-streets"))
 from sdsm_location_spoofing_verification import (  # noqa: E402
     DEFAULT_MAX_MEAN_HEADING_ERROR_DEG,
     DEFAULT_MAX_MEAN_POSITION_ERROR_M,
+    REFERENCE_MATCH_TOLERANCE_DEG,
     parse_projection_origin,
     verify_location_spoofing,
 )
@@ -96,17 +97,19 @@ def detect_reference(detection_log_path, window_ms) -> Tuple[float, float, Dict]
     return lat, lon, detail
 
 
-def _window_kafka_log(source: Path, destination: Path, window_ms) -> int:
+def _window_kafka_log(source: Path, destination: Path, window_ms, append: bool = False) -> int:
     """Copy the records of ``source`` whose CreateTime is inside the window.
 
     Multi-line JSON bodies are carried along with their header line, so the
-    filtered file stays parseable by the same reader.
+    filtered file stays parseable by the same reader. With ``append`` the records
+    are added to ``destination``, which is how several sessions are pooled into
+    one log for a single verification.
     """
     low, high = window_ms
     kept = 0
     keeping = False
     with open(source, encoding="utf8", errors="ignore") as reader, \
-            open(destination, "w", encoding="utf8") as writer:
+            open(destination, "a" if append else "w", encoding="utf8") as writer:
         for line in reader:
             if line.startswith("CreateTime"):
                 match = _CREATE_TIME.match(line)
@@ -118,30 +121,70 @@ def _window_kafka_log(source: Path, destination: Path, window_ms) -> int:
     return kept
 
 
-def analyse_session(
-    runs,
-    session,
+def analyse_sessions(
+    specs,
     plots_dir: Optional[Path] = None,
     max_mean_position_error_m: float = DEFAULT_MAX_MEAN_POSITION_ERROR_M,
     max_mean_heading_error_deg: float = DEFAULT_MAX_MEAN_HEADING_ERROR_DEG,
 ) -> Dict:
-    """Run CS-01 over one session's runs."""
-    if session.kafka_detected_object is None:
-        raise FileNotFoundError("CS-01 needs the v2xhub_sim_sensor_detected_object log")
-    if session.kafka_sdsm is None:
-        raise FileNotFoundError("CS-01 needs the v2xhub_sdsm_sub log")
+    """Run CS-01 once over the pooled runs of one or more sessions.
 
-    window = session_window_ms(runs)
-    ref_lat, ref_lon, reference_detail = detect_reference(
-        session.kafka_detected_object, window
-    )
+    ``specs`` is a sequence of ``(name, runs, session)``. Each session is windowed
+    to its own runs, then the windowed records are concatenated and verified
+    together, so the result is a single figure for every run supplied.
 
+    Pooling is only valid while every session used the same configured reference,
+    so the references are compared and a mismatch raises instead of silently
+    averaging two different geometries. Pooling is safe against recycled object
+    ids because objects are matched on id *and* a timestamp within a few
+    milliseconds, and the sessions are a day apart.
+    """
+    specs = list(specs)
+    if not specs:
+        raise ValueError("CS-01 needs at least one session")
+
+    prepared = []
+    for name, runs, session in specs:
+        if session.kafka_detected_object is None:
+            raise FileNotFoundError(f"{name}: CS-01 needs the v2xhub_sim_sensor_detected_object log")
+        if session.kafka_sdsm is None:
+            raise FileNotFoundError(f"{name}: CS-01 needs the v2xhub_sdsm_sub log")
+        window = session_window_ms(runs)
+        ref_lat, ref_lon, detail = detect_reference(session.kafka_detected_object, window)
+        prepared.append((name, runs, session, window, ref_lat, ref_lon, detail))
+
+    ref_lat, ref_lon = prepared[0][4], prepared[0][5]
+    for name, _runs, _session, _window, lat, lon, _detail in prepared[1:]:
+        if (abs(lat - ref_lat) > REFERENCE_MATCH_TOLERANCE_DEG
+                or abs(lon - ref_lon) > REFERENCE_MATCH_TOLERANCE_DEG):
+            raise ValueError(
+                f"Sessions use different configured references, so they cannot be pooled: "
+                f"{prepared[0][0]} at {ref_lat:.7f},{ref_lon:.7f} but {name} at {lat:.7f},{lon:.7f}. "
+                f"Verify them separately."
+            )
+
+    per_session = []
     with tempfile.TemporaryDirectory(prefix="cs01_") as scratch:
         scratch_path = Path(scratch)
         detections = scratch_path / "v2xhub_sim_sensor_detected_object.log"
         sdsms = scratch_path / "v2xhub_sdsm_sub.log"
-        kept_detections = _window_kafka_log(session.kafka_detected_object, detections, window)
-        kept_sdsms = _window_kafka_log(session.kafka_sdsm, sdsms, window)
+
+        for name, runs, session, window, lat, lon, detail in prepared:
+            kept_detections = _window_kafka_log(
+                session.kafka_detected_object, detections, window, append=True
+            )
+            kept_sdsms = _window_kafka_log(session.kafka_sdsm, sdsms, window, append=True)
+            per_session.append({
+                "session": name,
+                "runs": len(runs),
+                "reference_lat": lat,
+                "reference_lon": lon,
+                "window_start_ms": window[0],
+                "window_end_ms": window[1],
+                "detection_records_in_window": kept_detections,
+                "sdsm_records_in_window": kept_sdsms,
+                "origins_in_window": detail["origins_in_window"],
+            })
 
         result = verify_location_spoofing(
             detection_log_path=detections,
@@ -158,15 +201,19 @@ def analyse_session(
         "pass": bool(result["pass"]),
         "reference_lat": ref_lat,
         "reference_lon": ref_lon,
-        "reference_detail": reference_detail,
         "driver_rotation_deg": result.get("rotation_deg"),
-        "runs": len(runs),
-        "window_start_ms": window[0],
-        "window_end_ms": window[1],
-        "detection_records_in_window": kept_detections,
-        "sdsm_records_in_window": kept_sdsms,
+        "sessions": [item["session"] for item in per_session],
+        "total_runs": sum(item["runs"] for item in per_session),
+        "detection_records_in_window": sum(item["detection_records_in_window"] for item in per_session),
+        "sdsm_records_in_window": sum(item["sdsm_records_in_window"] for item in per_session),
         "max_mean_position_error_m": max_mean_position_error_m,
         "max_mean_heading_error_deg": max_mean_heading_error_deg,
         **{key: source[key] for key in sorted(source)},
+        "per_session": per_session,
         "rows": result["rows"],
     }
+
+
+def analyse_session(runs, session, **kwargs) -> Dict:
+    """Run CS-01 over a single session. Thin wrapper over ``analyse_sessions``."""
+    return analyse_sessions([("session", runs, session)], **kwargs)

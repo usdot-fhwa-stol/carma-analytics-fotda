@@ -97,14 +97,19 @@ python src/carma-platform/run_cp01_analysis.py \
     --output-dir out/cp01
 ```
 
-**CS-01** is also separate, because the configured reference location can change
-between sessions, so each session is verified on its own:
+**CS-01** is also separate, and pools every session given into one result:
 
 ```bash
 python src/carma-platform/run_cs01_analysis.py \
+    --data-root .../20260914_verification_test \
     --data-root .../20260915_verification_test \
     --output-dir out/cs01
 ```
+
+Each session is windowed to its own runs first, then all of them are verified
+together, so there is one plot and one set of statistics. Pooling needs the
+sessions to share a configured reference, so the references are compared and a
+mismatch stops the run rather than averaging two different geometries.
 
 It checks that each SDSM places the spoofed pedestrian at the reference point
 FLIRCameraDriver was configured with (mean position error < 0.2 m) and that the
