@@ -165,22 +165,32 @@ def _merge_on_uper(base: pd.DataFrame, frame: pd.DataFrame, columns) -> pd.DataF
 OBU_MATCH_WINDOW_MS = 60.0
 
 
-def _attach_obu_radio(table: pd.DataFrame, radio_times: List[float]) -> pd.DataFrame:
-    """Attach the OBU radio receive stage by nearest time after the broadcast.
+def attach_obu_radio(table: pd.DataFrame, radio_messages: List[dict]) -> pd.DataFrame:
+    """Attach the OBU radio receive stage, by payload bytes where possible.
 
-    The OBU capture has no payload, so this is the one stage that cannot be
-    joined on identity. Each broadcast takes the closest not-yet-used radio
-    packet within ``OBU_MATCH_WINDOW_MS``, consuming it so two broadcasts cannot
-    claim the same reception.
+    ``radio_messages`` are ``{timestamp, payload_hex}`` dicts with ``timestamp``
+    already in epoch **milliseconds**. When ``payload_hex`` is present the join
+    is an exact identity, the same as every other stage from ``t_streets_encode``
+    onward. When it is None -- a tcpdump text capture, which records no payload --
+    the code falls back to nearest-time matching.
 
-    Nearest-time rather than a positional zip: when the RSU drops a broadcast the
-    two sequences differ in length, and zipping them would shift every row after
-    the drop by one -- a systematic error that still looks like clean data. Four
-    of the fifteen runs in this session have exactly that mismatch.
+    Both forms are in use: the 2026-09-14 session captured the OBU as text, the
+    2026-09-15 session as binary pcap. The fallback is weaker and the QA output
+    says which was used, because a latency from ordinal pairing is not the same
+    measurement as one from byte identity.
     """
     table["t_obu_radio_rx"] = np.nan
-    if not radio_times or "t_rsu_broadcast" not in table.columns:
+    if not radio_messages or "t_rsu_broadcast" not in table.columns:
         return table
+
+    if radio_messages[0].get("payload_hex") and "sdsm_uper_hex" in table.columns:
+        by_payload = {}
+        for message in radio_messages:
+            by_payload.setdefault(message["payload_hex"], message["timestamp"])
+        table["t_obu_radio_rx"] = table["sdsm_uper_hex"].map(by_payload)
+        return table
+
+    radio_times = [message["timestamp"] for message in radio_messages]
 
     ordered = table.dropna(subset=["t_rsu_broadcast"]).sort_values("t_rsu_broadcast")
     available = sorted(float(value) for value in radio_times)
@@ -205,7 +215,7 @@ def _attach_obu_radio(table: pd.DataFrame, radio_times: List[float]) -> pd.DataF
     return table
 
 
-def build_run_table(run, session_logs: SessionLogs, window_sec, obu_radio_times=None) -> pd.DataFrame:
+def build_run_table(run, session_logs: SessionLogs, window_sec) -> pd.DataFrame:
     """One row per FLIR detection in this run, with every stage it reached."""
     window_ms = (window_sec[0] * 1e3, window_sec[1] * 1e3)
 
@@ -232,7 +242,7 @@ def build_run_table(run, session_logs: SessionLogs, window_sec, obu_radio_times=
     return table
 
 
-def attach_run_sources(table: pd.DataFrame, run, window_sec, radio_times=None) -> pd.DataFrame:
+def attach_run_sources(table: pd.DataFrame, run, window_sec, radio_messages=None) -> pd.DataFrame:
     """Add the per-run stages: RSU broadcast, OBU radio, and the vehicle's ROS topics."""
     if table.empty:
         return table
@@ -257,7 +267,7 @@ def attach_run_sources(table: pd.DataFrame, run, window_sec, radio_times=None) -
     table = _merge_on_uper(table, inbound, ["t_ros_inbound"])
 
     table = _attach_ros_stages(table, run, window_sec)
-    table = _attach_obu_radio(table, radio_times or [])
+    table = attach_obu_radio(table, radio_messages or [])
     return table
 
 

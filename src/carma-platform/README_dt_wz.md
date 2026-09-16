@@ -38,7 +38,7 @@ The dataset-dependent tests skip unless the session is on disk; set
 <data-root>/
     runs.csv                                   the manifest; the authority
     rsu_pcap/       capture_*.pcap             SDSM broadcasts (binary pcap)
-    obu/hass-wz-logs/  <cond>-run<N>.pcap      OBU radio (tcpdump TEXT)
+    obu/            <cond>-run<N>.pcap         OBU radio (binary pcap OR tcpdump text)
     rosbags/        recovered_rosbag2_*.mcap   CARMA Platform recordings
     pc1/            v2xhub_pc1_*.log
     pc2/            v2xhub_pc2_*.log, sdss_*.log, kafka_topics_*/*.log
@@ -105,6 +105,7 @@ analysis runs on a plain Python venv:
 | `pcap_backend` | `tshark` + `pycrate` | timestamps come from the pcap record header; correlation is on payload bytes, so no ASN.1 decode is required |
 | `kafka_log` | — | tolerates both tab- and pipe-delimited console dumps |
 | `tcpdump_text` | — | reads OBU captures saved as tcpdump console text |
+| `obu_capture` | — | dispatches on the OBU file's actual format, binary or text |
 
 `parse_ros2_bags` falls back to `mcap_backend` automatically when `rosbag2_py`
 is absent, so the other analyses in this directory gain the same portability.
@@ -119,11 +120,17 @@ broadcasting RSU; earlier sessions captured the OBU, where the equivalent stage
 therefore slightly smaller than the 2026-09-11 figures for a reason that has
 nothing to do with the system getting faster.
 
-**`t_obu_radio_rx` is matched by time, not by payload.** The OBU capture is
-tcpdump text and carries no payload bytes, so this stage is matched to the
-nearest broadcast within 60 ms. It is sound in aggregate and should not be
-trusted for an individual row. Every other stage from `t_streets_encode` onward
-is joined on exact payload bytes.
+**`t_obu_radio_rx` is only as strong as the OBU capture format.** Both forms are
+in use and both are named `.pcap`, so the reader decides from content:
+
+* **binary pcap** (2026-09-15 on) carries payload bytes, so the stage is joined
+  on exact identity like every other stage from `t_streets_encode` onward, and
+  a true over-the-air reception rate is reported (`ota_reception_rate_pct`).
+* **tcpdump text** (2026-09-14) carries no payload, so the stage falls back to
+  nearest-time matching within 60 ms. Sound in aggregate, not per row.
+
+`summary_by_run.csv` records which was used in `obu_payload_matched`. Check it
+before comparing this stage across sessions.
 
 **Cross-host hops can come out negative, and that is a clock offset.** A message
 cannot arrive before it was sent, so a persistently negative hop measures the

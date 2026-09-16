@@ -50,7 +50,7 @@ from dt_wz_cascade import cascade_config
 from dt_wz_cascade import plots as cascade_plots
 from dt_wz_cascade import qa as cascade_qa
 from guidance_scripts import get_engage_time
-from portable import kafka_log, tcpdump_text
+from portable import kafka_log, obu_capture
 
 # Topics checked for rate regression, with the rate each is expected to hold.
 # SDSM is event-driven -- it only flows while an object is detected -- so its
@@ -140,11 +140,15 @@ def analyse_run(run, session_logs, detection_records, output_dir, verbose=True):
 
     try:
         obu = metrics.obu_radio_activity(
-            run.obu_capture, run.start_time.date(), run.mcap, window, stats_dir
+            run.obu_capture, run.start_time.date(), run.mcap, window, stats_dir,
+            rsu_pcap=run.rsu_pcap,
         )
         row["obu_bsm_on_radio"] = obu["total_bsms_on_radio"]
         row["obu_bsm_shortfall"] = obu["bsm_shortfall"]
         row["obu_sdsm_on_radio"] = obu["total_sdsms_on_radio"]
+        if obu.get("ota_reception_rate_pct") is not None:
+            row["obu_ota_reception_pct"] = obu["ota_reception_rate_pct"]
+            row["obu_ota_missed"] = obu["ota_missed_by_radio"]
         results["PL01_obu_radio_activity"] = True
     except Exception as error:
         print(f"  ERROR in PL01_obu_radio_activity: {error}")
@@ -158,17 +162,21 @@ def analyse_run(run, session_logs, detection_records, output_dir, verbose=True):
 def _build_cascade(run, session_logs, window, run_dir, row, verbose):
     """Build and persist this run's per-detection stage table."""
     try:
-        radio = tcpdump_text.timestamps_of_type(
-            tcpdump_text.parse_tcpdump_text(run.obu_capture, run.start_time.date()),
-            "SDSM", window[0], window[1],
-        )
+        # The OBU capture is a binary pcap in some sessions and tcpdump text in
+        # others; the reader dispatches on the file and only the binary form
+        # carries payloads to match on.
+        capture = obu_capture.read_obu_capture(run.obu_capture, run.start_time.date())
+        radio = [
+            {"timestamp": message["timestamp"] * 1e3, "payload_hex": message["payload_hex"]}
+            for message in obu_capture.messages_of_type(capture, "SDSM", window[0], window[1])
+        ]
+        row["obu_payload_matched"] = capture["payloads_available"]
+
         table = cascade_build.build_run_table(run, session_logs, window)
         if table.empty:
             row["cascade_rows"] = 0
             return table
-        table = cascade_build.attach_run_sources(
-            table, run, window, [value * 1e3 for value in radio]
-        )
+        table = cascade_build.attach_run_sources(table, run, window, radio)
         table = cascade_build.add_quality(table)
         table = cascade_build.add_deltas(table)
         table.insert(0, "condition", run.condition)

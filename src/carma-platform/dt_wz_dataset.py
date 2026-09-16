@@ -5,7 +5,7 @@ A session directory looks like this::
     20260914_verification_test/
         runs.csv
         rsu_pcap/      capture_<date>_<cond>_run<N>[_take2].pcap   binary pcap
-        obu/hass-wz-logs/  <cond>-run<N>.pcap                      tcpdump TEXT
+        obu/  <cond>-run<N>.pcap                      tcpdump TEXT
         rosbags/       [recovered_]rosbag2_<cond>_run<N>.mcap
         pc1/           v2xhub_pc1_<date>.log
         pc2/           v2xhub_pc2_<date>.log, sdss_<date>.log,
@@ -27,6 +27,7 @@ and carry no date, so the run's date is taken from here (see
 from __future__ import annotations
 
 import csv
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -37,9 +38,17 @@ from typing import Dict, List, Optional
 # from a DST transition.
 SESSION_TZ = timezone(timedelta(hours=-4), name="America/New_York (EDT)")
 
-# Seconds the pedestrian dwells in the detection zone, per run_condition. Used to
-# derive CP-01 entry windows.
-CONDITION_DWELL_SEC = {"5sec": 5, "10sec": 10, "15sec": 15}
+# Seconds the pedestrian dwells in the detection zone, read out of the
+# run_condition name ("20sec" -> 20). Parsed rather than tabulated so a session
+# introducing a new dwell -- 2026-09-15 added 20sec -- needs no code change, and
+# so a condition can never silently fall back to a dwell of zero and sort first.
+_CONDITION_SEC = re.compile(r"(\d+)\s*s", re.IGNORECASE)
+
+
+def condition_dwell_sec(condition: str) -> int:
+    """Dwell seconds for a run_condition name, or 0 if it carries no number."""
+    match = _CONDITION_SEC.search(condition or "")
+    return int(match.group(1)) if match else 0
 
 
 @dataclass(frozen=True)
@@ -60,7 +69,7 @@ class RunSpec:
 
     @property
     def dwell_sec(self) -> int:
-        return CONDITION_DWELL_SEC.get(self.condition, 0)
+        return condition_dwell_sec(self.condition)
 
     def missing(self) -> List[str]:
         return [
@@ -161,7 +170,7 @@ def load_runs_csv(runs_csv, data_root=None) -> List[RunSpec]:
                     run_id=int(clean["run_id"]),
                     start_time=start.replace(tzinfo=SESSION_TZ),
                     rsu_pcap=_resolve(root, "rsu_pcap", clean["rsu_pcap_fn"]),
-                    obu_capture=_resolve(root, "obu/hass-wz-logs", clean["obu_pcap_fn"]),
+                    obu_capture=_resolve(root, "obu", clean["obu_pcap_fn"]),
                     mcap=_resolve(root, "rosbags", clean["rosbag_fn"]),
                 )
             )
@@ -185,7 +194,7 @@ def group_by_condition(runs: List[RunSpec]) -> Dict[str, List[RunSpec]]:
         grouped.setdefault(run.condition, []).append(run)
     for bucket in grouped.values():
         bucket.sort(key=lambda run: run.run_id)
-    return dict(sorted(grouped.items(), key=lambda item: CONDITION_DWELL_SEC.get(item[0], 0)))
+    return dict(sorted(grouped.items(), key=lambda item: condition_dwell_sec(item[0])))
 
 
 def condition_order(runs: List[RunSpec]) -> List[str]:

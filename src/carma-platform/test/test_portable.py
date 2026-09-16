@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from portable import kafka_log, pcap_backend, tcpdump_text  # noqa: E402
+from portable import kafka_log, obu_capture, pcap_backend, tcpdump_text  # noqa: E402
 
 DATA_ROOT = Path(
     os.environ.get(
@@ -160,6 +160,39 @@ class TestPcapDefiniteLength(unittest.TestCase):
         self.assertEqual(pcap_backend._find_message(packet, ids)[0], "SDSM")
         # Same id, but the declared length does not reach the end of the packet.
         self.assertIsNone(pcap_backend._find_message(packet + b"tail", ids)[0])
+
+
+class TestObuCaptureDispatch(unittest.TestCase):
+    """The OBU capture is binary pcap in some sessions and tcpdump text in others.
+
+    Both are named ``.pcap``, so the reader must decide from content. Getting this
+    wrong is silent: the text parser finds no matching lines in a binary file and
+    returns an empty list, which looks like a run where the radio heard nothing.
+    """
+
+    TEXT = "18:51:52.671839 IP6 a::1.2600 > ff02::1.2600: UDP, length 48\n"
+
+    def test_text_capture_reports_no_payloads(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".pcap", delete=False) as handle:
+            handle.write(self.TEXT)
+            path = handle.name
+        try:
+            capture = obu_capture.read_obu_capture(path, date(2026, 9, 14))
+            self.assertFalse(capture["payloads_available"])
+            self.assertEqual(len(capture["messages"]), 1)
+            self.assertIsNone(capture["messages"][0]["payload_hex"])
+        finally:
+            os.unlink(path)
+
+    def test_text_capture_without_a_date_raises(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".pcap", delete=False) as handle:
+            handle.write(self.TEXT)
+            path = handle.name
+        try:
+            with self.assertRaises(ValueError):
+                obu_capture.read_obu_capture(path, None)
+        finally:
+            os.unlink(path)
 
 
 @unittest.skipUnless(HAS_DATA, f"verification session not present at {DATA_ROOT}")

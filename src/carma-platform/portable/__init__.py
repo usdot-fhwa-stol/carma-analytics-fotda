@@ -16,12 +16,22 @@ These are *fallbacks*, wired in where the ROS-based path raises ImportError, so
 behaviour is unchanged wherever the full stack is installed.
 """
 
-from . import cdr, kafka_log, mcap_backend, pairing, pcap_backend, tcpdump_text, timeutil
+from . import (
+    cdr,
+    kafka_log,
+    mcap_backend,
+    obu_capture,
+    pairing,
+    pcap_backend,
+    tcpdump_text,
+    timeutil,
+)
 
 __all__ = [
     "cdr",
     "kafka_log",
     "mcap_backend",
+    "obu_capture",
     "pairing",
     "pcap_backend",
     "tcpdump_text",

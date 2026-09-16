@@ -24,7 +24,8 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from portable import kafka_log, mcap_backend, tcpdump_text
+from portable import kafka_log, mcap_backend
+from portable import obu_capture as obu_capture_reader  # aliased: the parameter is also obu_capture
 from portable.pcap_backend import extract_pcap_messages
 from utils import calculate_error_statistics
 
@@ -483,23 +484,27 @@ def message_rate(mcap_path, topic, expected_rate_hz, window, stats_dir=None,
     return stats["is_passed"], stats
 
 
-def obu_radio_activity(obu_capture, capture_date, mcap_path, window, stats_dir=None):
-    """OBU radio traffic counts against what CARMA Platform sent and received.
+def obu_radio_activity(obu_capture, capture_date, mcap_path, window, stats_dir=None,
+                       rsu_pcap=None):
+    """OBU radio traffic against what CARMA Platform sent and received.
 
-    The OBU capture is tcpdump *text*, so it carries no payload and nothing here
-    is byte-matched. Two count comparisons are possible and are reported as
+    Two count comparisons are always available and are reported as
     characterization only, with no pass/fail:
 
     * BSMs the radio put on the air vs. ``/message/bsm_outbound``
     * SDSMs the radio received vs. ``/message/incoming_sdsm``
 
     A count shortfall is evidence of loss; a count match is consistent with no
-    loss but does not prove each individual message survived, because ordinal
-    counting cannot tell a dropped message followed by a duplicate from a clean
-    one-to-one delivery.
+    loss but does not prove each message survived, since ordinal counting cannot
+    distinguish a drop followed by a duplicate from clean one-to-one delivery.
+
+    When the capture is a binary pcap it also carries payload bytes, and passing
+    ``rsu_pcap`` then adds a genuine over-the-air reception rate: which of the
+    RSU's individual broadcasts this OBU actually received, matched byte for
+    byte. That is not available from a tcpdump text capture at any sample size.
     """
-    packets = tcpdump_text.parse_tcpdump_text(obu_capture, capture_date)
-    counts = tcpdump_text.count_by_type(packets, window[0], window[1])
+    capture = obu_capture_reader.read_obu_capture(obu_capture, capture_date)
+    counts = obu_capture_reader.count_by_type(capture, window[0], window[1])
     topic_counts = mcap_backend.topic_message_counts(mcap_path)
 
     ros_bsm = 0
@@ -520,13 +525,18 @@ def obu_radio_activity(obu_capture, capture_date, mcap_path, window, stats_dir=N
 
     bsm_radio = counts.get("BSM", 0)
     sdsm_radio = counts.get("SDSM", 0)
-    sdsm_times = tcpdump_text.timestamps_of_type(packets, "SDSM", window[0], window[1])
+    received = obu_capture_reader.messages_of_type(capture, "SDSM", window[0], window[1])
+    sdsm_times = [message["timestamp"] for message in received]
     sdsm_intervals = np.diff(sdsm_times) if len(sdsm_times) > 1 else np.array([])
 
     stats = {
         "obu_capture": str(obu_capture),
-        "payload_matched": False,
-        "note": "tcpdump text capture: counts and timing only, no payload matching",
+        "payload_matched": capture["payloads_available"],
+        "note": (
+            "binary pcap: messages identified by payload bytes"
+            if capture["payloads_available"]
+            else "tcpdump text capture: counts and timing only, no payload matching"
+        ),
         "total_bsms_sent_by_platform": ros_bsm,
         "total_bsms_on_radio": bsm_radio,
         "bsm_shortfall": max(ros_bsm - bsm_radio, 0),
@@ -536,5 +546,21 @@ def obu_radio_activity(obu_capture, capture_date, mcap_path, window, stats_dir=N
         "sdsm_shortfall": max(sdsm_radio - ros_sdsm, 0),
         "sdsm_radio_interval_s": _percentiles(sdsm_intervals) if len(sdsm_intervals) else None,
     }
+
+    # Over-the-air reception, byte for byte. Only possible when the capture
+    # carries payloads; a text capture cannot support this at any sample size.
+    if capture["payloads_available"] and rsu_pcap is not None:
+        broadcast = [
+            message for message in extract_pcap_messages(rsu_pcap, ["SDSM"])
+            if window[0] <= message["timestamp"] <= window[1]
+        ]
+        heard = {message["payload_hex"] for message in received}
+        matched = sum(1 for message in broadcast if message["payload_hex"] in heard)
+        stats["ota_broadcasts_in_window"] = len(broadcast)
+        stats["ota_received_by_radio"] = matched
+        stats["ota_missed_by_radio"] = len(broadcast) - matched
+        stats["ota_reception_rate_pct"] = (
+            matched / len(broadcast) * 100.0 if broadcast else None
+        )
     _write_stats(stats_dir, "pl01_obu_radio_activity", stats)
     return stats

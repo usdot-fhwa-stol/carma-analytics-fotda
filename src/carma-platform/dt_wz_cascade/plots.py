@@ -145,9 +145,26 @@ def plot_latency_by_stage(table: pd.DataFrame, title: str, output_path,
             bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.75, "pad": 1.0},
         )
 
+    # Clip to the whisker extent. A few multi-second outliers -- a camera stall
+    # puts detections 3 s late -- otherwise stretch the axis by 20x and flatten
+    # every box into an invisible sliver. The count beyond the axis is stated in
+    # the subtitle so nothing is hidden, only moved out of the way.
+    upper = max(
+        boxes["whiskers"][2 * index - 1].get_xdata()[1] for index in range(1, len(series) + 1)
+    )
+    lower = min(
+        boxes["whiskers"][2 * index - 2].get_xdata()[1] for index in range(1, len(series) + 1)
+    )
+    beyond = sum(int((values > upper).sum() + (values < lower).sum()) for values in series)
+    headroom = (upper - lower) * 0.22 or 1.0
+    axis.set_xlim(min(lower - headroom * 0.1, 0), upper + headroom)
+
     axis.invert_yaxis()
     axis.set_xlabel(xlabel)
-    axis.set_title(f"{title}\nn = {len(table)} detections", loc="left", fontsize=11)
+    subtitle = f"n = {len(table)} detections"
+    if beyond:
+        subtitle += f"   ·   {beyond} points beyond axis, up to {max(v.max() for v in series):,.0f} ms"
+    axis.set_title(f"{title}\n{subtitle}", loc="left", fontsize=11)
     axis.grid(axis="x", alpha=0.25, linewidth=0.6)
     axis.set_axisbelow(True)
     _despine(axis)
