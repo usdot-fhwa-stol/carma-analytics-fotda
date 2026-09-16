@@ -438,61 +438,127 @@ def verify_location_spoofing(
     return {"pass": overall_pass, "rotation_deg": rotation_deg, "sources": results, "rows": rows}
 
 
+HISTOGRAM_BINS = 20
+
+
+def _frame_axes(axis, x_values, y_values, margin: float = 1.1):
+    """Set each axis limit to ``margin`` times that axis's own data range.
+
+    The two axes are scaled independently, so the panel frames the walked area
+    tightly. That means a metre east and a metre north are not the same length on
+    the page; the panel shows where the pedestrian went, and the position error
+    it is checked against is quantified in its own histogram.
+    """
+    x_values = np.asarray(x_values, dtype=float)
+    y_values = np.asarray(y_values, dtype=float)
+    if x_values.size == 0 or y_values.size == 0:
+        return
+    for setter, values in ((axis.set_xlim, x_values), (axis.set_ylim, y_values)):
+        middle = (values.max() + values.min()) / 2.0
+        half = ((values.max() - values.min()) / 2.0 or 1.0) * margin
+        setter(middle - half, middle + half)
+
+
+def _threshold_marker(axis, values, threshold, label, signed=False):
+    """Draw a threshold line, but only when it does not swamp the data.
+
+    The heading error is within +/-0.013 deg against a +/-1 deg limit. Drawing
+    that line forces an axis 75x wider than the data and flattens the histogram
+    into an invisible sliver, so when the threshold is far outside the data the
+    limit is stated in the legend instead of plotted.
+    """
+    values = np.asarray(values, dtype=float)
+    span = values.max() - values.min() if values.size else 0.0
+    reach = max(abs(values.max()), abs(values.min())) if values.size else 0.0
+    if threshold <= max(reach, span) * 1.5:
+        for sign in ((1, -1) if signed else (1,)):
+            axis.axvline(sign * threshold, color="black", linestyle="--", linewidth=1,
+                         label=label if sign == 1 else None)
+    else:
+        # Off-scale: keep the criterion visible without destroying the scale.
+        axis.plot([], [], linestyle="--", color="black", linewidth=1,
+                  label=f"{label} — off scale")
+
+
 def plot_verification(rows: list, results: dict, max_mean_position_error_m: float,
                       max_mean_heading_error_deg: float, plots_dir: Path = None):
-    """Plot SDSM vs expected object locations in the reference frame, and position/heading errors over time."""
+    """Plot SDSM vs expected object locations in the reference frame, and the error distributions.
+
+    The errors are shown as histograms rather than against time. These runs are
+    minutes apart, so a time axis spends most of its width on the gaps between
+    runs and compresses every run into a narrow band; the distribution is what
+    the pass criteria are actually stated against.
+    """
     fig = plt.figure(figsize=(15, 9))
     grid = fig.add_gridspec(2, 2, width_ratios=[1, 1.4])
     map_ax = fig.add_subplot(grid[:, 0])
     position_ax = fig.add_subplot(grid[0, 1])
-    heading_ax = fig.add_subplot(grid[1, 1], sharex=position_ax)
+    heading_ax = fig.add_subplot(grid[1, 1])
 
     expected = np.array([[row["Expected East (m)"], row["Expected North (m)"]] for row in rows])
-    map_ax.scatter(expected[:, 0], expected[:, 1], s=40, facecolors="none", edgecolors=EXPECTED_COLOR,
-                   linewidths=1, label="Expected (reference + detection offsets)")
+    map_ax.scatter(expected[:, 0], expected[:, 1], s=28, marker="x", color=EXPECTED_COLOR,
+                   linewidths=0.8, label="Expected (reference + detection offsets)")
+    position_errors, heading_errors, labels = [], [], []
     for source in results:
         source_rows = [row for row in rows if row["Source"] == source]
-        times = [datetime.fromtimestamp(row["SDSM Time (ms)"] / 1000, timezone.utc) for row in source_rows]
         sdsm_east = [row["Expected East (m)"] + row["Error East (m)"] for row in source_rows]
         sdsm_north = [row["Expected North (m)"] + row["Error North (m)"] for row in source_rows]
         color = SOURCE_COLORS[source]
         map_ax.scatter(sdsm_east, sdsm_north, s=8, color=color, label=f"{source} SDSM")
-        position_ax.plot(times, [row["Position Error (m)"] for row in source_rows], ".", markersize=3, color=color,
-                         label=f"{source} SDSM (mean {results[source]['mean_position_error_m']:.3f} m)")
-        heading_rows = [(time, row["Heading Error (deg)"]) for time, row in zip(times, source_rows)
-                        if row["Heading Error (deg)"] is not None]
-        mean_heading = results[source]["mean_heading_error_deg"]
-        if heading_rows:
-            heading_ax.plot(*zip(*heading_rows), ".", markersize=3, color=color,
-                            label=f"{source} SDSM (mean |error| {mean_heading:.3f} deg)")
-    map_ax.plot(0, 0, "+", color="black", markersize=14, markeredgewidth=2, label="Reference")
+
+        position_errors.append(([row["Position Error (m)"] for row in source_rows], color,
+                                f"{source} SDSM (mean {results[source]['mean_position_error_m']:.3f} m)"))
+        source_headings = [row["Heading Error (deg)"] for row in source_rows
+                           if row["Heading Error (deg)"] is not None]
+        if source_headings:
+            heading_errors.append((source_headings, color,
+                                   f"{source} SDSM (mean |error| "
+                                   f"{results[source]['mean_heading_error_deg']:.3f} deg)"))
+        labels.append(source)
+
     map_ax.set_title("Pedestrian Location in Reference Frame")
     map_ax.set_xlabel("East of Reference (m)")
     map_ax.set_ylabel("North of Reference (m)")
-    map_ax.set_aspect("equal", adjustable="datalim")
+    # Frame the data, not the origin. The reference sits at (0, 0) by
+    # construction and the pedestrian never walks over it, so including it
+    # leaves most of the panel empty.
+    all_east = np.r_[expected[:, 0], [row["Expected East (m)"] + row["Error East (m)"] for row in rows]]
+    all_north = np.r_[expected[:, 1], [row["Expected North (m)"] + row["Error North (m)"] for row in rows]]
+    _frame_axes(map_ax, all_east, all_north, margin=1.1)
     map_ax.grid(True, alpha=0.3)
     map_ax.legend(fontsize=8)
 
-    position_ax.axhline(max_mean_position_error_m, color="black", linestyle="--", linewidth=1,
-                        label=f"Mean threshold ({max_mean_position_error_m:g} m)")
+    for values, color, label in position_errors:
+        position_ax.hist(values, bins=HISTOGRAM_BINS, color=color, alpha=0.8,
+                         edgecolor="white", linewidth=0.5, label=label)
+    _threshold_marker(position_ax, [v for values, _c, _l in position_errors for v in values],
+                      max_mean_position_error_m,
+                      f"Mean threshold ({max_mean_position_error_m:g} m)")
     position_ax.set_title("SDSM Position Error")
-    position_ax.set_ylabel("Position Error (m)")
-    position_ax.set_ylim(bottom=0)
-    position_ax.grid(True, alpha=0.3)
+    position_ax.set_xlabel("Position Error (m)")
+    position_ax.set_ylabel("SDSM objects")
+    position_ax.grid(True, axis="y", alpha=0.3)
     position_ax.legend(fontsize=8)
 
-    for sign in (1, -1):
-        heading_ax.axhline(sign * max_mean_heading_error_deg, color="black", linestyle="--", linewidth=1,
-                           label=f"Mean threshold (±{max_mean_heading_error_deg:g} deg)" if sign == 1 else None)
+    for values, color, label in heading_errors:
+        heading_ax.hist(values, bins=HISTOGRAM_BINS, color=color, alpha=0.8,
+                        edgecolor="white", linewidth=0.5, label=label)
+    _threshold_marker(heading_ax, [v for values, _c, _l in heading_errors for v in values] or [0.0],
+                      max_mean_heading_error_deg,
+                      f"Mean threshold (±{max_mean_heading_error_deg:g} deg)", signed=True)
     heading_ax.set_title("SDSM Heading Error (moving detections)")
-    heading_ax.set_xlabel("SDSM Time (UTC)")
-    heading_ax.set_ylabel("Heading Error (deg)")
-    heading_ax.grid(True, alpha=0.3)
+    heading_ax.set_xlabel("Heading Error (deg)")
+    heading_ax.set_ylabel("SDSM objects")
+    heading_ax.grid(True, axis="y", alpha=0.3)
     heading_ax.legend(fontsize=8)
+
+    for axis in (map_ax, position_ax, heading_ax):
+        axis.spines["top"].set_visible(False)
+        axis.spines["right"].set_visible(False)
+        axis.set_axisbelow(True)
 
     overall = "PASS" if all(result["pass"] for result in results.values()) else "FAIL"
     fig.suptitle(f"CS-01 SDSM Location Spoofing Verification: {overall}")
-    fig.autofmt_xdate()
     fig.tight_layout()
 
     if plots_dir:
