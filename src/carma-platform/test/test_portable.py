@@ -20,6 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import cp01_detection_drops as cp01  # noqa: E402
+import cs01_location_spoofing as cs01  # noqa: E402
 from portable import kafka_log, obu_capture, pcap_backend, tcpdump_text  # noqa: E402
 
 DATA_ROOT = Path(
@@ -280,6 +281,103 @@ class TestCp01Anchoring(unittest.TestCase):
         self.assertEqual(summary["total_expected_frames"], 250)
         self.assertEqual(summary["total_dropped_frames"], 3)
         self.assertEqual(summary["headline"], "3 frames out of 250 frames dropped")
+
+
+class TestCs01Windowing(unittest.TestCase):
+    """CS-01 must window the Kafka dumps and read the reference from the data.
+
+    A dump holds the broker's whole retention, and the configured reference
+    changed on 2026-09-09, so an unwindowed run verifies several days of testing
+    against whichever reference is hard-coded. Both faults produce a confident
+    PASS over the wrong data rather than an error.
+    """
+
+    HEADER = "CreateTime:{ms}|Partition:0|Offset:1|null|"
+    PROJ = "+proj=tmerc +lat_0={lat:.10f} +lon_0={lon:.10f} +k=1 +x_0=0 +y_0=0"
+    # Real epoch milliseconds: the readers require a 10-13 digit timestamp, so a
+    # toy value like 1000 is correctly rejected as not a Kafka record header.
+    BASE = 1789000000000
+
+    def _log(self, entries):
+        """entries: (offset_ms, json_body) pairs -> path to a Kafka-style log."""
+        with tempfile.NamedTemporaryFile("w", suffix=".log", delete=False) as handle:
+            for offset, body in entries:
+                handle.write(self.HEADER.format(ms=self.BASE + offset) + body + "\n")
+            return handle.name
+
+    def test_window_keeps_only_records_inside_the_span(self):
+        path = self._log([(1000, '{"a":1}'), (2000, '{"a":2}'), (3000, '{"a":3}')])
+        out = tempfile.NamedTemporaryFile("w", suffix=".log", delete=False).name
+        try:
+            kept = cs01._window_kafka_log(
+                Path(path), Path(out), (self.BASE + 1500, self.BASE + 2500)
+            )
+            self.assertEqual(kept, 1)
+            self.assertEqual(len(kafka_log.parse_kafka_log_records(out)), 1)
+        finally:
+            os.unlink(path)
+            os.unlink(out)
+
+    def test_window_carries_multiline_bodies_with_their_header(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".log", delete=False) as handle:
+            handle.write(self.HEADER.format(ms=self.BASE + 2000) + '{"a":\n')
+            handle.write('1}\n')
+            path = handle.name
+        out = tempfile.NamedTemporaryFile("w", suffix=".log", delete=False).name
+        try:
+            cs01._window_kafka_log(
+                Path(path), Path(out), (self.BASE + 1500, self.BASE + 2500)
+            )
+            records = kafka_log.parse_kafka_log_records(out)
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["a"], 1)
+        finally:
+            os.unlink(path)
+            os.unlink(out)
+
+    def test_reference_is_the_majority_origin_inside_the_window(self):
+        """The old reference is present but outside the window, so it must not win."""
+        old = self.PROJ.format(lat=38.955018, lon=-77.1484523)
+        new = self.PROJ.format(lat=38.955027, lon=-77.1484523)
+        entries = [(1000, '{"timestamp":%d,"projString":"%s"}' % (self.BASE + 1000, old))] * 50
+        entries += [(2000, '{"timestamp":%d,"projString":"%s"}' % (self.BASE + 2000, new))] * 3
+        path = self._log(entries)
+        try:
+            lat, lon, detail = cs01.detect_reference(
+                path, (self.BASE + 1500, self.BASE + 2500)
+            )
+            self.assertAlmostEqual(lat, 38.955027, places=6)
+            self.assertAlmostEqual(lon, -77.1484523, places=6)
+            self.assertEqual(detail["total_in_window"], 3)
+            self.assertEqual(len(detail["origins_in_window"]), 1)
+        finally:
+            os.unlink(path)
+
+    def test_reference_detection_reports_every_origin_in_the_window(self):
+        """A window straddling a reconfiguration must show both, not hide one."""
+        old = self.PROJ.format(lat=38.955018, lon=-77.1484523)
+        new = self.PROJ.format(lat=38.955027, lon=-77.1484523)
+        entries = [(2000, '{"timestamp":%d,"projString":"%s"}' % (self.BASE + 2000, new))] * 4
+        entries += [(2100, '{"timestamp":%d,"projString":"%s"}' % (self.BASE + 2100, old))] * 2
+        path = self._log(entries)
+        try:
+            _lat, _lon, detail = cs01.detect_reference(
+                path, (self.BASE + 1500, self.BASE + 2500)
+            )
+            self.assertEqual(len(detail["origins_in_window"]), 2)
+        finally:
+            os.unlink(path)
+
+    def test_no_detections_in_window_raises(self):
+        body = '{"timestamp":%d,"projString":"%s"}' % (
+            self.BASE + 9000, self.PROJ.format(lat=38.9, lon=-77.1)
+        )
+        path = self._log([(9000, body)])
+        try:
+            with self.assertRaises(ValueError):
+                cs01.detect_reference(path, (self.BASE + 1000, self.BASE + 2000))
+        finally:
+            os.unlink(path)
 
 
 @unittest.skipUnless(HAS_DATA, f"verification session not present at {DATA_ROOT}")

@@ -97,6 +97,25 @@ python src/carma-platform/run_cp01_analysis.py \
     --output-dir out/cp01
 ```
 
+**CS-01** is also separate, because the configured reference location can change
+between sessions, so each session is verified on its own:
+
+```bash
+python src/carma-platform/run_cs01_analysis.py \
+    --data-root .../20260915_verification_test \
+    --output-dir out/cs01
+```
+
+It checks that each SDSM places the spoofed pedestrian at the reference point
+FLIRCameraDriver was configured with (mean position error < 0.2 m) and that the
+reported heading matches the detection velocity (mean error < 1 deg).
+
+The reference is read from the data, never hard-coded: the detection logs hold
+three projection origins about one metre apart, because the driver was
+reconfigured on 2026-09-09. The Kafka dumps are also windowed to the session's
+runs first, since a dump holds the broker's whole retention and would otherwise
+verify several days of testing at once.
+
 It reports "X frames out of 4500 frames dropped" from the raw
 `v2xhub_sim_sensor_detected_object` Kafka topic. That topic is upstream of the
 SDSS, so a camera stall — which delays frames rather than dropping them — does

@@ -411,7 +411,7 @@ def verify_location_spoofing(
 
     rotation_deg, rotation_residual_m = fit_driver_rotation_deg(detections, ref_lat, ref_lon)
 
-    print("\n=== CS-03 SDSM Location Spoofing Verification ===")
+    print("\n=== CS-01 SDSM Location Spoofing Verification ===")
     print(f"Reference: {ref_lat}, {ref_lon}")
     if rotation_deg is not None:
         print(
@@ -491,7 +491,7 @@ def plot_verification(rows: list, results: dict, max_mean_position_error_m: floa
     heading_ax.legend(fontsize=8)
 
     overall = "PASS" if all(result["pass"] for result in results.values()) else "FAIL"
-    fig.suptitle(f"CS-03 SDSM Location Spoofing Verification: {overall}")
+    fig.suptitle(f"CS-01 SDSM Location Spoofing Verification: {overall}")
     fig.autofmt_xdate()
     fig.tight_layout()
 
@@ -521,7 +521,7 @@ def find_sdsm_log(kafka_log_dir: Path) -> Path:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="CS-03: Verify SDSMs place a location-spoofed pedestrian at the remote reference location "
+        description="CS-01: Verify SDSMs place a location-spoofed pedestrian at the remote reference location "
         "configured in FLIRCameraDriver, by comparing each SDSM object's location and heading against its source "
         "detection on the detected object Kafka topic."
     )
