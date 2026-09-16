@@ -470,6 +470,15 @@ def message_rate(mcap_path, topic, expected_rate_hz, window, stats_dir=None,
         "is_passed": None if average is None else bool(low <= average <= high),
         "not_applicable": False,
     }
+    if not counted:
+        # Distinguish "never arrived" from "arrived too slowly". Both fail the
+        # check, and both should: a topic that is silent when it is expected at
+        # a given rate is a real finding. But the two have different causes and
+        # the bare rate of 0.0 does not say which this is.
+        stats["note"] = (
+            "topic is present in the recording but no messages fall inside the "
+            "analysis window; this is absence, not a slow rate"
+        )
     _write_stats(stats_dir, f"pl01_{label}_rate", stats)
     return stats["is_passed"], stats
 
