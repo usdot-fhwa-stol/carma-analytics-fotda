@@ -1,463 +1,454 @@
-from pathlib import Path
+#!/usr/bin/env python3
+"""Run every DT-WZ (pedestrian detection to SDSM) metric over a verification session.
+
+Point it at the session directory and it does the rest::
+
+    python run_all_dt_wz_analysis.py \
+        --data-root /path/to/20260914_verification_test \
+        --output-dir out/verification_20260914
+
+``runs.csv`` in the session directory is the authority on which files constitute
+a run; see ``dt_wz_dataset``. Everything is written under ``--output-dir``:
+per-run stats JSON and a detection-level CSV, plus session-level summary tables
+and plots grouped by pedestrian dwell condition.
+
+Metrics produced per run
+------------------------
+======  ======================================================================
+CP-02   raw detection -> SDSM drop rate               (threshold 2%)
+CP-03   RSU broadcast -> CARMA Platform receipt       (threshold 2%)
+CP-04   detection -> Kafka latency                    (mean < 0.5 s)
+DT-05   detection -> SDSM receipt at the vehicle      (median < 0.3 s)
+PL-01   per-topic message rates, and OBU radio counts
+======  ======================================================================
+
+Plus the end-to-end cascade: one row per camera detection with a timestamp for
+each of the ~19 stages between the FLIR camera and the vehicle's fused output.
+
+A metric reports one of four outcomes, and they are not interchangeable: passed,
+failed, **not applicable** (the data needed was never recorded -- MAP and SPAT
+are in this position for the 2026-09-14 session), or errored.
+"""
+
+from __future__ import annotations
+
 import argparse
-from functools import lru_cache
 import json
-import re
 import sys
-import textwrap
+import traceback
+from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional
 
-import argcomplete
-import numpy as np
-from matplotlib import pyplot as plt
+import pandas as pd
 
-from run_all_analysis import run_all_analysis
-from message_scripts import (
-    INCOMING_SDSM_TOPIC,
-    check_message_broadcast_rate,
-    plot_message_time_intervals,
-    run_obu_bsm_transmission_drop_analysis,
-)
-from parse_ros2_bags import open_bagfile
-from utils import parse_kafka_log_timestamps
-from carma_cooperative_perception_scripts import (
-    DETECTION_TO_SDSM_RECEIPT_LATENCY_THRESHOLD_IN_S,
-    run_sdsm_latency_analysis,
-    run_sdsm_detection_drop_rate_analysis,
-    run_rsu_sdsm_transmission_drop_rate_analysis,
-    run_detection_to_kafka_latency_analysis,
-)
+import dt_wz_dataset as dataset
+import dt_wz_metrics as metrics
+from dt_wz_cascade import build as cascade_build
+from dt_wz_cascade import cascade_config
+from dt_wz_cascade import plots as cascade_plots
+from dt_wz_cascade import qa as cascade_qa
 from guidance_scripts import get_engage_time
+from portable import kafka_log, tcpdump_text
 
-# carma-streets is a hyphenated directory, not an importable package
-sys.path.append(str(Path(__file__).resolve().parent.parent / "carma-streets"))
-from detection_drop_characterization import characterize_detection_drops
-from sdsm_location_spoofing_verification import verify_location_spoofing
-
-# Raw v2xhub object detection Kafka log. A single log is a running record across every MCAP
-# recording in a dt_wz (pedestrian detection) test session, so the same path is used for every
-# MCAP file - each analysis below windows the log down to that MCAP's own recording span.
-DETECTION_LOG_PATH = Path(
-    "/workspaces/carma_ws/src/data-verification-initial/dth-flir-camera-laptop-kafka-logs/v2xhub_sim_sensor_detected_object_kafka.log"
-)
-
-# CP-03: RSU captures of the session's SDSM broadcasts. Every pcap is checked against every MCAP - each
-# MCAP only uses the broadcasts that fall within its own analysis window.
-RSU_PCAP_DIR = Path("/workspaces/carma_ws/src/data-verification-initial/rsu-files")
-
-# CP-01: manually recorded pedestrian entry times (one per run, America/New_York) and how long
-# the pedestrian stayed in the detection zone for each run (not exit - entry, which includes walking
-# in and out). These are the valid runs recorded during the 2026-09-10 data-verification-initial session.
-CP01_RUN_ENTRY_TIMES = [
-    "2026-09-10 13:43:22", "2026-09-10 13:46:42", "2026-09-10 13:49:51", "2026-09-10 13:53:39", "2026-09-10 13:57:56",
-]
-CP01_RUN_DURATIONS_SEC = [5, 5, 10, 20, 20]
-CP01_OUTPUT_SUBDIR = "cp01_detection_drop_characterization"
-
-# CS-03: remote reference location configured in FLIRCameraDriver (CameraLatitude/CameraLongitude) for the
-# 2026-09-10 session. Its heading (CameraRotation, 180 deg) is already applied to the detections by the driver.
-# CS-03 only needs one run where the pedestrian is detected: run 5 (entry 13:57:56, 20 s), recorded in this MCAP.
-CS03_REF_LAT = 38.955027
-CS03_REF_LON = -77.1484523
-CS03_MCAP_PATH = Path(
-    "/workspaces/carma_ws/src/data-verification-initial/mcap/rosbag2_2026-09-10_135602_0.mcap"
-)
-CS03_OUTPUT_SUBDIR = "cs03_sdsm_location_spoofing"
-
-# PL-01: Message communication regression testing. Expected average rates of the messages CARMA Platform
-# receives/broadcasts, each within +/-20% (+/-2 Hz at 10 Hz, +/-0.2 Hz at 1 Hz). SDSMs are only expected while an
-# object is detected, so their rate is averaged over the detection log's detection periods only.
-PL01_EXPECTED_RATES_HZ = {
-    "/message/incoming_map": ("MAP", "received", 1.0),
-    "/message/incoming_spat": ("SPAT", "received", 10.0),
-    INCOMING_SDSM_TOPIC: ("SDSM", "received", 10.0),
-    "/message/incoming_mobility_operation": ("MOM", "received", 1.0),
-    "/message/bsm_outbound": ("BSM", "broadcast", 10.0),
+# Topics checked for rate regression, with the rate each is expected to hold.
+# SDSM is event-driven -- it only flows while an object is detected -- so its
+# rate is averaged over the detection periods rather than the whole window.
+EXPECTED_RATES_HZ = {
+    "/message/incoming_map": ("MAP", 1.0, False),
+    "/message/incoming_spat": ("SPAT", 10.0, False),
+    "/message/incoming_sdsm": ("SDSM", 10.0, True),
+    "/message/incoming_mobility_operation": ("MOM", 1.0, False),
+    "/message/bsm_outbound": ("BSM", 10.0, False),
 }
-PL01_RATE_TOLERANCE_PCT = 0.2
-# Detections further apart than this split the detection log into separate detection periods
-PL01_DETECTION_GAP_SEC = 0.5
-# OBU rmnet_data1 (radio side) captures, checked for the BSMs CARMA Platform sent the OBU to broadcast. Only the
-# pcaps overlapping each MCAP's analysis window are used.
-PL01_OBU_PCAP_DIR = Path("/workspaces/carma_ws/src/data-verification-initial/obu-pcap")
-PL01_OUTPUT_SUBDIR = "pl01_message_communication"
-PL01_PLOT_NAME = "pl01_message_intervals_and_obu_bsm_drops.png"
-
-# CP-helper (SDSM message intervals), CP-02 (detection match status), CP-03 (RSU broadcast receipt status) and
-# CP-04 (detection to Kafka latency) are drawn as panels of one figure sharing a time axis, so SDSM interval gaps
-# line up exactly with dropped detections, dropped RSU transmissions and late detections.
-CP_COMBINED_PLOT_NAME = "cp_helper_cp02_cp03_cp04_combined.png"
+RATE_TOLERANCE_PCT = 0.2
 
 
-def _mark_panel_unavailable(ax, metric: str, error: Exception) -> None:
-    """Label a combined-figure panel whose analysis couldn't run, rather than leaving an empty axis"""
-    # File names are enough to explain the error here; full paths are in the console output
-    message = textwrap.fill(re.sub(r"/(?:[^/\s',\]]+/)+", "", str(error)), width=110)
-    ax.set_title(f"{metric}: not available")
-    ax.text(0.5, 0.5, message, transform=ax.transAxes, ha="center", va="center", fontsize=8, color="dimgray")
-    ax.set_yticks([])
+def analyse_run(run, session_logs, detection_records, output_dir, verbose=True):
+    """Run every metric for one run. Returns (results, summary_row, cascade_table)."""
+    run_dir = output_dir / run.name
+    stats_dir = run_dir / "stats"
+    for directory in (run_dir, stats_dir):
+        directory.mkdir(parents=True, exist_ok=True)
 
+    results: Dict[str, Optional[bool]] = {}
+    row: Dict[str, object] = {
+        "run": run.name,
+        "condition": run.condition,
+        "run_id": run.run_id,
+        "dwell_sec": run.dwell_sec,
+        "start_time": run.start_time.isoformat(),
+    }
 
-def analyze_mcap_file_for_dt_wz_analysis(
-    mcap_path: Path, output_dir: Path, stats_dir: Path, data_dir: Path, plots_dir: Path
-) -> list:
-    """Extract single MCAP file and run all dt_wz (pedestrian detection to SDSM) analysis on it"""
     try:
-        engage_time, disengage_time = get_engage_time(mcap_path)
-    except Exception as e:
-        print(f"Error getting engage time for mcap {mcap_path}: {e}")
-        return None
+        engage_time, disengage_time = get_engage_time(run.mcap)
+        window = metrics.engaged_window_epoch(run.mcap, engage_time, disengage_time)
+    except Exception as error:
+        print(f"  ERROR: cannot determine engaged window: {error}")
+        row["error"] = f"engaged window: {error}"
+        return {"engaged_window": None}, row, pd.DataFrame()
 
-    analysis_stats = {}
-    fig, (interval_ax, drop_rate_ax, transmission_ax, kafka_latency_ax) = plt.subplots(
-        4, 1, sharex=True, figsize=(12, 15), gridspec_kw={"height_ratios": [5, 3, 3, 3]}
-    )
+    row["engaged_duration_s"] = round(window[1] - window[0], 3)
+    active = metrics.detection_intervals(detection_records, window)
+    row["detection_active_s"] = round(sum(end - start for start, end in active), 3)
 
-    # CP-helper: SDSM message interval plot, shaded with raw-detection gaps for context
+    def record(name, function, *args, **kwargs):
+        try:
+            passed, stats = function(*args, **kwargs)
+            results[name] = passed
+            return stats
+        except Exception as error:
+            print(f"  ERROR in {name}: {error}")
+            if verbose:
+                traceback.print_exc(limit=2)
+            results[name] = None
+            row[f"{name}_error"] = str(error)
+            return {}
+
+    cp02 = record("CP02_sdsm_detection_drop_rate", metrics.detection_to_sdsm_drop_rate,
+                  run.mcap, detection_records, window, stats_dir)
+    row["cp02_raw_detections"] = cp02.get("total_raw_detections")
+    row["cp02_dropped"] = cp02.get("total_dropped")
+    row["cp02_drop_rate_pct"] = cp02.get("drop_rate_pct")
+
+    cp03 = record("CP03_rsu_sdsm_transmission_drop_rate", metrics.rsu_transmission_drop_rate,
+                  run.mcap, run.rsu_pcap, window, stats_dir)
+    row["cp03_broadcasts"] = cp03.get("total_broadcasts_checked")
+    row["cp03_dropped"] = cp03.get("total_dropped")
+    row["cp03_drop_rate_pct"] = cp03.get("drop_rate_pct")
+    latency = cp03.get("receive_latency_ms") or {}
+    row["cp03_receive_latency_median_ms"] = latency.get("median")
+
+    cp04 = record("CP04_detection_to_kafka_latency", metrics.detection_to_kafka_latency,
+                  detection_records, window, stats_dir)
+    row["cp04_mean_latency_s"] = cp04.get("mean_latency_s")
+    row["cp04_late_pct"] = cp04.get("late_pct")
+
+    dt05 = record("DT05_detection_to_sdsm_receipt_latency",
+                  metrics.detection_to_sdsm_receipt_latency, run.mcap, window, stats_dir)
+    row["dt05_samples"] = dt05.get("sample_count")
+    row["dt05_median_latency_s"] = dt05.get("median_latency_s")
+
+    for topic, (label, expected_hz, event_driven) in EXPECTED_RATES_HZ.items():
+        stats = record(
+            f"PL01_{label}_rate", metrics.message_rate, run.mcap, topic, expected_hz, window,
+            stats_dir, RATE_TOLERANCE_PCT, label.lower(),
+            active if event_driven else None,
+        )
+        row[f"pl01_{label.lower()}_rate_hz"] = stats.get("average_rate_hz")
+
     try:
-        plot_message_time_intervals(
-            mcap_path=mcap_path,
-            topic_name=INCOMING_SDSM_TOPIC,
-            detection_log_path=DETECTION_LOG_PATH,
-            start_time=engage_time,
-            end_time=disengage_time,
-            ax=interval_ax,
+        obu = metrics.obu_radio_activity(
+            run.obu_capture, run.start_time.date(), run.mcap, window, stats_dir
         )
-        analysis_stats["CP_helper_sdsm_message_intervals"] = True
-    except Exception as e:
-        print(f"Error analyzing {mcap_path} for metric CP_helper_sdsm_message_intervals: {e}")
-        analysis_stats["CP_helper_sdsm_message_intervals"] = None
-        _mark_panel_unavailable(interval_ax, "CP_helper_sdsm_message_intervals", e)
+        row["obu_bsm_on_radio"] = obu["total_bsms_on_radio"]
+        row["obu_bsm_shortfall"] = obu["bsm_shortfall"]
+        row["obu_sdsm_on_radio"] = obu["total_sdsms_on_radio"]
+        results["PL01_obu_radio_activity"] = True
+    except Exception as error:
+        print(f"  ERROR in PL01_obu_radio_activity: {error}")
+        results["PL01_obu_radio_activity"] = None
+        obu = {}
 
-    # CP-02: Raw detection to SDSM drop rate should be less than 2%
+    cascade = _build_cascade(run, session_logs, window, run_dir, row, verbose)
+    return results, row, cascade
+
+
+def _build_cascade(run, session_logs, window, run_dir, row, verbose):
+    """Build and persist this run's per-detection stage table."""
     try:
-        is_passed, _, _, _ = run_sdsm_detection_drop_rate_analysis(
-            mcap_path=mcap_path,
-            detection_log_path=DETECTION_LOG_PATH,
-            start_time=engage_time,
-            end_time=disengage_time,
-            save_stats_dir=stats_dir,
-            save_data_dir=data_dir,
-            ax=drop_rate_ax,
+        radio = tcpdump_text.timestamps_of_type(
+            tcpdump_text.parse_tcpdump_text(run.obu_capture, run.start_time.date()),
+            "SDSM", window[0], window[1],
         )
-        analysis_stats["CP02_sdsm_detection_drop_rate"] = is_passed
-    except Exception as e:
-        print(f"Error analyzing {mcap_path} for metric CP02_sdsm_detection_drop_rate: {e}")
-        analysis_stats["CP02_sdsm_detection_drop_rate"] = None
-        _mark_panel_unavailable(drop_rate_ax, "CP02_sdsm_detection_drop_rate", e)
-
-    # CP-03: SDSMs broadcast by the RSU but never received by CARMA Platform should be less than 2%
-    try:
-        is_passed, _, _ = run_rsu_sdsm_transmission_drop_rate_analysis(
-            mcap_path=mcap_path,
-            rsu_pcap_paths=sorted(RSU_PCAP_DIR.glob("*.pcap")),
-            start_time=engage_time,
-            end_time=disengage_time,
-            save_stats_dir=stats_dir,
-            ax=transmission_ax,
+        table = cascade_build.build_run_table(run, session_logs, window)
+        if table.empty:
+            row["cascade_rows"] = 0
+            return table
+        table = cascade_build.attach_run_sources(
+            table, run, window, [value * 1e3 for value in radio]
         )
-        analysis_stats["CP03_rsu_sdsm_transmission_drop_rate"] = is_passed
-    except Exception as e:
-        print(f"Error analyzing {mcap_path} for metric CP03_rsu_sdsm_transmission_drop_rate: {e}")
-        analysis_stats["CP03_rsu_sdsm_transmission_drop_rate"] = None
-        _mark_panel_unavailable(transmission_ax, "CP03_rsu_sdsm_transmission_drop_rate", e)
-
-    # CP-04: Detection to Kafka message creation latency should average < 0.5 s with < 2% of detections late (> 0.1 s)
-    try:
-        is_passed, _, _ = run_detection_to_kafka_latency_analysis(
-            mcap_path,
-            DETECTION_LOG_PATH,
-            start_time=engage_time,
-            end_time=disengage_time,
-            save_stats_dir=stats_dir,
-            save_data_dir=data_dir,
-            ax=kafka_latency_ax,
+        table = cascade_build.add_quality(table)
+        table = cascade_build.add_deltas(table)
+        table.insert(0, "condition", run.condition)
+        table.insert(1, "run", run.name)
+        table.to_csv(run_dir / "detections.csv", index=False, float_format="%.17g")
+        (run_dir / "qa_report.txt").write_text(
+            cascade_qa.report(table, f"Cascade QA — {run.name}")
         )
-        analysis_stats["CP04_detection_to_kafka_latency"] = is_passed
-    except Exception as e:
-        print(f"Error analyzing {mcap_path} for metric CP04_detection_to_kafka_latency: {e}")
-        analysis_stats["CP04_detection_to_kafka_latency"] = None
-        _mark_panel_unavailable(kafka_latency_ax, "CP04_detection_to_kafka_latency", e)
 
-    # DT-05: Median latency from object detection until CARMA Platform receives it in an SDSM should be < 0.3 s
-    try:
-        is_passed, _, _, _ = run_sdsm_latency_analysis(
-            mcap_path,
-            error_threshold_to_pass_seconds=DETECTION_TO_SDSM_RECEIPT_LATENCY_THRESHOLD_IN_S,
-            start_time=engage_time,
-            end_time=disengage_time,
-            save_stats_dir=stats_dir,
-            save_data_dir=data_dir,
-            save_plot_dir=plots_dir,
-        )
-        analysis_stats["DT05_detection_to_sdsm_receipt_latency"] = bool(is_passed)
-    except Exception as e:
-        print(f"Error analyzing {mcap_path} for metric DT05_detection_to_sdsm_receipt_latency: {e}")
-        analysis_stats["DT05_detection_to_sdsm_receipt_latency"] = None
-
-    # plot_message_time_intervals is generic across topics, so name what this panel shows here
-    if analysis_stats["CP_helper_sdsm_message_intervals"] is not None:
-        interval_ax.set_title(
-            "CP-helper: SDSM Receive Intervals on CARMA Platform (/message/incoming_sdsm)\n"
-            "Shaded green: no FLIR detection in the v2xhub_sim_sensor_detected_object Kafka log",
-            pad=20,
-        )
-        interval_ax.set_ylabel("Time Since Previous SDSM Received (s)")
-    # The shared x-axis is labeled once, under the bottom panel
-    interval_ax.set_xlabel("")
-    drop_rate_ax.set_xlabel("")
-    transmission_ax.set_xlabel("")
-    kafka_latency_ax.set_xlabel("Time Since Start of Recording (seconds)")
-    fig.tight_layout()
-    fig.savefig(plots_dir / CP_COMBINED_PLOT_NAME, dpi=300)
-    plt.close(fig)
-    print(f"Combined CP-helper/CP-02/CP-03/CP-04 plot saved to: {plots_dir / CP_COMBINED_PLOT_NAME}")
-
-    analysis_stats.update(analyze_pl01_message_communication(
-        mcap_path, engage_time, disengage_time, stats_dir / PL01_OUTPUT_SUBDIR, plots_dir / PL01_OUTPUT_SUBDIR
-    ))
-
-    return [analysis_stats]
+        row["cascade_rows"] = len(table)
+        row["cascade_reached_vehicle"] = int(table["reached_vehicle"].sum())
+        for stage in ("t_rsu_broadcast", "t_ros_inbound", "t_ros_fused"):
+            column = f"lat_{stage[2:]}_ms"
+            if column in table.columns and table[column].notna().any():
+                row[f"cascade_{stage[2:]}_median_ms"] = float(table[column].median())
+        return table
+    except Exception as error:
+        print(f"  ERROR building cascade: {error}")
+        if verbose:
+            traceback.print_exc(limit=2)
+        row["cascade_error"] = str(error)
+        return pd.DataFrame()
 
 
-@lru_cache(maxsize=None)
-def _detection_times_sec(detection_log_path: Path) -> np.ndarray:
-    """Sorted epoch-second timestamps of every detection in the (session-wide) detection log"""
-    return parse_kafka_log_timestamps(detection_log_path) / 1e3
-
-
-def detection_intervals(mcap_path: Path, start_time: float, end_time: float) -> list:
-    """
-    Periods within [start_time, end_time] (seconds since the start of the MCAP recording) during which
-    DETECTION_LOG_PATH has detections, split wherever consecutive detections are more than
-    PL01_DETECTION_GAP_SEC apart. Periods with a single detection have no duration and are left out.
-    """
-    _, _, global_start_time_ns = open_bagfile(str(mcap_path))
-    times = _detection_times_sec(DETECTION_LOG_PATH) - global_start_time_ns / 1e9
-    times = np.unique(times[(times >= start_time) & (times <= end_time)])
-    if len(times) < 2:
-        return []
-    breaks = np.flatnonzero(np.diff(times) > PL01_DETECTION_GAP_SEC)
-    starts = np.r_[times[0], times[breaks + 1]]
-    ends = np.r_[times[breaks], times[-1]]
-    return [(float(start), float(end)) for start, end in zip(starts, ends) if end > start]
-
-
-def analyze_pl01_message_communication(
-    mcap_path: Path, engage_time: float, disengage_time: float, stats_dir: Path, plots_dir: Path
-) -> dict:
-    """
-    PL-01: Message communication regression testing over the engaged window of one MCAP.
-    - Freq check (ROS side, covers the OBU side too): each PL01_EXPECTED_RATES_HZ topic's average rate should be
-      within PL01_RATE_TOLERANCE_PCT of its expected rate
-    - Msg drop check (ROS side): message interval plots per topic, the SDSM one shaded with detection log gaps
-    - Msg drop check (OBU side): BSMs CARMA Platform sent that the OBU never transmitted (characterization only)
-    """
-    stats_dir.mkdir(parents=True, exist_ok=True)
+def write_session_outputs(runs, rows, cascades, results_by_run, output_dir):
+    """Write the summary tables and the condition-grouped plots."""
+    plots_dir = output_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
-    analysis_stats = {}
 
-    for topic, (label, direction, expected_rate_hz) in PL01_EXPECTED_RATES_HZ.items():
-        metric = f"PL01_{label}_{direction}_rate"
-        try:
-            is_passed, rate_stats, rate_fig, _, _ = check_message_broadcast_rate(
-                mcap_path,
-                topic,
-                expected_rate_hz,
-                rate_tolerance_pct=PL01_RATE_TOLERANCE_PCT,
-                start_time=engage_time,
-                end_time=disengage_time,
-                save_stats_dir=stats_dir,
-                save_plot_dir=plots_dir,
-                pass_on_average_rate=True,
-                active_intervals=detection_intervals(mcap_path, engage_time, disengage_time) if label == "SDSM" else None,
-            )
-            if rate_fig is not None:
-                plt.close(rate_fig)
-            analysis_stats[metric] = is_passed if rate_stats else None
-        except Exception as e:
-            print(f"Error analyzing {mcap_path} for metric {metric}: {e}")
-            analysis_stats[metric] = None
+    summary = pd.DataFrame(rows)
+    summary.to_csv(output_dir / "summary_by_run.csv", index=False)
+    print(f"\nPer-run summary  -> {output_dir / 'summary_by_run.csv'}")
 
-    fig, axes = plt.subplots(
-        len(PL01_EXPECTED_RATES_HZ) + 1, 1, sharex=True, figsize=(12, 22),
-        gridspec_kw={"height_ratios": [4] * len(PL01_EXPECTED_RATES_HZ) + [2]},
+    numeric = summary.select_dtypes("number").columns
+    by_condition = (
+        summary.groupby("condition", sort=False)[list(numeric)]
+        .agg(["mean", "median"])
+        .round(4)
     )
-    for ax, (topic, (label, direction, expected_rate_hz)) in zip(axes, PL01_EXPECTED_RATES_HZ.items()):
-        expected_interval_sec = 1.0 / expected_rate_hz
-        try:
-            plot_message_time_intervals(
-                mcap_path=mcap_path,
-                topic_name=topic,
-                expected_interval_sec=expected_interval_sec,
-                interval_tolerance_pct=PL01_RATE_TOLERANCE_PCT,
-                detection_log_path=DETECTION_LOG_PATH if label == "SDSM" else None,
-                start_time=engage_time,
-                end_time=disengage_time,
-                ax=ax,
-                max_view_sec=5 * expected_interval_sec if expected_rate_hz >= 10 else 2 * expected_interval_sec,
-            )
-        except Exception as e:
-            print(f"Error plotting {topic} message intervals for {mcap_path}: {e}")
-        ax.set_title(
-            f"PL-01: {label} {direction.capitalize()} Intervals on CARMA Platform ({topic}), "
-            f"expected {expected_rate_hz:g} Hz" + ("\nShaded green: no FLIR detection in the detection Kafka log" if label == "SDSM" else ""),
-            pad=20,
+    by_condition.columns = [f"{column}_{stat}" for column, stat in by_condition.columns]
+    by_condition = by_condition.reset_index()
+    by_condition.insert(1, "runs", summary.groupby("condition", sort=False).size().values)
+    by_condition.to_csv(output_dir / "summary_by_condition.csv", index=False)
+    print(f"Condition summary -> {output_dir / 'summary_by_condition.csv'}")
+
+    cascade_plots.plot_drop_rates(
+        summary, "DT-WZ drop rates by run", plots_dir / "drop_rates_by_run.png"
+    )
+
+    grouped: Dict[str, pd.DataFrame] = {}
+    for condition in dataset.condition_order(runs):
+        frames = [table for name, table in cascades.items()
+                  if not table.empty and name.startswith(f"{condition}_")]
+        if not frames:
+            continue
+        combined = pd.concat(frames, ignore_index=True)
+        grouped[condition] = combined
+        cascade_plots.plot_latency_by_stage(
+            combined, f"SDSM latency by stage — {condition} dwell",
+            plots_dir / f"latency_by_stage_{condition}.png",
         )
-        ax.set_ylabel(f"Time Since Previous {label} (s)")
-        ax.set_xlabel("")
-
-    metric = "PL01_obu_bsm_transmission_drop"
-    try:
-        run_obu_bsm_transmission_drop_analysis(
-            mcap_path,
-            sorted(PL01_OBU_PCAP_DIR.glob("*rmnet*.pcap")),
-            start_time=engage_time,
-            end_time=disengage_time,
-            save_stats_dir=stats_dir,
-            ax=axes[-1],
+        cascade_plots.plot_latency_by_stage(
+            combined, f"Per-hop SDSM latency — {condition} dwell",
+            plots_dir / f"latency_per_hop_{condition}.png", mode="delta",
         )
-        # Characterization only (no pass/fail threshold): True means the drop rate was measured
-        analysis_stats[metric] = True
-    except Exception as e:
-        print(f"Error analyzing {mcap_path} for metric {metric}: {e}")
-        analysis_stats[metric] = None
-
-    axes[-1].set_xlabel("Time Since Start of Recording (seconds)")
-    fig.tight_layout()
-    fig.savefig(plots_dir / PL01_PLOT_NAME, dpi=200)
-    plt.close(fig)
-    print(f"PL-01 message interval and OBU BSM drop plot saved to: {plots_dir / PL01_PLOT_NAME}")
-
-    return analysis_stats
-
-
-def run_session_analysis(output_dir: Path) -> None:
-    """
-    Run the metrics evaluated once per test session rather than per MCAP, and add their results to
-    the session's analysis_summary.json:
-    - CP-01: Detection drop characterization over the recorded runs, which span several MCAP files
-      (characterization only)
-    - CS-03: SDSMs received in one run should place the spoofed pedestrian at the reference
-      (mean position error < 0.2 m, mean heading error < 1 deg)
-    - CP-03 total: the per-MCAP RSU SDSM transmission drop counts pooled into one session drop rate
-    - PL-01 OBU total: the per-MCAP OBU BSM transmission drop counts pooled into one session drop rate
-    """
-    session_metrics = {}
-
-    try:
-        cp01_result = characterize_detection_drops(
-            DETECTION_LOG_PATH,
-            CP01_RUN_ENTRY_TIMES,
-            CP01_RUN_DURATIONS_SEC,
-            plots_dir=output_dir / CP01_OUTPUT_SUBDIR,
+        cascade_plots.plot_cascade(
+            combined, f"SDSM latency cascade — {condition} dwell",
+            plots_dir / f"latency_cascade_{condition}.png",
         )
-        session_metrics["CP01_detection_drop_characterization"] = {
-            "output_dir": str(output_dir / CP01_OUTPUT_SUBDIR),
-            "runs": len(cp01_result["runs"]),
-            "expected_frames": cp01_result["total_expected_frames"],
-            "received_frames": cp01_result["total_received_frames"],
-            "dropped_frames": cp01_result["total_dropped_frames"],
-            "drop_rate": f"{cp01_result['total_drop_pct']:.2f}%",
-        }
-    except Exception as e:
-        print(f"Error analyzing metric CP01_detection_drop_characterization: {e}")
-        session_metrics["CP01_detection_drop_characterization"] = None
 
-    try:
-        cs03_result = verify_location_spoofing(
-            DETECTION_LOG_PATH,
-            CS03_REF_LAT,
-            CS03_REF_LON,
-            mcap_path=CS03_MCAP_PATH,
-            plots_dir=output_dir / CS03_OUTPUT_SUBDIR,
+    if grouped:
+        cascade_plots.plot_condition_comparison(
+            grouped, "End-to-end SDSM latency by dwell condition",
+            plots_dir / "latency_by_condition.png",
         )
-        mcap_result = cs03_result["sources"]["mcap"]
-        session_metrics["CS03_sdsm_location_spoofing"] = {
-            "output_dir": str(output_dir / CS03_OUTPUT_SUBDIR),
-            "mcap": str(CS03_MCAP_PATH),
-            "passed": cs03_result["pass"],
-            "verified_objects": mcap_result["verified_objects"],
-            "mean_position_error_m": round(mcap_result["mean_position_error_m"], 4),
-            "mean_heading_error_deg": round(mcap_result["mean_heading_error_deg"], 4),
-        }
-    except Exception as e:
-        print(f"Error analyzing metric CS03_sdsm_location_spoofing: {e}")
-        session_metrics["CS03_sdsm_location_spoofing"] = None
+        everything = pd.concat(grouped.values(), ignore_index=True)
+        everything.to_csv(output_dir / "detections_all_runs.csv", index=False,
+                          float_format="%.17g")
+        (output_dir / "qa_report.txt").write_text(
+            cascade_qa.report(everything, "Cascade QA — all runs")
+        )
+        cascade_qa.stage_summary(everything).to_csv(
+            output_dir / "stage_summary.csv", index=False
+        )
+        print(f"QA report         -> {output_dir / 'qa_report.txt'}")
+        cascade_plots.plot_latency_by_stage(
+            everything, "SDSM latency by stage — all runs",
+            plots_dir / "latency_by_stage_all.png",
+        )
+        print(f"Detection table   -> {output_dir / 'detections_all_runs.csv'} "
+              f"({len(everything)} detections)")
+    print(f"Plots             -> {plots_dir}")
 
-    # CP-03 pooled over every MCAP's RSU SDSM broadcasts, for the session's overall transmission drop rate
-    cp03_stats = [
-        json.loads(stats_path.read_text())
-        for stats_path in sorted(output_dir.glob("*/stats/rsu_sdsm_transmission_drop_rate.json"))
+    _write_summary_json(runs, results_by_run, summary, output_dir)
+    _write_column_docs(output_dir)
+
+
+def _write_summary_json(runs, results_by_run, summary, output_dir):
+    """analysis_summary.json, with N/A counted separately from failures."""
+    metrics_summary: Dict[str, Dict[str, int]] = defaultdict(
+        lambda: {"passed": 0, "failed": 0, "not_applicable": 0, "errors": 0}
+    )
+    for results in results_by_run.values():
+        for metric, outcome in results.items():
+            bucket = metrics_summary[metric]
+            if outcome is True:
+                bucket["passed"] += 1
+            elif outcome is False:
+                bucket["failed"] += 1
+            elif outcome is None:
+                bucket["not_applicable"] += 1
+
+    for metric, bucket in metrics_summary.items():
+        evaluated = bucket["passed"] + bucket["failed"]
+        bucket["total_runs"] = len(runs)
+        bucket["pass_rate"] = f"{bucket['passed'] / evaluated * 100:.2f}%" if evaluated else "n/a"
+
+    pooled = {}
+    for label, checked, dropped in (
+        ("CP02_detection_to_sdsm", "cp02_raw_detections", "cp02_dropped"),
+        ("CP03_rsu_to_vehicle", "cp03_broadcasts", "cp03_dropped"),
+    ):
+        if checked in summary.columns and dropped in summary.columns:
+            total = pd.to_numeric(summary[checked], errors="coerce").sum()
+            lost = pd.to_numeric(summary[dropped], errors="coerce").sum()
+            pooled[label] = {
+                "checked": int(total),
+                "dropped": int(lost),
+                "drop_rate": f"{lost / total * 100:.3f}%" if total else "n/a",
+            }
+
+    payload = {
+        "analysis_time": datetime.now().isoformat(),
+        "analysis_type": "dt_wz_verification",
+        "total_runs_analyzed": len(runs),
+        "conditions": {
+            condition: len(group)
+            for condition, group in dataset.group_by_condition(runs).items()
+        },
+        "metrics_summary": dict(metrics_summary),
+        "session_totals": pooled,
+        "notes": [
+            "not_applicable means the data needed was never recorded, not that the "
+            "check failed: these MCAPs contain no /message/incoming_map or "
+            "/message/incoming_spat, so PL01_MAP_rate and PL01_SPAT_rate cannot be "
+            "evaluated for this session.",
+            "t_rsu_broadcast is the RSU's transmit instant, taken from the RSU's own "
+            "pcap. Earlier sessions captured the OBU instead, so their t_ota_capture "
+            "stage sits one propagation hop later and end-to-end totals are not "
+            "directly comparable.",
+            "t_obu_radio_rx is paired by ordinal position within the run, not by "
+            "payload: the OBU capture is tcpdump text and carries no payload bytes. "
+            "Trust it in aggregate, not per row.",
+        ],
+    }
+    path = output_dir / "analysis_summary.json"
+    with open(path, "w") as handle:
+        json.dump(payload, handle, indent=2, default=str)
+    print(f"Summary JSON      -> {path}")
+
+
+def _write_column_docs(output_dir):
+    """Document the cascade table's stage columns alongside the data."""
+    lines = [
+        "# `detections.csv` columns",
+        "",
+        "One row per FLIR camera detection. Every `t_*` column is an absolute epoch",
+        "timestamp in **milliseconds UTC**; `lat_*_ms` is that stage measured from the",
+        "camera detection; `d_a__b_ms` is the cost of the single hop from `a` to `b`.",
+        "",
+        "| Column | Host | Meaning |",
+        "| --- | --- | --- |",
     ]
-    if cp03_stats:
-        checked = sum(stats["total_broadcasts_checked"] for stats in cp03_stats)
-        dropped = sum(stats["total_dropped"] for stats in cp03_stats)
-        session_metrics["CP03_rsu_sdsm_transmission_drop_rate"] = {
-            "mcaps": len(cp03_stats),
-            "broadcasts_checked": checked,
-            "received": sum(stats["total_received"] for stats in cp03_stats),
-            "received_late": sum(stats["total_received_late"] for stats in cp03_stats),
-            "dropped": dropped,
-            "drop_rate": f"{dropped / checked * 100:.2f}%",
-        }
-        print(f"CP-03 session drop rate: {dropped}/{checked} RSU SDSM broadcasts not received "
-              f"({dropped / checked * 100:.2f}%) across {len(cp03_stats)} MCAPs")
+    for column, host, label in cascade_config.STAGES:
+        note = ""
+        if column in cascade_config.COUNT_PAIRED_STAGES:
+            note = " **Paired by ordinal position, not payload.**"
+        elif column == "t_rsu_broadcast":
+            note = " **RSU transmit instant** (earlier sessions captured the OBU instead)."
+        lines.append(f"| `{column}` | {host} | {label}.{note} |")
 
-    # PL-01 OBU side pooled over every MCAP's sent BSMs, for the session's overall BSM transmission drop rate
-    pl01_stats = [
-        json.loads(stats_path.read_text())
-        for stats_path in sorted(output_dir.glob(f"*/stats/{PL01_OUTPUT_SUBDIR}/obu_bsm_transmission_drop_rate.json"))
+    lines += [
+        "",
+        "| Column | Meaning |",
+        "| --- | --- |",
+        "| `condition` | Pedestrian dwell condition (`5sec`/`10sec`/`15sec`) |",
+        "| `run` | Run identifier, `<condition>_run<N>` |",
+        "| `object_id` | FLIR track id; recycled across the session, unique within a run |",
+        "| `sdsm_uper_hex` | The SDSM's ASN.1-UPER bytes, the join key from encode to vehicle |",
+        "| `stages_reached` | How many stages carry a timestamp for this detection |",
+        "| `reached_vehicle` | Whether it arrived on the vehicle's inbound topic |",
+        "| `last_stage_reached` | The furthest stage reached, i.e. where it was lost |",
+        "",
+        "## Joins",
+        "",
+        "Stages up to the SDSM being encoded join on detection identity",
+        "`(object_id, t_flir_detect)`, with the SDSM-side identity recovered as",
+        "`sdsm_time_stamp - measurement_time`. From `t_streets_encode` to",
+        "`t_ros_inbound` the join is the UPER payload bytes, which is an exact",
+        "identity. `t_obu_radio_rx` alone is ordinal, and is left empty for the whole",
+        "run when the radio and broadcast counts disagree rather than risking a",
+        "systematic misalignment.",
     ]
-    if pl01_stats:
-        checked = sum(stats["total_bsms_checked"] for stats in pl01_stats)
-        dropped = sum(stats["total_dropped"] for stats in pl01_stats)
-        session_metrics["PL01_obu_bsm_transmission_drop"] = {
-            "mcaps": len(pl01_stats),
-            "bsms_checked": checked,
-            "transmitted": sum(stats["total_transmitted"] for stats in pl01_stats),
-            "transmitted_late": sum(stats["total_transmitted_late"] for stats in pl01_stats),
-            "dropped": dropped,
-            "drop_rate": f"{dropped / checked * 100:.2f}%",
-        }
-        print(f"PL-01 session OBU BSM drop rate: {dropped}/{checked} sent BSMs not transmitted "
-              f"({dropped / checked * 100:.2f}%) across {len(pl01_stats)} MCAPs")
+    path = output_dir / "detections_columns.md"
+    path.write_text("\n".join(lines) + "\n")
+    print(f"Column docs       -> {path}")
 
-    summary_path = output_dir / "analysis_summary.json"
-    with open(summary_path) as f:
-        summary = json.load(f)
-    summary["session_metrics"] = session_metrics
-    with open(summary_path, "w") as f:
-        json.dump(summary, f, indent=2)
-    print(f"Session metrics (CP-01, CS-03, CP-03 total, PL-01 OBU total) added to: {summary_path}")
+
+def run_session(data_root, runs_csv=None, output_dir=None, only_condition=None, limit=None):
+    """Analyse every run named in ``runs.csv`` and write the session outputs."""
+    data_root = Path(data_root)
+    runs_csv = Path(runs_csv) if runs_csv else data_root / "runs.csv"
+    runs = dataset.load_runs_csv(runs_csv, data_root)
+    if only_condition:
+        runs = [run for run in runs if run.condition == only_condition]
+        if not runs:
+            raise ValueError(f"No runs with condition {only_condition!r}")
+    if limit:
+        runs = runs[:limit]
+
+    session = dataset.discover_session(data_root)
+    output_dir = Path(output_dir) if output_dir else data_root / (
+        f"dt_wz_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"Session: {data_root}")
+    print(session.describe())
+    print(f"Runs: {len(runs)} across conditions "
+          f"{', '.join(dataset.condition_order(runs))}")
+    print(f"Output: {output_dir}\n")
+
+    print("Parsing session-wide logs (once for all runs):")
+    session_logs = cascade_build.SessionLogs.load(session)
+    detection_records = kafka_log.parse_kafka_log_records(session.kafka_detected_object)
+    print(f"  {len(detection_records)} detection records in the Kafka dump\n")
+
+    rows, cascades, results_by_run = [], {}, {}
+    for index, run in enumerate(runs, start=1):
+        print(f"[{index}/{len(runs)}] {run.name} ({run.mcap.name})")
+        results, row, cascade = analyse_run(run, session_logs, detection_records, output_dir)
+        rows.append(row)
+        cascades[run.name] = cascade
+        results_by_run[run.name] = results
+        print(f"      detections={row.get('cp02_raw_detections')} "
+              f"cp02_drop={row.get('cp02_drop_rate_pct')} "
+              f"cp03_drop={row.get('cp03_drop_rate_pct')} "
+              f"dt05_median={row.get('dt05_median_latency_s')} "
+              f"cascade_rows={row.get('cascade_rows')}")
+
+    write_session_outputs(runs, rows, cascades, results_by_run, output_dir)
+    print("\nAnalysis complete.")
+    return output_dir
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("--data-root", type=Path, required=True,
+                        help="Session directory holding runs.csv and the log folders")
+    parser.add_argument("--runs-csv", type=Path, default=None,
+                        help="Run manifest (default: <data-root>/runs.csv)")
+    parser.add_argument("--output-dir", type=Path, default=None,
+                        help="Where to write results (default: a timestamped dir under --data-root)")
+    parser.add_argument("--condition", default=None,
+                        help="Only analyse this dwell condition, e.g. 5sec")
+    parser.add_argument("--limit", type=int, default=None,
+                        help="Only analyse the first N runs (for a quick check)")
+    args = parser.parse_args(argv)
+
+    try:
+        run_session(args.data_root, args.runs_csv, args.output_dir,
+                    args.condition, args.limit)
+    except Exception as error:
+        print(f"Error: {error}", file=sys.stderr)
+        traceback.print_exc()
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Run all DT-WZ (pedestrian detection to SDSM) analysis on multiple MCAP files in a given directory"
-    )
-    parser.add_argument(
-        "--input-dir",
-        type=Path,
-        help="Directory containing MCAP files to analyze",
-        default=Path("/workspaces/carma_ws/src/data-verification-initial"),
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        help="Base directory for saving analysis results (optional)",
-        default=None,
-    )
-    argcomplete.autocomplete(parser)
-    args = parser.parse_args()
-
-    try:
-        output_dir = run_all_analysis(
-            args.input_dir,
-            analyze_mcap_file_for_dt_wz_analysis,
-            args.output_dir,
-            analysis_name="dt_wz_analysis",
-        )
-        run_session_analysis(output_dir)
-    except Exception as e:
-        print(f"Error: {e}")
-        exit(1)
+    sys.exit(main())
