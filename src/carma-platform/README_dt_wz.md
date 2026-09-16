@@ -87,6 +87,27 @@ Re-running over the same inputs reproduces byte-identical CSVs.
 | DT-05 | detection → SDSM receipt at the vehicle | median < 0.3 s |
 | PL-01 | per-topic message rates; OBU radio counts | rate within ±20% |
 
+**CP-01** is separate, because it pools across sessions rather than running per
+run (the test plan's 30 runs span two recording days):
+
+```bash
+python src/carma-platform/run_cp01_analysis.py \
+    --data-root .../20260914_verification_test \
+    --data-root .../20260915_verification_test \
+    --output-dir out/cp01
+```
+
+It reports "X frames out of 4500 frames dropped" from the raw
+`v2xhub_sim_sensor_detected_object` Kafka topic. That topic is upstream of the
+SDSS, so a camera stall — which delays frames rather than dropping them — does
+not inflate it; what it counts is frames the camera never produced.
+
+Each run's dwell window is found without a recorded entry time, by taking the
+detection-burst start whose dwell-length window holds the most frames. Anchoring
+on the *first* detection instead would measure a false start (one 2026-09-15 run
+opens with an 18-frame burst and a 2.9 s pause before the real dwell), and
+anchoring on the *longest burst* would stop at a genuine mid-dwell gap.
+
 Every run is windowed to its **engaged interval**, taken from `/guidance/state`.
 
 A metric reports one of four outcomes, and they are distinct: passed, failed,

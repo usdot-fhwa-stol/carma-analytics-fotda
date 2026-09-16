@@ -19,6 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import cp01_detection_drops as cp01  # noqa: E402
 from portable import kafka_log, obu_capture, pcap_backend, tcpdump_text  # noqa: E402
 
 DATA_ROOT = Path(
@@ -193,6 +194,92 @@ class TestObuCaptureDispatch(unittest.TestCase):
                 obu_capture.read_obu_capture(path, None)
         finally:
             os.unlink(path)
+
+
+class TestCp01Anchoring(unittest.TestCase):
+    """CP-01 has to find the dwell window without a recorded entry time.
+
+    Two failure modes, both of which produced badly wrong numbers in development
+    and neither of which raises:
+
+    * anchoring on the *first* detection measures a false start instead of the
+      dwell -- 2026-09-15 run 1 opens with an 18-frame burst and a 2.9 s pause
+      before the real 19.7 s dwell, giving 52 of 200 and 148 phantom drops;
+    * anchoring on the *longest burst* stops at a genuine mid-dwell gap and
+      measures only the larger fragment.
+
+    The anchor is therefore the burst start whose dwell-length window holds the
+    most frames. These tests pin both cases.
+    """
+
+    class _Run:
+        def __init__(self, start_ms, dwell_sec):
+            import datetime as _dt
+            self.name, self.condition, self.dwell_sec = "t", f"{dwell_sec}sec", dwell_sec
+            self.start_time = _dt.datetime.fromtimestamp(start_ms / 1000, _dt.timezone.utc)
+
+    BASE = 1789000000000.0
+
+    def _frames(self, *segments, cadence_ms=100.0):
+        """Build frame times from (offset_ms, count) segments at a given cadence."""
+        import numpy as np
+        out = []
+        for offset, count in segments:
+            out.extend(self.BASE + offset + cadence_ms * i for i in range(count))
+        return np.array(sorted(out), dtype=float)
+
+    def test_false_start_before_the_dwell_is_ignored(self):
+        # 18-frame false start, 2.9 s pause, then the real 200-frame dwell.
+        frames = self._frames((0, 18), (4700, 200))
+        result = cp01.measure_run(self._Run(self.BASE, 20), frames)
+        self.assertEqual(result.received_frames, 200)
+        self.assertEqual(result.dropped_frames, 0)
+
+    def test_gap_inside_the_dwell_still_counts_as_dropped(self):
+        # 100 frames, a 1 s hole (10 frames lost), then 90 more: 190 of 200.
+        frames = self._frames((0, 100), (11000, 90))
+        result = cp01.measure_run(self._Run(self.BASE, 20), frames)
+        self.assertEqual(result.received_frames, 190)
+        self.assertEqual(result.dropped_frames, 10)
+
+    def test_false_start_and_internal_gap_together(self):
+        frames = self._frames((0, 18), (4700, 100), (15700, 90))
+        result = cp01.measure_run(self._Run(self.BASE, 20), frames)
+        self.assertEqual(result.received_frames, 190)
+
+    def test_extra_frame_is_not_a_negative_drop(self):
+        # A camera running a shade fast fits 51 frames into a 5 s window. That is
+        # a cadence artefact, not a negative drop, and must floor at zero.
+        result = cp01.measure_run(
+            self._Run(self.BASE, 5), self._frames((0, 51), cadence_ms=98.0)
+        )
+        self.assertEqual(result.received_frames, 51)
+        self.assertEqual(result.dropped_frames, 0)
+
+    def test_no_detections_reports_everything_dropped(self):
+        import numpy as np
+        result = cp01.measure_run(self._Run(self.BASE, 20), np.array([], dtype=float))
+        self.assertEqual(result.received_frames, 0)
+        self.assertEqual(result.dropped_frames, 200)
+
+    def test_frames_are_deduplicated_per_camera_frame(self):
+        """Two tracked objects in one frame share a camera timestamp."""
+        records = [
+            {"timestamp": 1000.0, "objectId": 1},
+            {"timestamp": 1000.0, "objectId": 2},
+            {"timestamp": 1100.0, "objectId": 1},
+        ]
+        self.assertEqual(len(cp01.camera_frame_times(records)), 2)
+
+    def test_summary_totals_and_headline(self):
+        results = [
+            cp01.RunDrops("a", "5sec", 5, 50, 47),
+            cp01.RunDrops("b", "20sec", 20, 200, 200),
+        ]
+        summary = cp01.summarise(results)
+        self.assertEqual(summary["total_expected_frames"], 250)
+        self.assertEqual(summary["total_dropped_frames"], 3)
+        self.assertEqual(summary["headline"], "3 frames out of 250 frames dropped")
 
 
 @unittest.skipUnless(HAS_DATA, f"verification session not present at {DATA_ROOT}")
