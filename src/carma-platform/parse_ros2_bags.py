@@ -20,6 +20,12 @@ except ImportError:  # no ROS 2 on this machine
     from portable import mcap_backend as _portable
 
     USE_PORTABLE_BACKEND = True
+    # Keep the names bound so the module's attribute surface is the same either
+    # way: callers and test doubles can reference them without having to know
+    # which backend is live. They are only ever called on the rosbag2 path.
+    rosbag2_py = None
+    get_message = None
+    deserialize_message = None
 
 def get_rosbag_options(path, serialization_format="cdr", storage_id="sqlite3"):
     """
@@ -185,13 +191,15 @@ def read_messages(reader, topics, type_map, field_extractors):
     while reader.has_next():
         topic, msg_data, timestamp = reader.read_next()
         if topic in topics:
-            if USE_PORTABLE_BACKEND:
-                # The portable reader decodes as it reads -- it holds the schema
-                # table -- so msg_data is already a message, not raw bytes.
-                msg = msg_data
-            else:
+            if isinstance(msg_data, (bytes, bytearray)):
                 msg_type = type_map[topic]
                 msg = deserialize_message(msg_data, get_message(msg_type))
+            else:
+                # The portable reader decodes as it reads -- it holds the schema
+                # table -- so it hands back a message rather than raw bytes.
+                # Branching on the payload rather than on which backend is loaded
+                # keeps this correct for any reader that does its own decoding.
+                msg = msg_data
 
             try:
                 extracted_value = field_extractors[topic](msg)
