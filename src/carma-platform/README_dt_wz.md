@@ -97,6 +97,25 @@ python src/carma-platform/run_cp01_analysis.py \
     --output-dir out/cp01
 ```
 
+**CP-02** and **CP-03** also pool across sessions, each into its own folder:
+
+```bash
+python src/carma-platform/run_cp02_analysis.py \
+    --data-root .../20260914_verification_test \
+    --data-root .../20260915_verification_test \
+    --output-dir out/cp02        # and run_cp03_analysis.py -> out/cp03
+```
+
+Each writes `<metric>.json`, a per-run `.csv` and a per-run `.png`. Every run is
+windowed to its own engaged interval, and both figures are reported: the **pooled
+drop rate** (how much was lost overall) and the **per-run pass rate** (how often
+the 2% limit was met). They answer different questions and can disagree — one bad
+run fails on its own while barely moving the pooled rate.
+
+CP-03 additionally reports the air link on its own, where the OBU capture carries
+payloads: which of the RSU's broadcasts the radio actually received, separate
+from whether the vehicle's software then processed them.
+
 **CS-01** is also separate, and pools every session given into one result:
 
 ```bash
