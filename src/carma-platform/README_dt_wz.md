@@ -63,7 +63,6 @@ src/carma-platform/
 | `run_cp01_analysis.py` | camera frames missing from a detection burst | reported, no limit |
 | `run_cp02_analysis.py` | detections that never reached the vehicle | drop rate <= 2% |
 | `run_cp03_analysis.py` | RSU broadcasts the vehicle never received | drop rate <= 2% |
-| `run_cp04_analysis.py` | camera detection to Kafka | mean < 0.5 s |
 | `run_dt05_analysis.py` | camera detection to SDSM at the vehicle | median < 0.3 s |
 | `run_pl01_analysis.py` | per-topic message rates, OBU radio activity | rate within +/-20% |
 | `run_cs01_analysis.py` | SDSM places the pedestrian at the reference | < 0.2 m, < 1 deg |

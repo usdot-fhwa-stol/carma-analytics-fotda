@@ -7,7 +7,7 @@ names a measurement function, and hands the rest to this package.
 ```
 dt_wz_analysis_util/
     dataset.py    runs.csv and session layout -- what constitutes a run
-    metrics.py    the per-run measurements (CP-02, CP-03, CP-04, DT-05, PL-01)
+    metrics.py    the per-run measurements (CP-02, CP-03, DT-05, PL-01)
     report.py     windowing, pooling, output files and plots shared by the scripts
     cp01.py       camera detection drops, measured at the websocket
     cs01.py       SDSM location spoofing verification

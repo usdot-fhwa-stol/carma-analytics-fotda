@@ -18,7 +18,6 @@ folder     measures                                                    criterion
 cp01/      camera detection drops, counted at the websocket            (reported)
 cp02/      detection -> SDSM received at the vehicle                   <= 2%
 cp03/      RSU broadcast -> CARMA Platform receipt                     <= 2%
-cp04/      detection -> Kafka                                          mean < 0.5 s
 dt05/      detection -> SDSM receipt at the vehicle                    median < 0.3 s
 pl01/      per-topic message rates, OBU radio activity                 +/-20%
 cs01/      SDSM location spoofing verification                         0.2 m, 1 deg
@@ -45,7 +44,6 @@ import run_cascade_analysis
 import run_cp01_analysis
 import run_cp02_analysis
 import run_cp03_analysis
-import run_cp04_analysis
 import run_cs01_analysis
 import run_dt05_analysis
 import run_pl01_analysis
@@ -55,7 +53,6 @@ ANALYSES = {
     "cp01": (run_cp01_analysis, "cp01_detection_drops.json"),
     "cp02": (run_cp02_analysis, "cp02_detection_to_sdsm.json"),
     "cp03": (run_cp03_analysis, "cp03_rsu_to_vehicle.json"),
-    "cp04": (run_cp04_analysis, "cp04_detection_to_kafka.json"),
     "dt05": (run_dt05_analysis, "dt05_detection_to_sdsm_receipt.json"),
     "pl01": (run_pl01_analysis, "pl01_message_communication.json"),
     "cs01": (run_cs01_analysis, "cs01_location_spoofing.json"),

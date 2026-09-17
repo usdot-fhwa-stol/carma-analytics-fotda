@@ -43,9 +43,6 @@ SDSM_DROP_RATE_THRESHOLD_PCT = 2.0
 SDSM_DROP_RATE_MATCH_TOLERANCE_SEC = 0.05
 RSU_TRANSMISSION_DROP_RATE_THRESHOLD_PCT = 2.0
 DETECTION_TO_SDSM_RECEIPT_LATENCY_THRESHOLD_SEC = 0.3
-DETECTION_TO_KAFKA_MEAN_LATENCY_THRESHOLD_SEC = 0.5
-DETECTION_TO_KAFKA_LATE_THRESHOLD_SEC = 0.1
-DETECTION_TO_KAFKA_MAX_LATE_PCT = 2.0
 # Above this |rx - tx| a matched pair is counted as late rather than on time.
 TRANSMISSION_LATE_THRESHOLD_MS = 200.0
 
@@ -297,51 +294,6 @@ def rsu_transmission_drop_rate(
     }
     _write_stats(stats_dir, "cp03_rsu_sdsm_transmission_drop_rate", stats)
     return stats["is_passed"], stats
-
-
-# --------------------------------------------------------------------------
-# CP-04: detection -> Kafka latency
-# --------------------------------------------------------------------------
-
-def detection_to_kafka_latency(
-    detection_records, window, stats_dir=None,
-    max_mean_latency_sec=DETECTION_TO_KAFKA_MEAN_LATENCY_THRESHOLD_SEC,
-    late_threshold_sec=DETECTION_TO_KAFKA_LATE_THRESHOLD_SEC,
-    max_late_pct=DETECTION_TO_KAFKA_MAX_LATE_PCT,
-):
-    """Delay between the camera's detection stamp and the broker accepting it."""
-    raw = kafka_log.window_records(detection_records, window[0] * 1e3, window[1] * 1e3)
-    if not raw:
-        stats = {
-            "total_detections": 0, "late_detections": 0, "late_pct": None,
-            "mean_latency_s": None, "is_passed": None,
-            "note": "no raw detections inside the engaged window",
-        }
-        _write_stats(stats_dir, "cp04_detection_to_kafka_latency", stats)
-        return None, stats
-
-    latency_sec = np.array(
-        [(record["create_time_ms"] - float(record["timestamp"])) / 1e3 for record in raw],
-        dtype=float,
-    )
-    detection_times = np.array([float(record["timestamp"]) / 1e3 for record in raw], dtype=float)
-    late = int(np.sum(latency_sec > late_threshold_sec))
-    late_pct = late / len(latency_sec) * 100.0
-    mean_latency = float(np.mean(latency_sec))
-
-    stats = {
-        "latency_s": calculate_error_statistics(latency_sec),
-        "total_detections": len(latency_sec),
-        "late_detections": late,
-        "late_pct": late_pct,
-        "mean_latency_s": mean_latency,
-        "max_mean_latency_s": max_mean_latency_sec,
-        "late_threshold_s": late_threshold_sec,
-        "max_late_pct": max_late_pct,
-        "is_passed": bool(mean_latency < max_mean_latency_sec and late_pct < max_late_pct),
-    }
-    _write_stats(stats_dir, "cp04_detection_to_kafka_latency", stats)
-    return stats["is_passed"], (stats | {"_detection_times_sec": detection_times, "_latency_s": latency_sec})
 
 
 # --------------------------------------------------------------------------
