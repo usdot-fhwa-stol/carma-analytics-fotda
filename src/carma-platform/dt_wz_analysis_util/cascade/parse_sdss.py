@@ -23,7 +23,7 @@ import pandas as pd
 
 from . import cascade_config as config
 from .parse_v2xhub import _as_int, _first_json, _sdsm_identity
-from portable.timeutil import parse_bracket_ts
+from ..portable.timeutil import parse_bracket_ts
 
 # Anchored on message text, not on `file.cpp:line`. The service is rebuilt
 # between runs and its line numbers move -- 20260911 logged "Sending SDSM" from

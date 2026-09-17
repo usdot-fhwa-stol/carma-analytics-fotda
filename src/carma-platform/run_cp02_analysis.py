@@ -22,9 +22,9 @@ import argparse
 import sys
 from pathlib import Path
 
-import cp_metric_report as report
-import dt_wz_metrics as metrics
-from portable import kafka_log
+from dt_wz_analysis_util import report
+from dt_wz_analysis_util import metrics
+from dt_wz_analysis_util.portable import kafka_log
 
 METRIC = "CP-02"
 PREFIX = "cp02_detection_to_sdsm"

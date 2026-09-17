@@ -66,7 +66,7 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from portable import flir_websocket, kafka_log
+from .portable import flir_websocket, kafka_log
 
 # Nominal FLIR frame rate. 100 ms cadence, confirmed against the websocket logs:
 # the median inter-arrival is 100.0 ms and ~90% of intervals fall in 90-110 ms.

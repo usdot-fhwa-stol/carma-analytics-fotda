@@ -19,9 +19,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import cp01_detection_drops as cp01  # noqa: E402
-import cs01_location_spoofing as cs01  # noqa: E402
-from portable import kafka_log, obu_capture, pcap_backend, tcpdump_text  # noqa: E402
+from dt_wz_analysis_util import cp01  # noqa: E402
+from dt_wz_analysis_util import cs01  # noqa: E402
+from dt_wz_analysis_util.portable import (  # noqa: E402
+    kafka_log, obu_capture, pcap_backend, tcpdump_text,
+)
 
 DATA_ROOT = Path(
     os.environ.get(
@@ -383,7 +385,7 @@ class TestCs01Windowing(unittest.TestCase):
 @unittest.skipUnless(HAS_DATA, f"verification session not present at {DATA_ROOT}")
 class TestDataset(unittest.TestCase):
     def setUp(self):
-        import dt_wz_dataset
+        from dt_wz_analysis_util import dataset as dt_wz_dataset
         self.dataset = dt_wz_dataset
         self.runs = dt_wz_dataset.load_runs_csv(DATA_ROOT / "runs.csv", DATA_ROOT)
 
@@ -420,8 +422,8 @@ class TestGoldenRun(unittest.TestCase):
     EXPECTED = 60
 
     def setUp(self):
-        import dt_wz_dataset
-        import dt_wz_metrics
+        from dt_wz_analysis_util import dataset as dt_wz_dataset
+        from dt_wz_analysis_util import metrics as dt_wz_metrics
         from guidance_scripts import get_engage_time
 
         self.metrics = dt_wz_metrics
@@ -446,7 +448,7 @@ class TestGoldenRun(unittest.TestCase):
         self.assertEqual(len(received), self.EXPECTED)
 
     def test_payloads_match_byte_for_byte_end_to_end(self):
-        from portable import mcap_backend
+        from dt_wz_analysis_util.portable import mcap_backend
 
         broadcast = {
             message["payload_hex"]
@@ -461,9 +463,9 @@ class TestGoldenRun(unittest.TestCase):
         self.assertEqual(len(broadcast & received), self.EXPECTED)
 
     def test_no_drops_and_plausible_end_to_end_latency(self):
-        from portable import kafka_log as kl
+        from dt_wz_analysis_util.portable import kafka_log as kl
 
-        import dt_wz_dataset
+        from dt_wz_analysis_util import dataset as dt_wz_dataset
         session = dt_wz_dataset.discover_session(DATA_ROOT)
         records = kl.parse_kafka_log_records(session.kafka_detected_object)
 

@@ -1,36 +1,84 @@
 # DT-WZ verification analysis
 
-Analyse a pedestrian-detection-to-SDSM verification session: per-run metrics,
-an end-to-end latency cascade, and summary tables and plots grouped by
-pedestrian dwell condition.
+Analyses a pedestrian-detection-to-SDSM verification session: per-metric results,
+an end-to-end latency cascade, and tables and plots grouped by dwell condition.
 
 ## Running it
+
+Each metric has its own script, and they are the real entry points:
 
 ```bash
 source /home/vmuser/hass_dt_demo/.venv/bin/activate
 
-python src/carma-platform/run_all_dt_wz_analysis.py \
+python src/carma-platform/run_cp02_analysis.py \
     --data-root /path/to/20260914_verification_test \
-    --output-dir out/verification_20260914
+    --data-root /path/to/20260915_verification_test \
+    --output-dir out/cp02
 ```
 
-Roughly 80 s for a 15-run session. Useful flags:
+Every script takes the same two arguments. Repeat `--data-root` to pool sessions
+into one result; each session is windowed to its own runs first.
 
-| Flag | Purpose |
-| --- | --- |
-| `--runs-csv PATH` | Run manifest (default `<data-root>/runs.csv`) |
-| `--condition 5sec` | Only one dwell condition |
-| `--limit 2` | Only the first N runs, for a quick check |
-
-Requirements: `pandas numpy matplotlib mcap scipy`. **No ROS 2, no `tshark` and
-no `pycrate` are needed** — see *Portable backends* below.
+`run_all_dt_wz_analysis.py` is a wrapper that runs them all in turn:
 
 ```bash
-python -m unittest discover -s src/carma-platform/test -v
+python src/carma-platform/run_all_dt_wz_analysis.py \
+    --data-root .../20260914_verification_test \
+    --data-root .../20260915_verification_test \
+    --output-dir out
 ```
 
-The dataset-dependent tests skip unless the session is on disk; set
-`DT_WZ_DATA_ROOT` to point at another one.
+About 5.5 minutes for 30 runs across two sessions. Use `--only cp02 cp03` to run
+a subset. Prefer the individual scripts when re-running one metric: CP-02 and the
+cascade each parse logs of over a million lines.
+
+Requirements: `pandas numpy matplotlib mcap scipy`. **No ROS 2, no `tshark` and
+no `pycrate`** — see *Portable backends*.
+
+```bash
+python -m pytest src/carma-platform/test -q
+```
+
+## Layout
+
+```
+src/carma-platform/
+    run_cp01_analysis.py ... run_pl01_analysis.py   entry points, one per metric
+    run_cascade_analysis.py                         latency breakdown
+    run_all_dt_wz_analysis.py                       wrapper over the above
+    dt_wz_analysis_util/                            everything they depend on
+        dataset.py    runs.csv and session layout
+        metrics.py    the per-run measurements
+        report.py     windowing, pooling, output files, plots
+        cp01.py       camera detection drops
+        cs01.py       location spoofing verification
+        portable/     ROS-free MCAP, pcap, Kafka and tcpdump readers
+        cascade/      per-detection stage table and its plots
+```
+
+## Metrics
+
+| Script | Measures | Passes when |
+| --- | --- | --- |
+| `run_cp01_analysis.py` | camera frames missing from a detection burst | reported, no limit |
+| `run_cp02_analysis.py` | detections that never reached the vehicle | drop rate <= 2% |
+| `run_cp03_analysis.py` | RSU broadcasts the vehicle never received | drop rate <= 2% |
+| `run_cp04_analysis.py` | camera detection to Kafka | mean < 0.5 s |
+| `run_dt05_analysis.py` | camera detection to SDSM at the vehicle | median < 0.3 s |
+| `run_pl01_analysis.py` | per-topic message rates, OBU radio activity | rate within +/-20% |
+| `run_cs01_analysis.py` | SDSM places the pedestrian at the reference | < 0.2 m, < 1 deg |
+| `run_cascade_analysis.py` | per-hop latency, camera to fused output | reported, no limit |
+
+Every run is windowed to its **engaged interval**, taken from `/guidance/state`.
+
+Each drop-rate metric reports two figures, because they answer different
+questions and can disagree: the **pooled rate** (how much was lost overall) and
+the **per-run pass rate** (how often the limit was met). One bad run can fail on
+its own while barely moving the pooled rate.
+
+A metric reports one of four outcomes, and they are distinct: passed, failed,
+**not applicable**, or errored. Not-applicable means the data needed was never
+recorded. MAP and SPAT are in that position for these sessions.
 
 ## Expected session layout
 
@@ -48,141 +96,15 @@ The dataset-dependent tests skip unless the session is on disk; set
 obu_pcap_fn, rosbag_fn`. Times are America/New_York wall clock.
 
 **`runs.csv` decides what is a run — the tool never globs for recordings.** The
-2026-09-14 session has 20 MCAPs and 19 RSU pcaps for 15 real runs: the 5-second
-condition was run twice and only the `_take2` captures and `run7..run11` bags
-count, and every bag exists as both a truncated `rosbag2_*` copy (which will not
-open) and a readable `recovered_rosbag2_*` one. Nothing in the files themselves
-distinguishes the good from the abandoned.
-
-## Outputs
-
-```
-<output-dir>/
-    analysis_summary.json      pass / fail / N-A / error per metric, plus pooled totals
-    summary_by_run.csv         one row per run, every metric as a column
-    summary_by_condition.csv   mean and median per dwell condition
-    detections_all_runs.csv    every detection, every stage
-    qa_report.txt              per-hop coverage, latency, and clock offsets
-    stage_summary.csv          the same per-hop table as data
-    detections_columns.md      column reference for the detection tables
-    plots/
-        latency_by_stage_{5sec,10sec,15sec,all}.png
-        latency_per_hop_{5sec,10sec,15sec}.png
-        latency_cascade_{5sec,10sec,15sec}.png
-        latency_by_condition.png
-        drop_rates_by_run.png
-    <condition>_run<N>/
-        stats/*.json  detections.csv  qa_report.txt
-```
-
-Re-running over the same inputs reproduces byte-identical CSVs.
-
-## Metrics
-
-| ID | Measures | Passes when |
-| --- | --- | --- |
-| CP-02 | raw detection → SDSM received at the vehicle | drop rate ≤ 2% |
-| CP-03 | RSU broadcast → CARMA Platform receipt | drop rate ≤ 2% |
-| CP-04 | detection → Kafka broker accepting it | mean < 0.5 s, late < 2% |
-| DT-05 | detection → SDSM receipt at the vehicle | median < 0.3 s |
-| PL-01 | per-topic message rates; OBU radio counts | rate within ±20% |
-
-**CP-01** is separate, because it pools across sessions rather than running per
-run (the test plan's 30 runs span two recording days):
-
-```bash
-python src/carma-platform/run_cp01_analysis.py \
-    --data-root .../20260914_verification_test \
-    --data-root .../20260915_verification_test \
-    --output-dir out/cp01
-```
-
-**CP-02** and **CP-03** also pool across sessions, each into its own folder:
-
-```bash
-python src/carma-platform/run_cp02_analysis.py \
-    --data-root .../20260914_verification_test \
-    --data-root .../20260915_verification_test \
-    --output-dir out/cp02        # and run_cp03_analysis.py -> out/cp03
-```
-
-Each writes `<metric>.json`, a per-run `.csv` and a per-run `.png`. Every run is
-windowed to its own engaged interval, and both figures are reported: the **pooled
-drop rate** (how much was lost overall) and the **per-run pass rate** (how often
-the 2% limit was met). They answer different questions and can disagree — one bad
-run fails on its own while barely moving the pooled rate.
-
-CP-03 additionally reports the air link on its own, where the OBU capture carries
-payloads: which of the RSU's broadcasts the radio actually received, separate
-from whether the vehicle's software then processed them.
-
-**CS-01** is also separate, and pools every session given into one result:
-
-```bash
-python src/carma-platform/run_cs01_analysis.py \
-    --data-root .../20260914_verification_test \
-    --data-root .../20260915_verification_test \
-    --output-dir out/cs01
-```
-
-Each session is windowed to its own runs first, then all of them are verified
-together, so there is one plot and one set of statistics. Pooling needs the
-sessions to share a configured reference, so the references are compared and a
-mismatch stops the run rather than averaging two different geometries.
-
-It checks that each SDSM places the spoofed pedestrian at the reference point
-FLIRCameraDriver was configured with (mean position error < 0.2 m) and that the
-reported heading matches the detection velocity (mean error < 1 deg).
-
-The reference is read from the data, never hard-coded: the detection logs hold
-three projection origins about one metre apart, because the driver was
-reconfigured on 2026-09-09. The Kafka dumps are also windowed to the session's
-runs first, since a dump holds the broker's whole retention and would otherwise
-verify several days of testing at once.
-
-It reports "X frames out of 4500 frames dropped", counted at the **camera's
-websocket** in the pc2 V2XHub log — the closest measurement point to the camera,
-before the plugin parses, queues or forwards anything.
-
-Measuring at the Kafka topic instead would charge the camera for losses that are
-not its own: across these 30 runs, 24 frames arrived intact over the websocket
-and never reached Kafka, with contiguous `dataNumber` values proving the camera
-had sent them. Those are reported separately as `lost_after_camera`.
-
-**The denominator is the measured burst, not the nominal dwell.** The pedestrian
-never stood in the zone for exactly the labelled time — the 15 s runs average
-about 13.9 s, and one lasts 12.71 s. Counting that run against 150 frames reports
-22 drops for a stream that is continuous at 10.07 Hz with no gap over 150 ms, so
-it would measure the pedestrian's timing rather than the camera. Each run is
-therefore measured against the frames a continuous stream would hold over its own
-burst span.
-
-The dwell is found by splitting frames into bursts and taking the burst whose
-duration is closest to the run's condition, which rejects false starts. Each
-run's chosen burst is reported with its start time, end time and duration, so the
-window a number came from can be checked against the recording.
-
-A stall does not inflate the figure. The count is keyed on the camera's own
-capture time, so a frame that arrives late still lands in the burst it belongs
-to.
-
-Each run's dwell window is found without a recorded entry time, by taking the
-detection-burst start whose dwell-length window holds the most frames. Anchoring
-on the *first* detection instead would measure a false start (one 2026-09-15 run
-opens with an 18-frame burst and a 2.9 s pause before the real dwell), and
-anchoring on the *longest burst* would stop at a genuine mid-dwell gap.
-
-Every run is windowed to its **engaged interval**, taken from `/guidance/state`.
-
-A metric reports one of four outcomes, and they are distinct: passed, failed,
-**not applicable**, or errored. Not-applicable means the data needed was never
-recorded — it is not a failure. MAP and SPAT are in that position for the
-2026-09-14 session, whose MCAPs contain neither topic.
+2026-09-14 session holds 20 MCAPs and 19 RSU pcaps for 15 real runs: the 5-second
+condition was run twice, and every bag exists as both a truncated `rosbag2_*`
+copy (which will not open) and a readable `recovered_rosbag2_*` one. Nothing in
+the files themselves separates the good from the abandoned.
 
 ## Portable backends
 
-`portable/` reimplements the parts of the stack the metrics actually use, so the
-analysis runs on a plain Python venv:
+`dt_wz_analysis_util/portable/` reimplements the parts of the stack the metrics
+actually use, so the analysis runs on a plain Python venv:
 
 | Module | Replaces | Note |
 | --- | --- | --- |
@@ -191,34 +113,33 @@ analysis runs on a plain Python venv:
 | `kafka_log` | — | tolerates both tab- and pipe-delimited console dumps |
 | `tcpdump_text` | — | reads OBU captures saved as tcpdump console text |
 | `obu_capture` | — | dispatches on the OBU file's actual format, binary or text |
+| `flir_websocket` | — | the camera's raw websocket stream from the pc2 V2XHub log |
 
-`parse_ros2_bags` falls back to `mcap_backend` automatically when `rosbag2_py`
-is absent, so the other analyses in this directory gain the same portability.
+`parse_ros2_bags` falls back to `mcap_backend` automatically when `rosbag2_py` is
+absent, so the other analyses in this directory gain the same portability.
 
 ## Reading the results carefully
 
-Three properties of this data change what the numbers mean.
+**CP-01 is measured at the camera's websocket, against each run's own burst.**
+The websocket is the closest point to the camera, before the plugin parses or
+queues anything; counting at Kafka instead charges the camera for 24 frames the
+plugin lost. And the pedestrian never stood in the zone for exactly the labelled
+time — one "15 s" run lasts 12.71 s — so each run is measured against the frames
+a continuous stream would hold over its own burst span. Counting against the
+nominal dwell measures the pedestrian's timing, not the camera.
 
-**`t_rsu_broadcast` is the RSU's transmit instant.** This session captured the
-broadcasting RSU; earlier sessions captured the OBU, where the equivalent stage
-(`t_ota_capture`) sits one propagation hop later. End-to-end totals are
-therefore slightly smaller than the 2026-09-11 figures for a reason that has
-nothing to do with the system getting faster.
+**`t_rsu_broadcast` is the RSU's transmit instant.** These sessions captured the
+broadcasting RSU; earlier ones captured the OBU, where the equivalent stage sat
+one propagation hop later. End-to-end totals are not directly comparable.
 
-**`t_obu_radio_rx` is only as strong as the OBU capture format.** Both forms are
-in use and both are named `.pcap`, so the reader decides from content:
-
-* **binary pcap** (2026-09-15 on) carries payload bytes, so the stage is joined
-  on exact identity like every other stage from `t_streets_encode` onward, and
-  a true over-the-air reception rate is reported (`ota_reception_rate_pct`).
-* **tcpdump text** (2026-09-14) carries no payload, so the stage falls back to
-  nearest-time matching within 60 ms. Sound in aggregate, not per row.
-
-`summary_by_run.csv` records which was used in `obu_payload_matched`. Check it
-before comparing this stage across sessions.
+**`t_obu_radio_rx` is only as strong as the OBU capture format.** A binary pcap
+carries payloads, so the stage is joined on exact identity and a true
+over-the-air reception rate is reported. A tcpdump text capture carries none, so
+the stage falls back to nearest-time matching. `obu_payload_matched` records
+which was used.
 
 **Cross-host hops can come out negative, and that is a clock offset.** A message
 cannot arrive before it was sent, so a persistently negative hop measures the
-offset between two hosts' clocks. `qa_report.txt` estimates and reports these;
-none are silently corrected, because clamping one to zero would hide a real
-finding and shift the neighbouring hop by the same amount.
+offset between two hosts' clocks. `cascade/qa_report.txt` estimates and reports
+these; none are silently corrected, because clamping one to zero would hide a
+real finding and shift the neighbouring hop by the same amount.

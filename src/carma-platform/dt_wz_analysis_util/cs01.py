@@ -31,10 +31,10 @@ from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from portable import kafka_log
+from .portable import kafka_log
 
 # carma-streets is a hyphenated directory, so it is not importable by name
-sys.path.append(str(Path(__file__).resolve().parent.parent / "carma-streets"))
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent / "carma-streets"))
 from sdsm_location_spoofing_verification import (  # noqa: E402
     DEFAULT_MAX_MEAN_HEADING_ERROR_DEG,
     DEFAULT_MAX_MEAN_POSITION_ERROR_M,

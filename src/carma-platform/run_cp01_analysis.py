@@ -29,9 +29,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-import cp01_detection_drops as cp01  # noqa: E402
-import dt_wz_dataset as dataset  # noqa: E402
-from dt_wz_cascade.plots import stage_colors  # noqa: E402
+from dt_wz_analysis_util import cp01  # noqa: E402
+from dt_wz_analysis_util import dataset  # noqa: E402
+from dt_wz_analysis_util.cascade.plots import stage_colors  # noqa: E402
 
 
 def analyse(data_roots: List[Path], rate_hz: float) -> List[cp01.RunDrops]:

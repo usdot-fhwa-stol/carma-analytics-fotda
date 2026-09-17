@@ -20,13 +20,14 @@ from pathlib import Path
 from typing import Callable, Dict, List
 
 import matplotlib
+import numpy as np
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-import dt_wz_dataset as dataset  # noqa: E402
-import dt_wz_metrics as metrics  # noqa: E402
-from dt_wz_cascade.plots import stage_colors  # noqa: E402
+from . import dataset  # noqa: E402
+from . import metrics  # noqa: E402
+from .cascade.plots import stage_colors  # noqa: E402
 from guidance_scripts import get_engage_time  # noqa: E402
 
 SESSION_TZ = timezone(timedelta(hours=-4))
@@ -131,6 +132,98 @@ def summarise(rows: List[Dict], metric: str, threshold_pct: float) -> Dict:
     }
 
 
+def summarise_latency(rows: List[Dict], metric: str, threshold: float, unit: str,
+                      value_key: str = "median_s") -> Dict:
+    """Pooled summary for a latency metric rather than a drop-rate one.
+
+    The pooled figure is the median of the per-run medians, not a mean of means:
+    latency distributions here have long right tails from stalls, and a mean
+    would follow the tail rather than the typical message.
+    """
+    evaluated = [row for row in rows if row.get("passed") is not None]
+    passed = sum(1 for row in evaluated if row["passed"])
+    values = [row[value_key] for row in rows if row.get(value_key) is not None]
+    samples = sum(int(row.get("samples") or 0) for row in rows)
+
+    by_condition: Dict[str, Dict] = {}
+    for row in rows:
+        bucket = by_condition.setdefault(row["condition"], {"runs": 0, "passed": 0, "values": []})
+        bucket["runs"] += 1
+        bucket["passed"] += 1 if row.get("passed") else 0
+        if row.get(value_key) is not None:
+            bucket["values"].append(row[value_key])
+    for bucket in by_condition.values():
+        collected = bucket.pop("values")
+        bucket[f"median_{unit}"] = (
+            round(float(np.median(collected)), 4) if collected else None
+        )
+
+    return {
+        "metric": metric,
+        "threshold": threshold,
+        "unit": unit,
+        "runs": len(rows),
+        "runs_evaluated": len(evaluated),
+        "runs_passed": passed,
+        "runs_failed": len(evaluated) - passed,
+        "pass_rate": f"{passed / len(evaluated) * 100:.1f}%" if evaluated else "n/a",
+        "total_samples": samples,
+        "pooled_median": round(float(np.median(values)), 4) if values else None,
+        "worst_run_value": round(float(np.max(values)), 4) if values else None,
+        "headline": (
+            f"median {np.median(values):.3f} {unit} over {samples} samples" if values else "n/a"
+        ),
+        "failed_runs": [row["run"] for row in evaluated if not row["passed"]],
+        "by_condition": dict(
+            sorted(by_condition.items(), key=lambda item: dataset.condition_dwell_sec(item[0]))
+        ),
+        "runs_detail": rows,
+    }
+
+
+def plot_latency(rows: List[Dict], summary: Dict, title: str, output_path,
+                 value_key: str = "median_s"):
+    """Per-run median latency against the limit."""
+    usable = [row for row in rows if row.get(value_key) is not None]
+    if not usable:
+        return None
+    conditions = list(summary["by_condition"])
+    colors = dict(zip(conditions, stage_colors(range(max(len(conditions), 2)))))
+
+    figure, axis = plt.subplots(figsize=(11, 4.6))
+    values = [row[value_key] for row in usable]
+    axis.bar(range(len(usable)), values,
+             color=[colors[row["condition"]] for row in usable],
+             edgecolor="white", linewidth=0.8)
+    axis.axhline(summary["threshold"], color="#b00020", linestyle="--", linewidth=1.0)
+    axis.text(len(usable) - 0.4, summary["threshold"],
+              f" {summary['threshold']:g} {summary['unit']} limit", color="#b00020",
+              fontsize=8, va="bottom", ha="right")
+
+    axis.set_xticks(range(len(usable)))
+    axis.set_xticklabels([row["run"] for row in usable], rotation=45, ha="right", fontsize=7)
+    axis.set_ylabel(f"Median latency ({summary['unit']})")
+    axis.set_title(
+        f"{title} — {summary['headline']}, "
+        f"{summary['runs_passed']}/{summary['runs_evaluated']} runs passed",
+        loc="left", fontsize=11,
+    )
+    handles = [
+        plt.Line2D([], [], marker="s", linestyle="", markersize=7, color=colors[condition],
+                   label=f"{condition} ({summary['by_condition'][condition]['runs']} runs)")
+        for condition in conditions
+    ]
+    axis.legend(handles=handles, frameon=False, fontsize=8)
+    axis.grid(axis="y", alpha=0.25, linewidth=0.6)
+    axis.set_axisbelow(True)
+    axis.spines["top"].set_visible(False)
+    axis.spines["right"].set_visible(False)
+    figure.tight_layout()
+    figure.savefig(output_path, dpi=200)
+    plt.close(figure)
+    return output_path
+
+
 def plot_rates(rows: List[Dict], summary: Dict, title: str, output_path):
     """Per-run drop rate, coloured by condition, against the limit."""
     usable = [row for row in rows if row.get("drop_rate_pct") is not None]
@@ -195,19 +288,31 @@ def write_outputs(summary: Dict, output_dir: Path, prefix: str, title: str) -> N
         writer.writeheader()
         writer.writerows(rows)
 
-    plot_rates(rows, summary, title, output_dir / f"{prefix}.png")
+    if "unit" in summary:
+        plot_latency(rows, summary, title, output_dir / f"{prefix}.png")
+    else:
+        plot_rates(rows, summary, title, output_dir / f"{prefix}.png")
 
     print()
+    latency = "unit" in summary
     for condition, bucket in summary["by_condition"].items():
+        if latency:
+            value = bucket.get(f"median_{summary['unit']}")
+            print(f"  {condition:<8} {bucket['runs']:>2} runs  "
+                  f"median {value if value is not None else 'n/a'} {summary['unit']}  "
+                  f"{bucket['passed']}/{bucket['runs']} passed")
+            continue
         rate = bucket["drop_rate_pct"]
         print(f"  {condition:<8} {bucket['runs']:>2} runs  "
               f"{bucket['dropped']:>4}/{bucket['checked']:<6} lost  "
               f"({rate if rate is not None else 'n/a'}%)  "
               f"{bucket['passed']}/{bucket['runs']} passed")
     print()
+    limit = (f"{summary['threshold']:g} {summary['unit']}" if latency
+             else f"{summary['threshold_pct']:g}%")
     print(f"{summary['metric']}: {summary['headline']}")
     print(f"       per-run pass rate: {summary['runs_passed']}/{summary['runs_evaluated']} "
-          f"({summary['pass_rate']}), limit {summary['threshold_pct']:g}% per run")
+          f"({summary['pass_rate']}), limit {limit} per run")
     if summary["failed_runs"]:
         print(f"       failed: {', '.join(summary['failed_runs'])}")
     print(f"  -> {output_dir}")

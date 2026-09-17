@@ -27,9 +27,9 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
-from portable import kafka_log, mcap_backend
-from portable.pcap_backend import extract_pcap_messages
-from portable.timeutil import sdsm_timestamp_to_epoch_ms
+from ..portable import kafka_log, mcap_backend
+from ..portable.pcap_backend import extract_pcap_messages
+from ..portable.timeutil import sdsm_timestamp_to_epoch_ms
 
 from . import cascade_config as config
 from . import parse_sdss, parse_v2xhub
@@ -273,7 +273,7 @@ def attach_run_sources(table: pd.DataFrame, run, window_sec, radio_messages=None
 
 def _attach_ros_stages(table: pd.DataFrame, run, window_sec) -> pd.DataFrame:
     """Attach the J3224 receive time by detection identity, and the fused output by track."""
-    from dt_wz_metrics import sdsm_object_detections
+    from ..metrics import sdsm_object_detections
 
     detections = sdsm_object_detections(run.mcap, window_sec)
     if detections:

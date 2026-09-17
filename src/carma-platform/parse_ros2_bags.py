@@ -17,7 +17,7 @@ try:
 
     USE_PORTABLE_BACKEND = False
 except ImportError:  # no ROS 2 on this machine
-    from portable import mcap_backend as _portable
+    from dt_wz_analysis_util.portable import mcap_backend as _portable
 
     USE_PORTABLE_BACKEND = True
     # Keep the names bound so the module's attribute surface is the same either

@@ -28,8 +28,8 @@ import json
 import sys
 from pathlib import Path
 
-import cs01_location_spoofing as cs01
-import dt_wz_dataset as dataset
+from dt_wz_analysis_util import cs01
+from dt_wz_analysis_util import dataset
 
 
 def main(argv=None):

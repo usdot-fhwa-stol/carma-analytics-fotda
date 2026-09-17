@@ -24,13 +24,13 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from portable import kafka_log, mcap_backend
-from portable import obu_capture as obu_capture_reader  # aliased: the parameter is also obu_capture
-from portable.pcap_backend import extract_pcap_messages
+from .portable import kafka_log, mcap_backend
+from .portable import obu_capture as obu_capture_reader  # aliased: the parameter is also obu_capture
+from .portable.pcap_backend import extract_pcap_messages
 from utils import calculate_error_statistics
 
 # correlate_across_boundary lives in a hyphenated directory that is not importable
-sys.path.append(str(Path(__file__).resolve().parent.parent / "j2735-pcap"))
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent / "j2735-pcap"))
 from correlate_pcap_mcap import correlate_across_boundary  # noqa: E402
 
 INCOMING_SDSM_TOPIC = "/message/incoming_sdsm"
@@ -102,7 +102,7 @@ def sdsm_object_detections(mcap_path, window=None) -> List[Dict]:
     the measurement offset says how far before that the observation happened, so
     adding instead of subtracting dates every detection ~2x the offset too new.
     """
-    from portable.timeutil import sdsm_timestamp_to_epoch_ms
+    from .portable.timeutil import sdsm_timestamp_to_epoch_ms
 
     counts = mcap_backend.topic_message_counts(mcap_path)
     if not counts.get(INCOMING_J3224_TOPIC):
