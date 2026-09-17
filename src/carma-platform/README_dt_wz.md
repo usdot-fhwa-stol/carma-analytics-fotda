@@ -130,9 +130,22 @@ not its own: across these 30 runs, 24 frames arrived intact over the websocket
 and never reached Kafka, with contiguous `dataNumber` values proving the camera
 had sent them. Those are reported separately as `lost_after_camera`.
 
+**The denominator is the measured burst, not the nominal dwell.** The pedestrian
+never stood in the zone for exactly the labelled time — the 15 s runs average
+about 13.9 s, and one lasts 12.71 s. Counting that run against 150 frames reports
+22 drops for a stream that is continuous at 10.07 Hz with no gap over 150 ms, so
+it would measure the pedestrian's timing rather than the camera. Each run is
+therefore measured against the frames a continuous stream would hold over its own
+burst span.
+
+The dwell is found by splitting frames into bursts and taking the burst whose
+duration is closest to the run's condition, which rejects false starts. Each
+run's chosen burst is reported with its start time, end time and duration, so the
+window a number came from can be checked against the recording.
+
 A stall does not inflate the figure. The count is keyed on the camera's own
-capture time, so a frame that arrives late still lands in the dwell window it
-belongs to.
+capture time, so a frame that arrives late still lands in the burst it belongs
+to.
 
 Each run's dwell window is found without a recorded entry time, by taking the
 detection-burst start whose dwell-length window holds the most frames. Anchoring

@@ -135,7 +135,7 @@ def main(argv=None):
               f"{summary['camera_counter_gaps']}")
         print(f"       additionally lost after the camera, inside the plugin: "
               f"{summary['lost_after_camera']}")
-        print(f"       across {summary['runs']} runs / {summary['total_dwell_sec']} s of dwell")
+        print(f"       across {summary['runs']} runs / {summary['total_measured_burst_sec']} s of measured dwell")
         print(f"  -> {json_path}\n  -> {csv_path}\n  -> {plot_path}")
     except Exception as error:
         print(f"Error: {error}", file=sys.stderr)

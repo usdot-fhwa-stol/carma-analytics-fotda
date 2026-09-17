@@ -19,14 +19,19 @@ The Kafka topic is still read for comparison, and the difference between the two
 counts is reported per run as ``lost_after_camera``, which is the plugin-side
 loss stated separately instead of hidden inside the camera's figure.
 
-The test plan spans two recording sessions:
+The test plan spans two recording sessions -- 5/10/15 s dwells on 2026-09-14 and
+20 s dwells on 2026-09-15, 30 runs in total -- and the result is pooled across
+both.
 
-    5 runs x  5 s  +  5 runs x 10 s  +  5 runs x 15 s   (2026-09-14)
-    15 runs x 20 s                                       (2026-09-15)
-    = 30 runs, 450 s, 4500 expected frames
+**The denominator is the measured burst, not the nominal dwell.** The plan's
+nominal 4500 frames assume the pedestrian stood in the zone for exactly the
+labelled time. They did not: the 15 s runs average about 13.9 s, and one lasts
+12.71 s. Counting against 150 frames there reports 22 drops for a stream that is
+continuous at 10.07 Hz with no gap over 150 ms -- it measures the pedestrian's
+timing, not the camera.
 
-so the headline result is pooled across sessions, reported as
-"X frames out of 4500 frames dropped".
+So each run is measured against the frames a continuous stream would hold over
+that run's own burst span. What remains is the camera's own reliability.
 
 **A stall is not a drop.** A camera websocket stall delays frames without losing
 them: during the 2026-09-15 stalls every frame still arrived, just late and in a
@@ -43,23 +48,20 @@ which the camera detected nobody while the pedestrian was present.
 Kafka. Neither is part of the drop count; they say where the remaining losses
 sit.
 
-**Anchoring the dwell window.** The test plan says the entry time need not be
-recorded: measure the dwell from the first detection. Taken literally that
-misreads any run with a false start. 2026-09-15 run 1 opens with an 18-frame
-burst, a 2.9 s pause, a 34-frame burst, another pause, and only then the real
-19.7 s dwell -- anchoring on the first frame there measures 52 of 200 and reports
-148 phantom drops. Anchoring on the longest *burst* instead fails the opposite
-way: a genuine mid-dwell gap splits the dwell in two and only the larger half is
-measured.
+**Finding the dwell.** The entry time was not recorded, so the dwell is found in
+the data. Frames are split into bursts, and the burst whose duration is closest
+to the run's condition is taken as the dwell. That rejects false starts:
+2026-09-15 run 1 opens with a 1.7 s burst and a 3.3 s burst before the real
+19.7 s dwell, and only the last is close to 20 s.
 
-So the anchor is the burst start whose dwell-length window contains the most
-frames. That ignores false starts and still counts gaps inside the dwell, which
-are exactly the drops being measured.
+Each run's chosen burst is reported with its start time, end time and duration,
+so the window the number came from can be checked against the recording.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -70,14 +72,31 @@ from portable import flir_websocket, kafka_log
 # the median inter-arrival is 100.0 ms and ~90% of intervals fall in 90-110 ms.
 DETECTION_RATE_HZ = 10.0
 
-# Detections further apart than this start a new burst. Well above the 100 ms
-# cadence (and its jitter) and well below the pauses between runs.
-BURST_GAP_MS = 500.0
+# Detections further apart than this start a new burst. Chosen from the data:
+# the largest gap observed *inside* a dwell is 1.5 s, and the smallest pause
+# separating a false start from the real dwell is 2.9 s. 2 s sits between them,
+# so a dwell containing dropped frames stays one burst while a false start stays
+# separate. A threshold below ~1.5 s would split a dwell at its own drops, which
+# is the very thing being measured.
+BURST_GAP_MS = 2000.0
+
+# One frame period at the nominal rate.
+FRAME_INTERVAL_MS = 1000.0 / 10.0
+
+# runs.csv wall clock, used only to render burst times for a human to check.
+SESSION_TZ = timezone(timedelta(hours=-4))
 
 # How far around the nominal start time to look for a run's detections. Runs are
 # at least four minutes apart, so this cannot reach a neighbouring run.
 SEARCH_BEFORE_MS = 60_000.0
 SEARCH_AFTER_MS = 240_000.0
+
+
+def _iso(epoch_ms: Optional[float]) -> Optional[str]:
+    """Local (America/New_York) wall clock, so a burst can be checked by eye."""
+    if epoch_ms is None:
+        return None
+    return datetime.fromtimestamp(epoch_ms / 1000.0, SESSION_TZ).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
 
 @dataclass
@@ -90,6 +109,8 @@ class RunDrops:
     expected_frames: int
     received_frames: int
     first_detection_ms: Optional[float] = None
+    last_detection_ms: Optional[float] = None
+    burst_duration_sec: float = 0.0
     bursts_in_window: int = 0
     gap_spans_ms: List[float] = field(default_factory=list)
     # Camera frames the counter accounts for but that carried no message: frames
@@ -119,6 +140,11 @@ class RunDrops:
             "run": self.run,
             "condition": self.condition,
             "dwell_sec": self.dwell_sec,
+            "burst_duration_sec": self.burst_duration_sec,
+            "burst_start": _iso(self.first_detection_ms),
+            "burst_end": _iso(self.last_detection_ms),
+            "burst_start_ms": self.first_detection_ms,
+            "burst_end_ms": self.last_detection_ms,
             "expected_frames": self.expected_frames,
             "received_frames": self.received_frames,
             "dropped_frames": self.dropped_frames,
@@ -143,11 +169,12 @@ def camera_frame_times(detection_records) -> np.ndarray:
     )
 
 
-def _burst_starts(frames: np.ndarray) -> np.ndarray:
+def _bursts(frames: np.ndarray):
+    """Split frames into continuous bursts on gaps longer than BURST_GAP_MS."""
     if len(frames) == 0:
-        return frames
+        return []
     breaks = np.flatnonzero(np.diff(frames) > BURST_GAP_MS)
-    return np.r_[frames[0], frames[breaks + 1]]
+    return np.split(frames, breaks + 1)
 
 
 def measure_run(run, frames: np.ndarray, rate_hz: float = DETECTION_RATE_HZ,
@@ -170,27 +197,37 @@ def measure_run(run, frames: np.ndarray, rate_hz: float = DETECTION_RATE_HZ,
     if len(window) == 0:
         return result
 
-    span_ms = run.dwell_sec * 1000.0
-    starts = _burst_starts(window)
-    result.bursts_in_window = len(starts)
+    # Split into bursts, then take the burst whose duration is closest to this
+    # run's condition. The pedestrian's real dwell is never exactly the nominal
+    # time, so the burst itself defines the measurement window.
+    bursts = _bursts(window)
+    result.bursts_in_window = len(bursts)
+    nominal_ms = run.dwell_sec * 1000.0
+    best = min(bursts, key=lambda burst: abs((burst[-1] - burst[0]) - nominal_ms))
 
-    counts = [int(((window >= anchor) & (window < anchor + span_ms)).sum()) for anchor in starts]
-    best = int(np.argmax(counts))
-    anchor = float(starts[best])
+    dwell_frames = best
+    span_ms = float(dwell_frames[-1] - dwell_frames[0])
+    # Frames a continuous stream would hold over this same span. Fence-post: a
+    # 1.0 s span at 10 Hz spans 11 frames, not 10, because both ends are frames.
+    expected = int(round(span_ms / FRAME_INTERVAL_MS)) + 1 if len(dwell_frames) > 1 else 1
 
-    dwell_frames = window[(window >= anchor) & (window < anchor + span_ms)]
+    result.expected_frames = expected
     result.received_frames = len(dwell_frames)
-    result.first_detection_ms = anchor
+    result.first_detection_ms = float(dwell_frames[0])
+    result.last_detection_ms = float(dwell_frames[-1])
+    result.burst_duration_sec = round(span_ms / 1000.0, 3)
     if len(dwell_frames) > 1:
         gaps = np.diff(dwell_frames)
-        result.gap_spans_ms = [float(gap) for gap in gaps if gap > BURST_GAP_MS]
+        result.gap_spans_ms = [float(gap) for gap in gaps if gap > FRAME_INTERVAL_MS * 1.5]
 
+    # The burst is inclusive of its last frame, so the window closes just after it.
+    low, high = float(dwell_frames[0]), float(dwell_frames[-1]) + 1.0
     if websocket_frames is not None:
         result.counter_gaps = flir_websocket.counter_gaps(
-            flir_websocket.frames_in_window(websocket_frames, anchor, anchor + span_ms)
+            flir_websocket.frames_in_window(websocket_frames, low, high)
         )
     if kafka_frames is not None:
-        in_kafka = kafka_frames[(kafka_frames >= anchor) & (kafka_frames < anchor + span_ms)]
+        in_kafka = kafka_frames[(kafka_frames >= low) & (kafka_frames < high)]
         # Both sides carry the camera's own capture time, so they are directly
         # comparable; round to the millisecond the logs are written at.
         reached = set(np.round(in_kafka).astype(np.int64).tolist())
@@ -254,7 +291,8 @@ def summarise(results: List[RunDrops], rate_hz: float = DETECTION_RATE_HZ) -> Di
 
     return {
         "runs": len(results),
-        "total_dwell_sec": sum(item.dwell_sec for item in results),
+        "total_nominal_dwell_sec": sum(item.dwell_sec for item in results),
+        "total_measured_burst_sec": round(sum(item.burst_duration_sec for item in results), 3),
         "total_expected_frames": expected,
         "total_received_frames": received,
         "total_dropped_frames": dropped,
