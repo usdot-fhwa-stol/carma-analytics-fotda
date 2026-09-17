@@ -39,14 +39,13 @@ def analyse(data_roots: List[Path], rate_hz: float) -> List[cp01.RunDrops]:
     for root in data_roots:
         runs = dataset.load_runs_csv(root / "runs.csv", root)
         session = dataset.discover_session(root)
-        if session.kafka_detected_object is None:
+        if session.pc2_v2xhub is None:
             raise FileNotFoundError(
-                f"{root}: no v2xhub_sim_sensor_detected_object log; CP-01 needs the "
-                f"raw detection topic"
+                f"{root}: no pc2 V2XHub log; CP-01 counts the camera's websocket stream"
             )
-        print(f"{root.name}: {len(runs)} runs, detections from "
-              f"{session.kafka_detected_object.name}")
-        results.extend(cp01.analyse_session(runs, session.kafka_detected_object, rate_hz))
+        print(f"{root.name}: {len(runs)} runs, camera frames from "
+              f"{session.pc2_v2xhub.name}")
+        results.extend(cp01.analyse_session(runs, session, rate_hz))
     return results
 
 
@@ -131,6 +130,11 @@ def main(argv=None):
                   f"({bucket['drop_pct']:.2f}%)")
         print()
         print(f"CP-01: {summary['headline']} ({summary['total_drop_pct']:.2f}%)")
+        print(f"       measured at the {summary['measured_at']}")
+        print(f"       camera frames with no detection (counter gaps): "
+              f"{summary['camera_counter_gaps']}")
+        print(f"       additionally lost after the camera, inside the plugin: "
+              f"{summary['lost_after_camera']}")
         print(f"       across {summary['runs']} runs / {summary['total_dwell_sec']} s of dwell")
         print(f"  -> {json_path}\n  -> {csv_path}\n  -> {plot_path}")
     except Exception as error:

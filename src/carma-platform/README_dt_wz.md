@@ -121,10 +121,18 @@ reconfigured on 2026-09-09. The Kafka dumps are also windowed to the session's
 runs first, since a dump holds the broker's whole retention and would otherwise
 verify several days of testing at once.
 
-It reports "X frames out of 4500 frames dropped" from the raw
-`v2xhub_sim_sensor_detected_object` Kafka topic. That topic is upstream of the
-SDSS, so a camera stall — which delays frames rather than dropping them — does
-not inflate it; what it counts is frames the camera never produced.
+It reports "X frames out of 4500 frames dropped", counted at the **camera's
+websocket** in the pc2 V2XHub log — the closest measurement point to the camera,
+before the plugin parses, queues or forwards anything.
+
+Measuring at the Kafka topic instead would charge the camera for losses that are
+not its own: across these 30 runs, 24 frames arrived intact over the websocket
+and never reached Kafka, with contiguous `dataNumber` values proving the camera
+had sent them. Those are reported separately as `lost_after_camera`.
+
+A stall does not inflate the figure. The count is keyed on the camera's own
+capture time, so a frame that arrives late still lands in the dwell window it
+belongs to.
 
 Each run's dwell window is found without a recorded entry time, by taking the
 detection-burst start whose dwell-length window holds the most frames. Anchoring

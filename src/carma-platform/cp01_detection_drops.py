@@ -1,8 +1,23 @@
-"""CP-01: FLIR camera detection drop rate, from the raw Kafka detection topic.
+"""CP-01: FLIR camera detection drop rate, measured at the camera's websocket.
 
-Measures how many of the camera frames that *should* have been produced during
-each pedestrian dwell actually reached the ``v2xhub_sim_sensor_detected_object``
-topic. At a nominal 10 Hz, a 20-second dwell should yield 200 frames.
+Measures how many of the camera frames that *should* have arrived during each
+pedestrian dwell actually did. At a nominal 10 Hz, a 20-second dwell should
+yield 200 frames.
+
+**Measured at the websocket, not at Kafka.** CP-01 asks for a property of the
+camera, so it has to be measured as close to the camera as the logs allow. The
+pc2 V2XHub log records every websocket message verbatim, before the plugin
+parses, queues or forwards anything.
+
+The difference is not academic. Comparing the two sources across these 30 runs,
+24 frames arrived intact over the websocket and never reached Kafka -- and their
+``dataNumber`` values were contiguous, so the camera had sent them and the
+plugin had received them. Counting at Kafka charges those 24 frames to the
+camera. They belong to the plugin.
+
+The Kafka topic is still read for comparison, and the difference between the two
+counts is reported per run as ``lost_after_camera``, which is the plugin-side
+loss stated separately instead of hidden inside the camera's figure.
 
 The test plan spans two recording sessions:
 
@@ -13,13 +28,20 @@ The test plan spans two recording sessions:
 so the headline result is pooled across sessions, reported as
 "X frames out of 4500 frames dropped".
 
-**Why the Kafka topic and not a later stage.** It sits upstream of the
-sensor_data_sharing_service, so the SDSS's staleness rejection cannot remove
-anything from it. A camera websocket stall delays frames without dropping them:
-during the 2026-09-15 stalls the frames still arrive, just late and in a burst,
-and one stall window shows zero gaps over 150 ms. So what this metric counts is
-frames the camera never produced (or that were lost before Kafka), which is what
-CP-01 is asking about -- not frames rejected downstream for being late.
+**A stall is not a drop.** A camera websocket stall delays frames without losing
+them: during the 2026-09-15 stalls every frame still arrived, just late and in a
+burst, and one stall window shows no gap over 150 ms at all. Because the count
+is keyed on the camera's own capture time, a late frame still lands in the dwell
+window it belongs to, so a stall does not inflate this figure. The downstream
+staleness rejections that fail CP-02 are likewise invisible here, since they
+happen well after the websocket.
+
+**Two numbers come with the count.** ``counter_gaps`` is how many camera frames
+the ``dataNumber`` sequence accounts for that carried no message -- frames in
+which the camera detected nobody while the pedestrian was present.
+``lost_after_camera`` is how many arrived over the websocket but never reached
+Kafka. Neither is part of the drop count; they say where the remaining losses
+sit.
 
 **Anchoring the dwell window.** The test plan says the entry time need not be
 recorded: measure the dwell from the first detection. Taken literally that
@@ -42,7 +64,7 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from portable import kafka_log
+from portable import flir_websocket, kafka_log
 
 # Nominal FLIR frame rate. 100 ms cadence, confirmed against the websocket logs:
 # the median inter-arrival is 100.0 ms and ~90% of intervals fall in 90-110 ms.
@@ -70,6 +92,12 @@ class RunDrops:
     first_detection_ms: Optional[float] = None
     bursts_in_window: int = 0
     gap_spans_ms: List[float] = field(default_factory=list)
+    # Camera frames the counter accounts for but that carried no message: frames
+    # in which the camera detected nobody while the pedestrian was present.
+    counter_gaps: int = 0
+    # Frames that arrived over the websocket but never reached Kafka. Not a
+    # camera fault; reported so the plugin-side loss stays visible and separate.
+    lost_after_camera: Optional[int] = None
 
     @property
     def dropped_frames(self) -> int:
@@ -95,6 +123,8 @@ class RunDrops:
             "received_frames": self.received_frames,
             "dropped_frames": self.dropped_frames,
             "drop_pct": round(self.drop_pct, 3),
+            "counter_gaps": self.counter_gaps,
+            "lost_after_camera": self.lost_after_camera,
             "bursts_in_window": self.bursts_in_window,
             "largest_gap_ms": round(max(self.gap_spans_ms), 1) if self.gap_spans_ms else 0.0,
         }
@@ -120,8 +150,15 @@ def _burst_starts(frames: np.ndarray) -> np.ndarray:
     return np.r_[frames[0], frames[breaks + 1]]
 
 
-def measure_run(run, frames: np.ndarray, rate_hz: float = DETECTION_RATE_HZ) -> RunDrops:
-    """Frame accounting for one run's dwell window."""
+def measure_run(run, frames: np.ndarray, rate_hz: float = DETECTION_RATE_HZ,
+                websocket_frames=None, kafka_frames=None) -> RunDrops:
+    """Frame accounting for one run's dwell window.
+
+    ``frames`` is the sorted camera-time array the count is taken from -- the
+    websocket times for CP-01 proper. ``websocket_frames`` are the full websocket
+    records, used for the ``dataNumber`` gap count, and ``kafka_frames`` is the
+    Kafka camera-time array, used to report the plugin-side loss separately.
+    """
     expected = round(run.dwell_sec * rate_hz)
     start = run.start_time.timestamp() * 1000.0
     window = frames[(frames >= start - SEARCH_BEFORE_MS) & (frames <= start + SEARCH_AFTER_MS)]
@@ -147,13 +184,48 @@ def measure_run(run, frames: np.ndarray, rate_hz: float = DETECTION_RATE_HZ) -> 
     if len(dwell_frames) > 1:
         gaps = np.diff(dwell_frames)
         result.gap_spans_ms = [float(gap) for gap in gaps if gap > BURST_GAP_MS]
+
+    if websocket_frames is not None:
+        result.counter_gaps = flir_websocket.counter_gaps(
+            flir_websocket.frames_in_window(websocket_frames, anchor, anchor + span_ms)
+        )
+    if kafka_frames is not None:
+        in_kafka = kafka_frames[(kafka_frames >= anchor) & (kafka_frames < anchor + span_ms)]
+        # Both sides carry the camera's own capture time, so they are directly
+        # comparable; round to the millisecond the logs are written at.
+        reached = set(np.round(in_kafka).astype(np.int64).tolist())
+        result.lost_after_camera = sum(
+            1 for value in np.round(dwell_frames).astype(np.int64).tolist()
+            if value not in reached
+        )
     return result
 
 
-def analyse_session(runs, detection_log_path, rate_hz: float = DETECTION_RATE_HZ) -> List[RunDrops]:
-    """CP-01 for every run of one session."""
-    frames = camera_frame_times(kafka_log.parse_kafka_log_records(detection_log_path))
-    return [measure_run(run, frames, rate_hz) for run in runs]
+def analyse_session(runs, session, rate_hz: float = DETECTION_RATE_HZ) -> List[RunDrops]:
+    """CP-01 for every run of one session.
+
+    ``session`` is a ``dt_wz_dataset.SessionPaths``. The count comes from the pc2
+    V2XHub log's websocket messages; the Kafka detection topic is read only to
+    report the plugin-side loss alongside it.
+    """
+    if session.pc2_v2xhub is None:
+        raise FileNotFoundError(
+            "CP-01 needs the pc2 V2XHub log: it carries the camera's websocket stream"
+        )
+    websocket_frames = flir_websocket.parse_camera_frames(session.pc2_v2xhub)
+    frames = np.array([frame["camera_time_ms"] for frame in websocket_frames], dtype=float)
+
+    kafka_frames = None
+    if session.kafka_detected_object is not None:
+        kafka_frames = camera_frame_times(
+            kafka_log.parse_kafka_log_records(session.kafka_detected_object)
+        )
+
+    return [
+        measure_run(run, frames, rate_hz,
+                    websocket_frames=websocket_frames, kafka_frames=kafka_frames)
+        for run in runs
+    ]
 
 
 def summarise(results: List[RunDrops], rate_hz: float = DETECTION_RATE_HZ) -> Dict:
@@ -161,6 +233,9 @@ def summarise(results: List[RunDrops], rate_hz: float = DETECTION_RATE_HZ) -> Di
     expected = sum(item.expected_frames for item in results)
     received = sum(item.received_frames for item in results)
     dropped = sum(item.dropped_frames for item in results)
+
+    counter_gaps = sum(item.counter_gaps for item in results)
+    lost_after = sum(item.lost_after_camera or 0 for item in results)
 
     by_condition: Dict[str, Dict] = {}
     for item in results:
@@ -186,6 +261,9 @@ def summarise(results: List[RunDrops], rate_hz: float = DETECTION_RATE_HZ) -> Di
         "total_drop_pct": round(dropped / expected * 100.0, 3) if expected else 0.0,
         "headline": f"{dropped} frames out of {expected} frames dropped",
         "detection_rate_hz": rate_hz,
+        "measured_at": "camera websocket (pc2 V2XHub log)",
+        "camera_counter_gaps": counter_gaps,
+        "lost_after_camera": lost_after,
         "by_condition": dict(sorted(by_condition.items(), key=lambda kv: kv[1]["runs"])),
         "runs_detail": [item.as_row() for item in results],
     }
