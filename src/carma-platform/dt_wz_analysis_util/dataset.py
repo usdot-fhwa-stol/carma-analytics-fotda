@@ -55,12 +55,15 @@ def condition_dwell_sec(condition: str) -> int:
 class RunSpec:
     """One demo run and the four files that record it."""
 
-    condition: str          # "5sec" | "10sec" | "15sec"
-    run_id: int             # 1..5 within the condition
-    start_time: datetime    # runs.csv start_time_etc, tz-aware
-    rsu_pcap: Path          # SDSM broadcasts, binary pcap
-    obu_capture: Path       # OBU radio traffic, tcpdump text
-    mcap: Path              # CARMA Platform rosbag
+    condition: str                    # "5sec", "20sec", "pl-01", ...
+    run_id: int                       # position within the condition
+    obu_capture: Path                 # OBU radio traffic, binary pcap or tcpdump text
+    mcap: Path                        # CARMA Platform rosbag
+    # Optional, because not every session records them. A session dedicated to
+    # message rates has no RSU capture and needs no wall-clock start: its runs
+    # are found from the recording itself.
+    start_time: Optional[datetime] = None
+    rsu_pcap: Optional[Path] = None
 
     @property
     def name(self) -> str:
@@ -72,6 +75,11 @@ class RunSpec:
         return condition_dwell_sec(self.condition)
 
     def missing(self) -> List[str]:
+        """Files named in runs.csv that are not on disk.
+
+        A column the manifest omits is not missing -- it was never claimed. Only
+        files the manifest actually names are checked.
+        """
         return [
             f"{field}={path}"
             for field, path in (
@@ -79,7 +87,7 @@ class RunSpec:
                 ("obu_capture", self.obu_capture),
                 ("mcap", self.mcap),
             )
-            if not path.is_file()
+            if path is not None and not path.is_file()
         ]
 
 
@@ -163,13 +171,20 @@ def load_runs_csv(runs_csv, data_root=None) -> List[RunSpec]:
             }
             if not clean.get("run_condition"):
                 continue
-            start = datetime.strptime(clean["start_time_etc"], "%Y-%m-%d %H:%M:%S")
+            start = None
+            if clean.get("start_time_etc"):
+                start = datetime.strptime(
+                    clean["start_time_etc"], "%Y-%m-%d %H:%M:%S"
+                ).replace(tzinfo=SESSION_TZ)
             runs.append(
                 RunSpec(
                     condition=clean["run_condition"],
                     run_id=int(clean["run_id"]),
-                    start_time=start.replace(tzinfo=SESSION_TZ),
-                    rsu_pcap=_resolve(root, "rsu_pcap", clean["rsu_pcap_fn"]),
+                    start_time=start,
+                    rsu_pcap=(
+                        _resolve(root, "rsu_pcap", clean["rsu_pcap_fn"])
+                        if clean.get("rsu_pcap_fn") else None
+                    ),
                     obu_capture=_resolve(root, "obu", clean["obu_pcap_fn"]),
                     mcap=_resolve(root, "rosbags", clean["rosbag_fn"]),
                 )

@@ -340,6 +340,38 @@ def detection_to_sdsm_receipt_latency(
 # PL-01: message rates, and the OBU radio side
 # --------------------------------------------------------------------------
 
+def topic_active_intervals(mcap_path, topic, window, gap_sec) -> List[Tuple[float, float]]:
+    """Periods inside ``window`` during which a topic was actually being received.
+
+    For a topic that legitimately stops and restarts, the average rate over the
+    whole window measures how long it was absent rather than how fast it ran.
+    MOM is in that position: the vehicle drives out of range of the source and
+    the messages stop, which is expected behaviour, not a rate fault. Splitting
+    the topic's own arrivals on gaps longer than ``gap_sec`` recovers the periods
+    when it was in range, and the rate is then measured over those.
+
+    Returns an empty list if the topic is absent or has too few messages, which
+    makes the caller fall back to the whole window.
+    """
+    counts = mcap_backend.topic_message_counts(mcap_path)
+    if not counts.get(topic):
+        return []
+    reader, _type_map, _start = mcap_backend.open_bagfile(str(mcap_path), topics=[topic])
+    times = []
+    while reader.has_next():
+        _topic, _message, log_time_ns = reader.read_next()
+        seconds = log_time_ns / 1e9
+        if window[0] <= seconds <= window[1]:
+            times.append(seconds)
+    if len(times) < 2:
+        return []
+    times = np.unique(np.array(times, dtype=float))
+    breaks = np.flatnonzero(np.diff(times) > gap_sec)
+    starts = np.r_[times[0], times[breaks + 1]]
+    ends = np.r_[times[breaks], times[-1]]
+    return [(float(a), float(b)) for a, b in zip(starts, ends) if b > a]
+
+
 def detection_intervals(detection_records, window, gap_sec=0.5) -> List[Tuple[float, float]]:
     """Periods inside ``window`` during which the camera was reporting detections.
 

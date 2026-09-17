@@ -19,16 +19,36 @@ python src/carma-platform/run_cp02_analysis.py \
 Every script takes the same two arguments. Repeat `--data-root` to pool sessions
 into one result; each session is windowed to its own runs first.
 
+**PL-01 takes two groups of sessions**, because no single session carries every
+message: MAP and SPAT were not broadcast during the verification runs, and the
+session recorded to exercise them carries no SDSM.
+
+```bash
+python src/carma-platform/run_pl01_analysis.py \
+    --data-root .../20260917 \
+    --sdsm-data-root .../20260914_verification_test \
+    --sdsm-data-root .../20260915_verification_test \
+    --output-dir out/pl01
+```
+
+Two topics are averaged over the periods when they were present rather than over
+the whole engaged window, because neither runs continuously: **SDSM** flows only
+while an object is detected, and **MOM** stops when the vehicle drives out of
+range of the source. Averaging either over the whole window measures how long it
+was absent rather than how fast it ran.
+
 `run_all_dt_wz_analysis.py` is a wrapper that runs them all in turn:
 
 ```bash
 python src/carma-platform/run_all_dt_wz_analysis.py \
     --data-root .../20260914_verification_test \
     --data-root .../20260915_verification_test \
+    --pl01-data-root .../20260917 \
     --output-dir out
 ```
 
-About 5.5 minutes for 30 runs across two sessions. Use `--only cp02 cp03` to run
+`--pl01-data-root` routes PL-01's two groups; without it every metric uses
+`--data-root`. About 5.5 minutes for 30 runs across two sessions. Use `--only cp02 cp03` to run
 a subset. Prefer the individual scripts when re-running one metric: CP-02 and the
 cascade each parse logs of over a million lines.
 
@@ -65,6 +85,7 @@ src/carma-platform/
 | `run_cp03_analysis.py` | RSU broadcasts the vehicle never received | drop rate <= 2% |
 | `run_dt05_analysis.py` | camera detection to SDSM at the vehicle | median < 0.3 s |
 | `run_pl01_analysis.py` | per-topic message rates, OBU radio activity | rate within +/-20% |
+
 | `run_cs01_analysis.py` | SDSM places the pedestrian at the reference | < 0.2 m, < 1 deg |
 | `run_cascade_analysis.py` | per-hop latency, camera to fused output | reported, no limit |
 

@@ -83,6 +83,10 @@ def main(argv=None):
                         help="Session directory with runs.csv; repeat to pool sessions")
     parser.add_argument("--output-dir", type=Path, required=True,
                         help="Parent directory; each analysis writes into its own sub-folder")
+    parser.add_argument("--pl01-data-root", type=Path, action="append",
+                        help="Session(s) carrying MAP/SPAT/MOM/BSM for PL-01. When given, "
+                             "--data-root is used for PL-01's SDSM rate instead. Needed "
+                             "because no single session carries every message.")
     parser.add_argument("--only", nargs="+", choices=sorted(ANALYSES),
                         help="Run only these analyses (default: all)")
     args = parser.parse_args(argv)
@@ -96,9 +100,16 @@ def main(argv=None):
     for name in selected:
         module, result_file = ANALYSES[name]
         output_dir = args.output_dir / name
+        arguments = roots
+        if name == "pl01" and args.pl01_data_root:
+            arguments = []
+            for root in args.pl01_data_root:
+                arguments += ["--data-root", str(root)]
+            for root in args.data_root:
+                arguments += ["--sdsm-data-root", str(root)]
         print(f"\n{'=' * 70}\n{name}\n{'=' * 70}")
         try:
-            module.main(roots + ["--output-dir", str(output_dir)])
+            module.main(arguments + ["--output-dir", str(output_dir)])
             results[name] = _headline(name, output_dir / result_file if result_file else None)
         except SystemExit as exit_code:
             # A metric script exits non-zero when its own criterion failed; that

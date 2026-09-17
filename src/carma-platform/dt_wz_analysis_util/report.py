@@ -84,10 +84,16 @@ def analyse_runs(data_roots: List[Path], measure: Callable, prepare: Callable = 
                 row["error"] = str(error)
             rows.append(row)
             if verbose:
-                print(f"  {run.name:<12} checked={row.get('checked')} "
-                      f"dropped={row.get('dropped')} "
-                      f"rate={row.get('drop_rate_pct')} "
-                      f"{'PASS' if row.get('passed') else 'FAIL' if row.get('passed') is False else '-'}")
+                verdict = ("PASS" if row.get("passed") else
+                           "FAIL" if row.get("passed") is False else "n/a")
+                if row.get("checked") is not None:
+                    detail = (f"checked={row['checked']} dropped={row.get('dropped')} "
+                              f"rate={row.get('drop_rate_pct')}")
+                elif row.get("samples") is not None:
+                    detail = f"samples={row['samples']} median={row.get('median_s')}"
+                else:
+                    detail = row.get("summary", "")
+                print(f"  {run.name:<12} {detail} {verdict}".rstrip())
     return rows
 
 
