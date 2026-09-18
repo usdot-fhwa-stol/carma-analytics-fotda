@@ -139,6 +139,11 @@ actually use, so the analysis runs on a plain Python venv:
 `parse_ros2_bags` falls back to `mcap_backend` automatically when `rosbag2_py` is
 absent, so the other analyses in this directory gain the same portability.
 
+**PL-03 caches its geometry.** Each run's trajectory and pedestrian points are
+written to `pl03_tracks.npz`, so `--plot-only` redraws both figures in about a
+second instead of re-reading 30 recordings. If the cache is absent it runs the
+full analysis once and builds it, so the flag is always safe to pass.
+
 **PL-03 scores only the valid runs.** A run counts toward the yield rate only if
 its camera detections were consistent and its SDSMs were consistently received,
 so the metric measures vehicle behaviour rather than sensing faults. Both checks

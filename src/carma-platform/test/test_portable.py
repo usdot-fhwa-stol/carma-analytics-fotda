@@ -474,6 +474,55 @@ class TestPl03Yield(unittest.TestCase):
         self.assertEqual(summary["success_rate_pct"], 80.0)
         self.assertFalse(summary["is_passed"])      # under the 90% target
 
+    def test_track_cache_round_trips(self):
+        """--plot-only trusts this cache, so it must return what it was given."""
+        item = self._result("a", True, True)
+        item.track = {
+            "times": self._np.array([0.0, 1.0, 2.0]),
+            "east": self._np.array([0.0, 5.0, 10.0]),
+            "north": self._np.array([0.0, 0.1, 0.2]),
+            "speed": self._np.array([0.0, 5.0, 5.0]),
+            "ped_east": self._np.array([20.0]),
+            "ped_north": self._np.array([1.0]),
+            "stop": (5.0, 0.1),
+        }
+        with tempfile.TemporaryDirectory() as scratch:
+            path = Path(scratch) / pl03.CACHE_NAME
+            pl03.save_tracks([item], path)
+            loaded = pl03.load_tracks(path)
+        self.assertEqual(list(loaded), ["a"])
+        self._np.testing.assert_allclose(loaded["a"]["east"], item.track["east"])
+        self._np.testing.assert_allclose(loaded["a"]["ped_east"], item.track["ped_east"])
+        self.assertEqual(loaded["a"]["stop"], (5.0, 0.1))
+
+    def test_cached_run_with_no_stop_reloads_as_none(self):
+        """A run that never stopped must not come back as a stop at (nan, nan)."""
+        item = self._result("a", True, False)
+        item.track = {
+            "times": self._np.array([0.0, 1.0]), "east": self._np.array([0.0, 5.0]),
+            "north": self._np.zeros(2), "speed": self._np.array([5.0, 5.0]),
+            "ped_east": self._np.array([20.0]), "ped_north": self._np.array([0.0]),
+            "stop": None,
+        }
+        with tempfile.TemporaryDirectory() as scratch:
+            path = Path(scratch) / pl03.CACHE_NAME
+            pl03.save_tracks([item], path)
+            self.assertIsNone(pl03.load_tracks(path)["a"]["stop"])
+
+    def test_missing_cache_reads_as_empty_rather_than_raising(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            self.assertEqual(pl03.load_tracks(Path(scratch) / pl03.CACHE_NAME), {})
+
+    def test_row_round_trips_the_fields_the_plots_need(self):
+        item = self._result("a", False, True)
+        item.pedestrian_ahead_m = 7.5
+        rebuilt = pl03.RunYield.from_row(item.as_row())
+        self.assertEqual(rebuilt.run, "a")
+        self.assertFalse(rebuilt.valid)
+        self.assertTrue(rebuilt.yielded)
+        self.assertAlmostEqual(rebuilt.pedestrian_ahead_m, 7.5)
+        self.assertIn("camera detection gap", rebuilt.invalid_reason)
+
     def test_no_valid_runs_reports_rather_than_dividing_by_zero(self):
         summary = pl03.summarise([self._result("a", False, False)])
         self.assertIsNone(summary["success_rate_pct"])

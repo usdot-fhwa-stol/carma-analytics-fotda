@@ -151,8 +151,76 @@ class RunYield:
         }
 
 
+    @classmethod
+    def from_row(cls, row: Dict) -> "RunYield":
+        """Rebuild the fields the plots need from a saved CSV/JSON row."""
+        item = cls(run=row["run"], condition=row["condition"],
+                   dwell_sec=int(row.get("dwell_sec") or 0))
+        for field_name in ("valid", "yielded"):
+            value = row.get(field_name)
+            item.__dict__[field_name] = (
+                value if isinstance(value, bool)
+                else str(value).lower() == "true" if value not in (None, "") else None
+            )
+        for field_name in ("distance_to_pedestrian_m", "pedestrian_ahead_m",
+                           "approach_distance_m", "stop_duration_sec"):
+            value = row.get(field_name)
+            item.__dict__[field_name] = (
+                float(value) if value not in (None, "") else None)
+        item.invalid_reason = row.get("invalid_reason") or None
+        return item
+
+
 def _round(value, places):
     return None if value is None else round(float(value), places)
+
+
+CACHE_NAME = "pl03_tracks.npz"
+
+# Arrays saved per run. ``stop`` is stored as two values, NaN when the run never
+# stopped, so the file stays a flat array archive rather than needing pickling.
+_TRACK_ARRAYS = ("times", "east", "north", "speed", "ped_east", "ped_north")
+
+
+def save_tracks(results: List["RunYield"], cache_path) -> Optional[Path]:
+    """Cache each run's geometry so the plots can be redrawn without the MCAPs.
+
+    Re-reading 30 recordings costs minutes and yields exactly the same points,
+    so iterating on a figure should not pay for it.
+    """
+    payload = {}
+    names = []
+    for item in results:
+        if not item.track:
+            continue
+        names.append(item.run)
+        for key in _TRACK_ARRAYS:
+            payload[f"{item.run}|{key}"] = np.asarray(item.track[key], dtype=float)
+        stop = item.track.get("stop")
+        payload[f"{item.run}|stop"] = np.array(
+            stop if stop else (np.nan, np.nan), dtype=float)
+    if not names:
+        return None
+    cache_path = Path(cache_path)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(cache_path, runs=np.array(names), **payload)
+    return cache_path
+
+
+def load_tracks(cache_path) -> Dict[str, Dict]:
+    """Read back what ``save_tracks`` wrote, or {} if there is no cache."""
+    cache_path = Path(cache_path)
+    if not cache_path.is_file():
+        return {}
+    with np.load(cache_path, allow_pickle=False) as archive:
+        tracks = {}
+        for run in archive["runs"]:
+            run = str(run)
+            track = {key: archive[f"{run}|{key}"] for key in _TRACK_ARRAYS}
+            stop = archive[f"{run}|stop"]
+            track["stop"] = None if np.isnan(stop).any() else (float(stop[0]), float(stop[1]))
+            tracks[run] = track
+    return tracks
 
 
 def _enu(latitudes, longitudes) -> Tuple[np.ndarray, np.ndarray]:

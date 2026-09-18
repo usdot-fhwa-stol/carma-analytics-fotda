@@ -15,6 +15,11 @@ metric isolates vehicle behaviour from sensing faults. Invalid runs are still
 scored and reported with the reason they were excluded.
 
 Writes ``pl03_vehicle_yield.{json,csv,png}`` and ``pl03_trajectories.png``.
+
+Each run also caches its trajectory and pedestrian points to
+``pl03_tracks.npz``, so ``--plot-only`` redraws the figures without re-reading
+the recordings -- minutes of MCAP parsing for points that cannot have changed.
+If the cache is absent, ``--plot-only`` falls back to a full run and builds it.
 """
 
 from __future__ import annotations
@@ -254,22 +259,46 @@ def main(argv=None):
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--target-pct", type=float, default=90.0,
                         help="Required success rate over valid runs (default 90)")
+    parser.add_argument("--plot-only", action="store_true",
+                        help="Redraw the figures from the cached geometry instead of "
+                             "re-reading the recordings. Falls back to a full run if "
+                             "no cache is present.")
     parser.add_argument("--speed-cmap", default=DEFAULT_SPEED_CMAP,
                         help=f"Colour ramp for speed (default {DEFAULT_SPEED_CMAP}; "
                              f"'coolwarm' for a literal blue-to-red)")
     args = parser.parse_args(argv)
 
-    results = analyse(args.data_root)
-    summary = pl03.summarise(results, args.target_pct)
-    summary["sessions"] = [str(root) for root in args.data_root]
+    cache_path = args.output_dir / pl03.CACHE_NAME
+    summary_path = args.output_dir / f"{PREFIX}.json"
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    (args.output_dir / f"{PREFIX}.json").write_text(json.dumps(summary, indent=2, default=float))
-    rows = summary["runs_detail"]
-    with open(args.output_dir / f"{PREFIX}.csv", "w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
+    results, summary = None, None
+    if args.plot_only:
+        tracks = pl03.load_tracks(cache_path)
+        if tracks and summary_path.is_file():
+            summary = json.loads(summary_path.read_text())
+            results = [pl03.RunYield.from_row(row) for row in summary["runs_detail"]]
+            for item in results:
+                item.track = tracks.get(item.run)
+            print(f"Redrawing from {cache_path.name} ({len(tracks)} cached runs); "
+                  f"the recordings were not read.")
+        else:
+            missing = "cache" if not tracks else "summary"
+            print(f"No {missing} in {args.output_dir}; running the full analysis "
+                  f"once to build it.")
+
+    if results is None:
+        results = analyse(args.data_root)
+        summary = pl03.summarise(results, args.target_pct)
+        summary["sessions"] = [str(root) for root in args.data_root]
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        summary_path.write_text(json.dumps(summary, indent=2, default=float))
+        rows = summary["runs_detail"]
+        with open(args.output_dir / f"{PREFIX}.csv", "w", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
+        if pl03.save_tracks(results, cache_path):
+            print(f"Cached trajectories -> {cache_path}")
 
     plot_summary(results, summary, args.output_dir / f"{PREFIX}.png")
     plot_trajectories(results, args.output_dir / TRAJECTORY_NAME, args.speed_cmap)
