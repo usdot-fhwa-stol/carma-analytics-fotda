@@ -271,6 +271,7 @@ def _run_vehicle_yield(case, args):
 def _run_location_spoofing(case, args):
     result = location_spoofing.analyse_data_roots(
         args.data_root, output_dir=args.output_dir, config=args.settings,
+        metric_label=case.title,
         max_mean_position_error_m=args.max_position_error_m,
         max_mean_heading_error_deg=args.max_heading_error_deg,
     )

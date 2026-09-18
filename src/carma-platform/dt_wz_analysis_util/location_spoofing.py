@@ -128,6 +128,7 @@ def analyse_sessions(
     max_mean_position_error_m: float = DEFAULT_MAX_MEAN_POSITION_ERROR_M,
     max_mean_heading_error_deg: float = DEFAULT_MAX_MEAN_HEADING_ERROR_DEG,
     window_margin_ms: float = cfg.LOCATION_SPOOFING.window_margin_ms,
+    metric_label: str = None,
 ) -> Dict:
     """Verify once over the pooled runs of one or more sessions.
 
@@ -196,6 +197,7 @@ def analyse_sessions(
             max_mean_position_error_m=max_mean_position_error_m,
             max_mean_heading_error_deg=max_mean_heading_error_deg,
             plots_dir=plots_dir,
+            **({"metric_label": metric_label} if metric_label else {}),
         )
 
     source = result["sources"].get("kafka", {})
@@ -228,6 +230,7 @@ def analyse_session(runs, session, **kwargs) -> Dict:
 def analyse_data_roots(data_roots, output_dir=None,
                        config: cfg.LocationSpoofingConfig = cfg.LOCATION_SPOOFING,
                        layout: cfg.SessionLayout = cfg.LAYOUT,
+                       metric_label: str = None,
                        **limits) -> Dict:
     """Verify one or more session directories, pooled into one result.
 
@@ -243,7 +246,8 @@ def analyse_data_roots(data_roots, output_dir=None,
     if output_dir is not None:
         Path(output_dir).mkdir(parents=True, exist_ok=True)
     return analyse_sessions(specs, plots_dir=output_dir,
-                            window_margin_ms=config.window_margin_ms, **limits)
+                            window_margin_ms=config.window_margin_ms,
+                            metric_label=metric_label, **limits)
 
 
 def write_outputs(result: Dict, output_dir: Path, case: cfg.TestCase) -> None:

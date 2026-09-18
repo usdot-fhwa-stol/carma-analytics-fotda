@@ -95,7 +95,7 @@ options:
 python3 detection_drop_characterization.py --kafka-log-dir kafka-logs --entry-times "2026-09-03 14:03:19" "2026-09-03 14:03:51" --durations 25 25 --plots-dir detection_drop_plots
 ```
 
-## CS-03 SDSM Location Spoofing Verification
+## CS-01 SDSM Location Spoofing Verification
 The `sdsm_location_spoofing_verification.py` script verifies that SDSMs place a location-spoofed pedestrian at the remote reference location configured in `FLIRCameraDriver`. Collect Kafka logs (`collect_kafka_logs.sh`) after one run where the pedestrian is detected; any mcap from that run can optionally be added to also verify the SDSMs CARMA Platform received.
 
 `FLIRCameraDriver` discards the camera's true location and reports each detection on `v2xhub_sim_sensor_detected_object` as cartesian (east, north) offsets from the configured reference lat/lon, which it writes as the `lat_0`/`lon_0` of the detection's `projString`. The configured reference heading is already applied to these offsets (the script prints the rotation it measures between the camera's true-frame `wgs84Position` and the reported `position`), so it is not applied again. Each SDSM object is paired with its source detection by object ID and detection time (`sdsm_time_stamp - measurement_time`), and:
@@ -115,8 +115,8 @@ usage: sdsm_location_spoofing_verification.py [-h] --kafka-log-dir
                                               [--min-heading-speed MIN_HEADING_SPEED]
                                               [--match-tolerance-ms MATCH_TOLERANCE_MS]
 
-CS-03: Verify SDSMs place a location-spoofed pedestrian at the remote
-reference location configured in FLIRCameraDriver, by comparing each SDSM
+Verify SDSMs place a location-spoofed pedestrian at the remote reference
+location configured in FLIRCameraDriver, by comparing each SDSM
 object's location and heading against its source detection on the detected
 object Kafka topic.
 
@@ -149,5 +149,5 @@ options:
 ```
 ### Example usage
 ```
-python3 sdsm_location_spoofing_verification.py --kafka-log-dir kafka-logs --ref-lat 38.955018 --ref-lon -77.1484523 --mcap rosbag2_2026-09-03_141220_0.mcap --plots-dir cs03_plots
+python3 sdsm_location_spoofing_verification.py --kafka-log-dir kafka-logs --ref-lat 38.955018 --ref-lon -77.1484523 --mcap rosbag2_2026-09-03_141220_0.mcap --plots-dir cs01_plots
 ```

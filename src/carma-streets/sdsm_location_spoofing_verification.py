@@ -10,6 +10,10 @@ from matplotlib import pyplot as plt
 
 from parse_kafka_logs import KafkaLogMessageType, parse_kafka_logs_as_type
 
+# What this check is called in the report. A caller running it as part of a
+# wider suite passes its own test code; run on its own the script uses this.
+DEFAULT_METRIC_LABEL = "SDSM Location Spoofing Verification"
+
 DEFAULT_MAX_MEAN_POSITION_ERROR_M = 0.2
 DEFAULT_MAX_MEAN_HEADING_ERROR_DEG = 1.0
 DEFAULT_MIN_HEADING_SPEED_MPS = 0.1
@@ -285,6 +289,7 @@ def verify_location_spoofing(
     min_heading_speed_mps: float = DEFAULT_MIN_HEADING_SPEED_MPS,
     match_tolerance_ms: float = DEFAULT_MATCH_TOLERANCE_MS,
     plots_dir: Path = None,
+    metric_label: str = DEFAULT_METRIC_LABEL,
 ) -> dict:
     """Verify SDSMs place a location-spoofed pedestrian where FLIRCameraDriver reported it.
 
@@ -411,7 +416,7 @@ def verify_location_spoofing(
 
     rotation_deg, rotation_residual_m = fit_driver_rotation_deg(detections, ref_lat, ref_lon)
 
-    print("\n=== CS-01 SDSM Location Spoofing Verification ===")
+    print(f"\n=== {metric_label} ===")
     print(f"Reference: {ref_lat}, {ref_lon}")
     if rotation_deg is not None:
         print(
@@ -433,7 +438,8 @@ def verify_location_spoofing(
     overall_pass = all(result["pass"] for result in results.values())
     print(f"\nOverall: {'PASS' if overall_pass else 'FAIL'}")
 
-    plot_verification(rows, results, max_mean_position_error_m, max_mean_heading_error_deg, plots_dir)
+    plot_verification(rows, results, max_mean_position_error_m,
+                      max_mean_heading_error_deg, plots_dir, metric_label)
 
     return {"pass": overall_pass, "rotation_deg": rotation_deg, "sources": results, "rows": rows}
 
@@ -503,7 +509,8 @@ def _threshold_marker(axis, values, threshold, label, signed=False):
 
 
 def plot_verification(rows: list, results: dict, max_mean_position_error_m: float,
-                      max_mean_heading_error_deg: float, plots_dir: Path = None):
+                      max_mean_heading_error_deg: float, plots_dir: Path = None,
+                      metric_label: str = DEFAULT_METRIC_LABEL):
     """Plot SDSM vs expected object locations in the reference frame, and the error distributions.
 
     The errors are shown as histograms rather than against time. These runs are
@@ -584,7 +591,7 @@ def plot_verification(rows: list, results: dict, max_mean_position_error_m: floa
         axis.set_axisbelow(True)
 
     overall = "PASS" if all(result["pass"] for result in results.values()) else "FAIL"
-    fig.suptitle(f"CS-01 SDSM Location Spoofing Verification: {overall}")
+    fig.suptitle(f"{metric_label}: {overall}")
     fig.tight_layout()
 
     if plots_dir:
@@ -613,7 +620,7 @@ def find_sdsm_log(kafka_log_dir: Path) -> Path:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="CS-01: Verify SDSMs place a location-spoofed pedestrian at the remote reference location "
+        description="Verify SDSMs place a location-spoofed pedestrian at the remote reference location "
         "configured in FLIRCameraDriver, by comparing each SDSM object's location and heading against its source "
         "detection on the detected object Kafka topic."
     )
