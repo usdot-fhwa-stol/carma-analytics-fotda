@@ -25,10 +25,16 @@ def check_message_broadcast_rate(
     save_stats_dir=None,
     save_data_dir=None,
     save_plot_dir=None,
+    pass_on_average_rate=False,
+    active_intervals=None,
 ):
     """
     Analyzes the broadcast rate of messages on any given topic to verify they are
     transmitted at the expected frequency.
+
+    By default the analysis passes if at least 95% of 1-second windows have a rate within tolerance.
+    That can't work for ~1 Hz topics (a 1-second window holds 0, 1 or 2 messages), so pass_on_average_rate
+    instead passes if the average rate over the analysis window is within tolerance.
 
     Args:
         mcap_path: Path to MCAP file
@@ -40,6 +46,11 @@ def check_message_broadcast_rate(
         save_stats_dir: Directory to save analysis stats
         save_data_dir: Directory to save extracted data
         save_plot_dir: Directory to save generated plots
+        pass_on_average_rate: Pass if the average rate is within tolerance, rather than 95% of 1-second windows
+        active_intervals: Optional list of (start, end) times in seconds since the start of the recording
+            during which the topic is expected to be published (e.g. only while an object is detected, for
+            SDSMs). Only messages received within them are analyzed, using message receive times, and the
+            average rate is their count over the intervals' total duration.
 
     Returns:
         Tuple containing:
@@ -85,16 +96,26 @@ def check_message_broadcast_rate(
         # If timestamp extraction failed, use message receive timestamps
         timestamps, extracted_stamps = extracted_data[topics[0]]
 
-        # Use extracted timestamps if available, otherwise use receive timestamps
-        if extracted_stamps.any() and extracted_stamps[0] is not None:
+        # Use extracted timestamps if available, otherwise use receive timestamps. Active intervals are in
+        # receive time (seconds since the start of the recording), so they always use receive timestamps.
+        if active_intervals is None and extracted_stamps.any() and extracted_stamps[0] is not None:
             timestamps = np.array([stamp for stamp in extracted_stamps if stamp is not None])
         else:
             timestamps = np.array(timestamps)
-            print(f"Warning: Using message receive timestamps for {topic_name} (no header.stamp found)")
+            if active_intervals is None:
+                print(f"Warning: Using message receive timestamps for {topic_name} (no header.stamp found)")
 
     except Exception as e:
         print(f"Error extracting data from topic {topic_name}: {e}")
         return False, {}, None, [], []
+
+    active_duration = None
+    if active_intervals is not None:
+        in_active_interval = np.zeros(len(timestamps), dtype=bool)
+        for interval_start, interval_end in active_intervals:
+            in_active_interval |= (timestamps >= interval_start) & (timestamps <= interval_end)
+        timestamps = timestamps[in_active_interval]
+        active_duration = float(sum(interval_end - interval_start for interval_start, interval_end in active_intervals))
 
     if len(timestamps) < 2:
         print(f"Error: Insufficient data points for rate analysis on topic {topic_name}")
@@ -102,6 +123,12 @@ def check_message_broadcast_rate(
 
     # Sort timestamps to ensure chronological order
     timestamps = np.sort(timestamps)
+
+    # Average rate over the analysis window (or over the active intervals' total duration)
+    if active_duration:
+        average_rate_hz = len(timestamps) / active_duration
+    else:
+        average_rate_hz = (len(timestamps) - 1) / (timestamps[-1] - timestamps[0])
 
     # Calculate time intervals between consecutive messages
     broadcast_intervals = np.diff(timestamps)
@@ -141,14 +168,17 @@ def check_message_broadcast_rate(
 
     # Check if rolling average rate is within tolerance
     rates_within_tolerance = np.sum(
-        (rolling_rates >= rate_lower_bound) | (rolling_rates <= rate_upper_bound)
+        (rolling_rates >= rate_lower_bound) & (rolling_rates <= rate_upper_bound)
     ) if len(rolling_rates) > 0 else 0
 
     total_windows = len(rolling_rates) if len(rolling_rates) > 0 else 1
     percentage_within_tolerance = (rates_within_tolerance / total_windows) * 100
 
-    # Pass if at least 95% of time windows are within tolerance
-    is_passed = bool(percentage_within_tolerance >= 95.0)
+    if pass_on_average_rate:
+        is_passed = bool(rate_lower_bound <= average_rate_hz <= rate_upper_bound)
+    else:
+        # Pass if at least 95% of time windows are within tolerance
+        is_passed = bool(percentage_within_tolerance >= 95.0)
 
     # Create visualization
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 10))
@@ -191,6 +221,11 @@ def check_message_broadcast_rate(
             color="blue"
         )
         ax2.axhline(y=rolling_stats["median"], color="r", linestyle="--", label="Median")
+    ax2.axhline(y=average_rate_hz, color="purple", linestyle="-.", label=f"Average ({average_rate_hz:.2f} Hz)")
+    if active_intervals is not None:
+        for i, (interval_start, interval_end) in enumerate(active_intervals):
+            ax2.axvspan(interval_start, interval_end, color="green", alpha=0.1,
+                        label="Active interval" if i == 0 else None)
 
     ax2.axhline(y=expected_rate_hz, color="g", linestyle="--", label=f"Expected Rate ({expected_rate_hz} Hz)")
     ax2.axhline(y=rate_lower_bound, color="orange", linestyle=":", label=f"Tolerance Band")
@@ -216,6 +251,9 @@ def check_message_broadcast_rate(
     print(f"Tolerance: ±{rate_tolerance_pct*100:.1f}% ({rate_lower_bound:.1f} - {rate_upper_bound:.1f} Hz)")
     print(f"Total Messages: {len(timestamps)}")
     print(f"Analysis Duration: {timestamps[-1] - timestamps[0]:.2f} seconds" if len(timestamps) > 1 else "N/A")
+    if active_duration:
+        print(f"Active Interval Duration: {active_duration:.2f} seconds over {len(active_intervals)} intervals")
+    print(f"Average Rate: {average_rate_hz:.2f} Hz")
 
     if len(instantaneous_rates) > 0:
         print_stats(instant_stats, "Instantaneous Rate Statistics")
@@ -224,7 +262,8 @@ def check_message_broadcast_rate(
         print_stats(rolling_stats, "1-Second Window Rate Statistics")
         print(f"Time windows within tolerance: {rates_within_tolerance}/{total_windows} ({percentage_within_tolerance:.1f}%)")
 
-    print(f"\nResult: {'PASSED' if is_passed else 'FAILED'}")
+    pass_criterion = "average rate within tolerance" if pass_on_average_rate else ">= 95% of 1-second windows within tolerance"
+    print(f"\nResult: {'PASSED' if is_passed else 'FAILED'} ({pass_criterion})")
 
     # Prepare comprehensive stats dictionary
     stats = {
@@ -236,6 +275,9 @@ def check_message_broadcast_rate(
         "instantaneous_rates": instant_stats,
         "rolling_window_rates": rolling_stats,
         "percentage_within_tolerance": float(percentage_within_tolerance),
+        "average_rate_hz": float(average_rate_hz),
+        "active_duration": active_duration,
+        "pass_criterion": pass_criterion,
         "is_passed": is_passed
     }
 
@@ -268,6 +310,8 @@ def check_message_broadcast_rate(
         plt.show()
 
     return is_passed, stats, fig, broadcast_intervals, timestamps
+
+
 
 def process_cc_logs_for_tcr_tcm_data(
     cc_data_path,
@@ -911,6 +955,9 @@ def main():
     """
     # Example usage of the functions
     mcap_path = "/path/to/your/mcap_file.mcap"
+
+
+
 
 
 if __name__ == "__main__":
