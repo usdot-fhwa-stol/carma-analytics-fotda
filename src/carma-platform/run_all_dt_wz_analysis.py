@@ -40,13 +40,13 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-import run_cascade_analysis
-import run_cp01_analysis
-import run_cp02_analysis
-import run_cp03_analysis
-import run_cs01_analysis
-import run_dt05_analysis
-import run_pl01_analysis
+from dt_wz_analysis_util import run_cascade_analysis
+from dt_wz_analysis_util import run_cp01_analysis
+from dt_wz_analysis_util import run_cp02_analysis
+from dt_wz_analysis_util import run_cp03_analysis
+from dt_wz_analysis_util import run_cs01_analysis
+from dt_wz_analysis_util import run_dt05_analysis
+from dt_wz_analysis_util import run_pl01_analysis
 
 # folder -> (module, the JSON it writes)
 ANALYSES = {

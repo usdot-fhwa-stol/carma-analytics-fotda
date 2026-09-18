@@ -28,4 +28,6 @@ _PARENT = str(Path(__file__).resolve().parent.parent)
 if _PARENT not in sys.path:
     sys.path.insert(0, _PARENT)
 
-__all__ = ["cascade", "cp01", "cs01", "dataset", "metrics", "portable", "report"]
+__all__ = ["cascade", "cp01", "cs01", "dataset", "metrics", "portable", "report",
+"run_cp01_analysis", "run_cp02_analysis", "run_cp03_analysis", "run_cs01_analysis",
+"run_dt05_analysis", "run_pl01_analysis", "run_cascade_analysis"]
