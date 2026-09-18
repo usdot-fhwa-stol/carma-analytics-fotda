@@ -1,14 +1,9 @@
-from parse_ros2_bags import extract_mcap_data, open_bagfile
+from parse_ros2_bags import extract_mcap_data
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import pyplot as plt
 import json
-from utils import calculate_error_statistics, print_stats, extract_and_plot_message_intervals
-from carma_cooperative_perception_scripts import (
-    run_sdsm_detection_drop_rate_analysis,
-    extract_pcap_messages,
-    _import_pcap_mcap_correlator,
-)
+from utils import calculate_error_statistics, print_stats
 import re
 import os
 from datetime import datetime
@@ -19,11 +14,6 @@ TIME_SECONDS_LABEL_STRING = "Time (seconds)"
 INCOMING_GEOFENCE_CONTROL_TOPIC = "/message/incoming_geofence_control"
 OUTGOING_GEOFENCE_REQUEST_TOPIC = "/message/outgoing_geofence_request"
 OUTGOING_MOBILITY_OPERATION_TOPIC = "/message/outgoing_mobility_operation"
-INCOMING_SDSM_TOPIC = "/message/incoming_sdsm"
-INCOMING_BINARY_MSG_TOPIC = "/hardware_interface/comms/inbound_binary_msg"
-
-# carma_driver_msgs/msg/ByteArray.message_type values, for filtering INCOMING_BINARY_MSG_TOPIC
-BINARY_MSG_TYPE_CHOICES = ["SensorDataSharingMessage", "BSM", "SPAT", "MAP"]
 
 def check_message_broadcast_rate(
     mcap_path,
@@ -321,214 +311,7 @@ def check_message_broadcast_rate(
 
     return is_passed, stats, fig, broadcast_intervals, timestamps
 
-def run_obu_bsm_transmission_drop_analysis(
-    mcap_path,
-    obu_pcap_paths,
-    start_time=None,
-    end_time=None,
-    save_stats_dir=None,
-    save_plot_dir=None,
-    ax=None,
-):
-    """
-    Characterizes how many BSMs CARMA Platform sent to its OBU for broadcast
-    (/hardware_interface/comms/outbound_binary_msg) never appear in the OBU's own radio-side capture
-    (rmnet_data1 pcap, outgoing direction), i.e. BSMs dropped between CARMA Platform and transmission.
 
-    Uses the j2735-pcap correlator (correlate_pcap_mcap.py): each sent BSM is matched byte-for-byte to the
-    closest-in-time unconsumed identical BSM in the pcap. Sent BSMs that match nothing are dropped; matches later
-    than the correlator's drop latency threshold (200 ms) are counted as transmitted late. BSMs sent while no
-    pcap was recording can't be checked and are excluded.
-
-    Args:
-        mcap_path: Path to MCAP file containing /hardware_interface/comms/outbound_binary_msg
-        obu_pcap_paths: OBU rmnet pcaps to look for transmitted BSMs in. Only pcaps overlapping this MCAP's
-            analysis window are used, so every OBU pcap in a session can be passed for every MCAP.
-        start_time: Time to start the analysis (seconds from start of recording)
-        end_time: Time to end the analysis (seconds from start of recording)
-        save_stats_dir: Directory to save analysis stats
-        save_plot_dir: Directory to save generated plots
-        ax: Optional matplotlib Axes to draw into (e.g. one panel of a combined figure). When given,
-            the caller owns the figure's layout and saving, so save_plot_dir is ignored.
-
-    Returns:
-        Tuple containing:
-        - stats: Dictionary with drop rate and transmit latency statistics
-        - figure: Matplotlib figure object
-
-    Deps:
-        Topics: [/hardware_interface/comms/outbound_binary_msg]
-        Msgs: carma_driver_msgs/msg/ByteArray
-        Tools: tshark, and the j2735-pcap requirements (pycrate, mcap, mcap-ros2-support)
-    """
-    pcap_base, pcap_mcap = _import_pcap_mcap_correlator()
-
-    # Same time origin as the other plots' x-axis (seconds since the MCAP recording started)
-    _, _, global_start_time_ns = open_bagfile(str(mcap_path))
-    recording_origin_sec = global_start_time_ns / 1e9
-    window_start_sec = recording_origin_sec + start_time if start_time is not None else -np.inf
-    window_end_sec = recording_origin_sec + end_time if end_time is not None else np.inf
-
-    sent = [
-        message for message in pcap_mcap.extract_mcap_binary_messages(mcap_path)["outbound"]
-        if message["msg_type"] == "BSM" and window_start_sec <= message["timestamp"] <= window_end_sec
-    ]
-    if not sent:
-        raise ValueError(f"No BSMs sent on /hardware_interface/comms/outbound_binary_msg in {mcap_path}'s analysis window")
-
-    # Only pcaps overlapping the window, so a gap between two runs' pcaps isn't mistaken for dropped BSMs
-    transmitted = []
-    used_pcaps = []
-    for obu_pcap_path in obu_pcap_paths:
-        pcap_bsms = extract_pcap_messages(obu_pcap_path, "outgoing", "BSM")
-        if pcap_bsms and pcap_bsms[0]["timestamp"] <= window_end_sec and pcap_bsms[-1]["timestamp"] >= window_start_sec:
-            transmitted += pcap_bsms
-            used_pcaps.append(str(obu_pcap_path))
-    if not transmitted:
-        raise ValueError(f"No OBU pcap in {[str(p) for p in obu_pcap_paths]} covers {mcap_path}'s analysis window")
-
-    transmitted_on_time, dropped, transmitted_late, out_of_window = pcap_mcap.correlate_across_boundary(
-        sent, transmitted, pcap_base.DROP_LATENCY_THRESHOLD_MS
-    )
-    total_checked = len(transmitted_on_time) + len(transmitted_late) + len(dropped)
-    if total_checked == 0:
-        raise ValueError(f"No sent BSMs fall within the OBU pcaps' recording window {used_pcaps}")
-    drop_rate_pct = len(dropped) / total_checked * 100
-
-    print(f"\n=== PL-01: CARMA Platform BSM to OBU Transmission Drop Analysis ===")
-    print(f"OBU pcaps: {used_pcaps}")
-    print(f"BSMs sent by CARMA Platform checked: {total_checked} "
-          f"(plus {len(out_of_window)} outside the pcaps' recording window, not counted)")
-    print(f"Transmitted by OBU: {len(transmitted_on_time)}")
-    print(f"Transmitted late (> {pcap_base.DROP_LATENCY_THRESHOLD_MS} ms): {len(transmitted_late)}")
-    print(f"Dropped (never transmitted): {len(dropped)}")
-    print(f"Drop rate: {drop_rate_pct:.2f}%")
-
-    stats = {
-        "obu_pcaps": used_pcaps,
-        "total_bsms_checked": total_checked,
-        "total_transmitted": len(transmitted_on_time),
-        "total_transmitted_late": len(transmitted_late),
-        "total_dropped": len(dropped),
-        "total_outside_recording_window": len(out_of_window),
-        "drop_rate_pct": float(drop_rate_pct),
-        "late_threshold_ms": pcap_base.DROP_LATENCY_THRESHOLD_MS,
-        "transmit_latency_ms": pcap_base.summarize(transmitted_on_time) if transmitted_on_time else None,
-    }
-
-    own_figure = ax is None
-    if own_figure:
-        fig, ax = plt.subplots(figsize=(12, 4))
-    else:
-        fig = ax.figure
-    for events, marker, color, markersize, label in (
-        (transmitted_on_time, ".", "green", 4, f"Transmitted ({len(transmitted_on_time)})"),
-        (transmitted_late, "^", "orange", 6, f"Transmitted late > {pcap_base.DROP_LATENCY_THRESHOLD_MS} ms ({len(transmitted_late)})"),
-        (dropped, "x", "red", 6, f"Not transmitted ({len(dropped)})"),
-    ):
-        if events:
-            times = np.array([event[0] for event in events]) - recording_origin_sec
-            ax.plot(times, np.ones(len(times)), marker, color=color, markersize=markersize, linestyle="none", label=label)
-    ax.set_title(
-        "PL-01: BSMs Sent by CARMA Platform Transmitted by OBU\n"
-        f"(/hardware_interface/comms/outbound_binary_msg -> OBU rmnet pcap) - Drop Rate {drop_rate_pct:.2f}%"
-    )
-    ax.set_xlabel(TIME_SECONDS_LABEL_STRING)
-    ax.set_yticks([])
-    ax.grid(True, alpha=0.3)
-    ax.legend(loc="upper right")
-    if own_figure:
-        fig.tight_layout()
-
-    if save_stats_dir:
-        save_stats_dir = Path(save_stats_dir)
-        save_stats_dir.mkdir(parents=True, exist_ok=True)
-        stats_full_path = save_stats_dir / "obu_bsm_transmission_drop_rate.json"
-        with open(stats_full_path, "w") as f:
-            json.dump(stats, f, indent=2)
-        print(f"\nStats saved to: {stats_full_path}")
-
-    if own_figure:
-        if save_plot_dir:
-            save_plot_dir = Path(save_plot_dir)
-            save_plot_dir.mkdir(parents=True, exist_ok=True)
-            fig.savefig(save_plot_dir / "obu_bsm_transmission_drop_analysis.png", dpi=300)
-            print(f"Plot saved to: {save_plot_dir}")
-        else:
-            plt.show()
-
-    return stats, fig
-
-def plot_message_time_intervals(
-    mcap_path,
-    topic_name,
-    message_type=None,
-    expected_interval_sec=0.1,
-    interval_tolerance_pct=0.1,
-    detection_log_path=None,
-    start_time=None,
-    end_time=None,
-    save_plot_dir=None,
-    ax=None,
-    max_view_sec=0.5,
-):
-    """
-    Plots the number of seconds between consecutive messages on a given topic, highlighting
-    intervals outside of an expected tolerance band. If message_type is given, messages are
-    first filtered to those whose message_type field matches - useful for topics like
-    INCOMING_BINARY_MSG_TOPIC (carma_driver_msgs/msg/ByteArray) that carry multiple message
-    types (see BINARY_MSG_TYPE_CHOICES) on one topic.
-
-    If detection_log_path is given (e.g. the v2xhub_sim_sensor_detected_object Kafka log
-    corresponding to mcap_path), gaps in object detection are shaded green on the plot. This
-    distinguishes SDSM message gaps caused by there being nothing to detect from actual missed
-    SDSM broadcasts (shaded red).
-
-    Args:
-        mcap_path: Path to MCAP file
-        topic_name: Name of the ROS topic to analyze (e.g., INCOMING_SDSM_TOPIC)
-        message_type: Optional value to filter the topic's message_type field on (optional)
-        expected_interval_sec: Expected number of seconds between consecutive messages (default: 0.1)
-        interval_tolerance_pct: Tolerance percentage around the expected interval (default: 0.1 = 10%)
-        detection_log_path: Optional path to the Kafka object detection log corresponding to
-            mcap_path (optional)
-        start_time: Time to start the analysis (seconds from start of recording)
-        end_time: Time to end the analysis (seconds from start of recording)
-        save_plot_dir: Directory to save generated plot (optional)
-        ax: Optional matplotlib Axes to draw into (e.g. one panel of a combined figure). When given,
-            the caller owns the figure's layout and saving, so save_plot_dir is ignored.
-        max_view_sec: Y-axis view limit in seconds; intervals (and detection gaps) beyond this are shaded
-            (default: 0.5)
-
-    Returns:
-        Tuple containing:
-        - figure: Matplotlib figure object
-        - timestamps: Array of message timestamps (seconds from start of recording)
-        - intervals: Array of seconds between consecutive messages
-
-    Deps:
-        Topics: [topic_name]
-        Msgs: carma_driver_msgs/msg/ByteArray if message_type is given, otherwise any ROS message type
-    """
-    output_file = None
-    if save_plot_dir:
-        safe_topic_name = topic_name.replace("/", "_").replace(" ", "_")
-        suffix = f"_{message_type}" if message_type else ""
-        output_file = save_plot_dir / f"{safe_topic_name}{suffix}_message_intervals.png"
-
-    return extract_and_plot_message_intervals(
-        mcap_path,
-        topic_name,
-        message_type,
-        expected_interval_sec,
-        interval_tolerance_pct,
-        detection_log_path=detection_log_path,
-        start_time=start_time,
-        end_time=end_time,
-        output_file=output_file,
-        ax=ax,
-        max_view_sec=max_view_sec,
-    )
 
 def process_cc_logs_for_tcr_tcm_data(
     cc_data_path,
@@ -1171,20 +954,9 @@ def main():
     Main function to run the analysis scritps.
     """
     # Example usage of the functions
-    mcap_path = "/workspaces/carma_ws/src/data-verification-initial/mcap/rosbag2_2026-09-10_131927_0.mcap"
-    detection_log_path = "/workspaces/carma_ws/src/data-verification-initial/dth-flir-camera-laptop-kafka-logs/v2xhub_sim_sensor_detected_object_kafka.log"
-    # check_message_broadcast_rate(
-    #     mcap_path=mcap_path,
-    #     topic_name=INCOMING_SDSM_TOPIC,
-    #     expected_rate_hz=10.0)
-    # plot_message_time_intervals(
-    #     mcap_path=mcap_path,
-    #     topic_name=INCOMING_SDSM_TOPIC,
-    #     detection_log_path=detection_log_path)
-    # CP-02: Raw detection to SDSM drop rate should be less than 2%
-    run_sdsm_detection_drop_rate_analysis(
-        mcap_path=mcap_path,
-        detection_log_path=detection_log_path)
+    mcap_path = "/path/to/your/mcap_file.mcap"
+
+
 
 
 
