@@ -47,7 +47,7 @@ import sys
 from pathlib import Path
 
 from dt_wz_analysis_util import metrics, report
-from dt_wz_analysis_util.portable import kafka_log
+from dt_wz_analysis_util.readers import kafka_log
 
 PREFIX = "pl01_message_communication"
 

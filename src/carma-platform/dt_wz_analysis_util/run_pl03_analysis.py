@@ -39,7 +39,7 @@ from matplotlib.collections import LineCollection  # noqa: E402
 
 from dt_wz_analysis_util import cp01, dataset, metrics, pl03, report  # noqa: E402
 from dt_wz_analysis_util.cascade.plots import stage_colors  # noqa: E402
-from dt_wz_analysis_util.portable import kafka_log  # noqa: E402
+from dt_wz_analysis_util.readers import kafka_log  # noqa: E402
 
 PREFIX = "pl03_vehicle_yield"
 TRAJECTORY_NAME = "pl03_trajectories.png"

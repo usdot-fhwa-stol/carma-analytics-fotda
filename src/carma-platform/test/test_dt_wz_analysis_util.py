@@ -1,4 +1,4 @@
-"""Tests for the portable backends and the DT-WZ dataset spec.
+"""Tests for the format readers, the dataset spec and the metric scoring.
 
 The parser tests are self-contained and always run. The dataset tests need the
 2026-09-14 verification session on disk and skip cleanly without it; point
@@ -22,8 +22,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from dt_wz_analysis_util import cp01  # noqa: E402
 from dt_wz_analysis_util import cs01  # noqa: E402
 from dt_wz_analysis_util import pl03  # noqa: E402
-from dt_wz_analysis_util.portable import (  # noqa: E402
-    kafka_log, obu_capture, pcap_backend, tcpdump_text,
+from dt_wz_analysis_util.readers import (  # noqa: E402
+    kafka_log, obu_capture, pcap_reader, tcpdump_text,
 )
 
 DATA_ROOT = Path(
@@ -147,24 +147,24 @@ class TestPcapDefiniteLength(unittest.TestCase):
     """Long-form ASN.1 lengths; the SDSM-only predecessor handled short form only."""
 
     def test_short_form(self):
-        self.assertEqual(pcap_backend._definite_length(b"\x3c", 0), (0x3C, 1))
+        self.assertEqual(pcap_reader._definite_length(b"\x3c", 0), (0x3C, 1))
 
     def test_long_form_one_byte(self):
-        self.assertEqual(pcap_backend._definite_length(b"\x81\xc8", 0), (200, 2))
+        self.assertEqual(pcap_reader._definite_length(b"\x81\xc8", 0), (200, 2))
 
     def test_long_form_two_bytes(self):
-        self.assertEqual(pcap_backend._definite_length(b"\x82\x01\x00", 0), (256, 3))
+        self.assertEqual(pcap_reader._definite_length(b"\x82\x01\x00", 0), (256, 3))
 
     def test_rejects_out_of_range(self):
-        self.assertEqual(pcap_backend._definite_length(b"", 0), (None, 0))
-        self.assertEqual(pcap_backend._definite_length(b"\x84\x01", 0), (None, 0))
+        self.assertEqual(pcap_reader._definite_length(b"", 0), (None, 0))
+        self.assertEqual(pcap_reader._definite_length(b"\x84\x01", 0), (None, 0))
 
     def test_find_message_requires_end_alignment(self):
         ids = {b"\x00\x29": "SDSM"}
         packet = b"\xff\xff" + b"\x00\x29\x03" + b"abc"
-        self.assertEqual(pcap_backend._find_message(packet, ids)[0], "SDSM")
+        self.assertEqual(pcap_reader._find_message(packet, ids)[0], "SDSM")
         # Same id, but the declared length does not reach the end of the packet.
-        self.assertIsNone(pcap_backend._find_message(packet + b"tail", ids)[0])
+        self.assertIsNone(pcap_reader._find_message(packet + b"tail", ids)[0])
 
 
 class TestObuCaptureDispatch(unittest.TestCase):
@@ -585,7 +585,7 @@ class TestGoldenRun(unittest.TestCase):
 
     def test_rsu_broadcast_count(self):
         messages = [
-            message for message in pcap_backend.extract_pcap_messages(self.run.rsu_pcap, ["SDSM"])
+            message for message in pcap_reader.extract_pcap_messages(self.run.rsu_pcap, ["SDSM"])
             if self.window[0] <= message["timestamp"] <= self.window[1]
         ]
         self.assertEqual(len(messages), self.EXPECTED)
@@ -596,22 +596,22 @@ class TestGoldenRun(unittest.TestCase):
         self.assertEqual(len(received), self.EXPECTED)
 
     def test_payloads_match_byte_for_byte_end_to_end(self):
-        from dt_wz_analysis_util.portable import mcap_backend
+        from dt_wz_analysis_util.readers import mcap_reader
 
         broadcast = {
             message["payload_hex"]
-            for message in pcap_backend.extract_pcap_messages(self.run.rsu_pcap, ["SDSM"])
+            for message in pcap_reader.extract_pcap_messages(self.run.rsu_pcap, ["SDSM"])
             if self.window[0] <= message["timestamp"] <= self.window[1]
         }
         received = {
             message["payload_hex"]
-            for message in mcap_backend.extract_mcap_binary_messages(self.run.mcap)["inbound"]
+            for message in mcap_reader.extract_mcap_binary_messages(self.run.mcap)["inbound"]
             if message["msg_type"] == "SDSM"
         }
         self.assertEqual(len(broadcast & received), self.EXPECTED)
 
     def test_no_drops_and_plausible_end_to_end_latency(self):
-        from dt_wz_analysis_util.portable import kafka_log as kl
+        from dt_wz_analysis_util.readers import kafka_log as kl
 
         from dt_wz_analysis_util import dataset as dt_wz_dataset
         session = dt_wz_dataset.discover_session(DATA_ROOT)

@@ -27,9 +27,9 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
-from ..portable import kafka_log, mcap_backend
-from ..portable.pcap_backend import extract_pcap_messages
-from ..portable.timeutil import sdsm_timestamp_to_epoch_ms
+from ..readers import kafka_log, mcap_reader
+from ..readers.pcap_reader import extract_pcap_messages
+from ..timeutil import sdsm_timestamp_to_epoch_ms
 
 from . import cascade_config as config
 from . import parse_sdss, parse_v2xhub
@@ -259,7 +259,7 @@ def attach_run_sources(table: pd.DataFrame, run, window_sec, radio_messages=None
     inbound = pd.DataFrame(
         [
             {"sdsm_uper_hex": message["payload_hex"], "t_ros_inbound": message["timestamp"] * 1e3}
-            for message in mcap_backend.extract_mcap_binary_messages(run.mcap)["inbound"]
+            for message in mcap_reader.extract_mcap_binary_messages(run.mcap)["inbound"]
             if message["msg_type"] == "SDSM"
             and window_sec[0] <= message["timestamp"] <= window_sec[1]
         ]
@@ -312,12 +312,12 @@ def _fused_times(run, window_sec, table) -> np.ndarray:
     detection first influence a fused output", which is the question the
     end-to-end latency asks, and not "which track is this detection".
     """
-    counts = mcap_backend.topic_message_counts(run.mcap)
+    counts = mcap_reader.topic_message_counts(run.mcap)
     topic = "/environment/fused_external_objects"
     if not counts.get(topic) or "t_ros_j3224" not in table.columns:
         return np.full(len(table), np.nan)
 
-    reader, _type_map, _start = mcap_backend.open_bagfile(str(run.mcap), topics=[topic])
+    reader, _type_map, _start = mcap_reader.open_bagfile(str(run.mcap), topics=[topic])
     published = []
     while reader.has_next():
         _topic, _message, log_time_ns = reader.read_next()

@@ -2,7 +2,7 @@
 
 Same function names, signatures and return shapes, so ``extract_mcap_data`` and
 ``open_bagfile`` can be swapped in wherever ROS 2 is not installed. Messages are
-decoded by ``portable.cdr`` using the ``ros2msg`` schema text rosbag2 stores
+decoded by ``cdr`` using the ``ros2msg`` schema text rosbag2 stores
 inside the MCAP, so no generated message packages are needed either.
 
 One deliberate difference from the ROS implementation: the recording origin is

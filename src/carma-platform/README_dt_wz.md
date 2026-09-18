@@ -72,7 +72,9 @@ src/carma-platform/
         report.py     windowing, pooling, output files, plots
         cp01.py       camera detection drops
         cs01.py       location spoofing verification
-        portable/     ROS-free MCAP, pcap, Kafka and tcpdump readers
+        readers/      MCAP, pcap, Kafka dump and tcpdump-text readers
+        timeutil.py   timestamp normalisation
+        pairing.py    pairing for log lines with no correlatable key
         cascade/      per-detection stage table and its plots
 ```
 
@@ -122,21 +124,21 @@ condition was run twice, and every bag exists as both a truncated `rosbag2_*`
 copy (which will not open) and a readable `recovered_rosbag2_*` one. Nothing in
 the files themselves separates the good from the abandoned.
 
-## Portable backends
+## Format readers
 
-`dt_wz_analysis_util/portable/` reimplements the parts of the stack the metrics
+`dt_wz_analysis_util/readers/` reimplements the parts of the stack the metrics
 actually use, so the analysis runs on a plain Python venv:
 
 | Module | Replaces | Note |
 | --- | --- | --- |
-| `mcap_backend` | `rosbag2_py` / `rclpy` | decodes CDR from the ros2msg schema text stored inside the MCAP, so no generated message packages are needed |
-| `pcap_backend` | `tshark` + `pycrate` | timestamps come from the pcap record header; correlation is on payload bytes, so no ASN.1 decode is required |
+| `mcap_reader` | `rosbag2_py` / `rclpy` | decodes CDR from the ros2msg schema text stored inside the MCAP, so no generated message packages are needed |
+| `pcap_reader` | `tshark` + `pycrate` | timestamps come from the pcap record header; correlation is on payload bytes, so no ASN.1 decode is required |
 | `kafka_log` | — | tolerates both tab- and pipe-delimited console dumps |
 | `tcpdump_text` | — | reads OBU captures saved as tcpdump console text |
 | `obu_capture` | — | dispatches on the OBU file's actual format, binary or text |
 | `flir_websocket` | — | the camera's raw websocket stream from the pc2 V2XHub log |
 
-`parse_ros2_bags` falls back to `mcap_backend` automatically when `rosbag2_py` is
+`parse_ros2_bags` falls back to `mcap_reader` automatically when `rosbag2_py` is
 absent, so the other analyses in this directory gain the same portability.
 
 **PL-03 caches its geometry.** Each run's trajectory and pedestrian points are

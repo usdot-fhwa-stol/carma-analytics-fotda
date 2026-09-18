@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from . import pcap_backend, tcpdump_text
+from . import pcap_reader, tcpdump_text
 
 
 def read_obu_capture(path, capture_date=None) -> Dict:
@@ -43,7 +43,7 @@ def read_obu_capture(path, capture_date=None) -> Dict:
         ]
         return {"payloads_available": False, "messages": messages}
 
-    return {"payloads_available": True, "messages": pcap_backend.extract_pcap_messages(path)}
+    return {"payloads_available": True, "messages": pcap_reader.extract_pcap_messages(path)}
 
 
 def messages_of_type(capture: Dict, msg_type: str, start_sec=None, end_sec=None) -> List[Dict]:

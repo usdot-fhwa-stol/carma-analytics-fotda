@@ -18,8 +18,8 @@ import re
 import pandas as pd
 
 from . import cascade_config as config
-from ..portable.pairing import pair_forward
-from ..portable.timeutil import parse_bracket_ts, sdsm_timestamp_to_epoch_ms
+from ..pairing import pair_forward
+from ..timeutil import parse_bracket_ts, sdsm_timestamp_to_epoch_ms
 
 # --- line anchors -----------------------------------------------------------
 A_FLIR = "FLIRCameraDriverPlugin.cpp (133)"

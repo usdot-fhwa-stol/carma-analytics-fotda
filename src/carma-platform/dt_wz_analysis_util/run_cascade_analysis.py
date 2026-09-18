@@ -33,7 +33,7 @@ from dt_wz_analysis_util.cascade import build as cascade_build
 from dt_wz_analysis_util.cascade import cascade_config
 from dt_wz_analysis_util.cascade import plots as cascade_plots
 from dt_wz_analysis_util.cascade import qa as cascade_qa
-from dt_wz_analysis_util.portable import obu_capture
+from dt_wz_analysis_util.readers import obu_capture
 
 
 def build_run(run, session_logs, window):

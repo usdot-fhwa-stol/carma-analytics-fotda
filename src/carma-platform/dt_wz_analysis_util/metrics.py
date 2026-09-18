@@ -24,9 +24,9 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from .portable import kafka_log, mcap_backend
-from .portable import obu_capture as obu_capture_reader  # aliased: the parameter is also obu_capture
-from .portable.pcap_backend import extract_pcap_messages
+from .readers import kafka_log, mcap_reader
+from .readers import obu_capture as obu_capture_reader  # aliased: the parameter is also obu_capture
+from .readers.pcap_reader import extract_pcap_messages
 from utils import calculate_error_statistics
 
 # correlate_across_boundary lives in a hyphenated directory that is not importable
@@ -81,7 +81,7 @@ def engaged_window_epoch(mcap_path, engage_time: float, disengage_time: float) -
     source in a session (pcap, Kafka, V2XHub logs) is on an absolute clock, so
     the window has to be lifted before it can be used to filter them.
     """
-    _reader, _type_map, start_ns = mcap_backend.open_bagfile(str(mcap_path))
+    _reader, _type_map, start_ns = mcap_reader.open_bagfile(str(mcap_path))
     origin = start_ns / 1e9
     return origin + engage_time, origin + disengage_time
 
@@ -99,13 +99,13 @@ def sdsm_object_detections(mcap_path, window=None) -> List[Dict]:
     the measurement offset says how far before that the observation happened, so
     adding instead of subtracting dates every detection ~2x the offset too new.
     """
-    from .portable.timeutil import sdsm_timestamp_to_epoch_ms
+    from .timeutil import sdsm_timestamp_to_epoch_ms
 
-    counts = mcap_backend.topic_message_counts(mcap_path)
+    counts = mcap_reader.topic_message_counts(mcap_path)
     if not counts.get(INCOMING_J3224_TOPIC):
         return []
 
-    reader, _type_map, _start = mcap_backend.open_bagfile(str(mcap_path), topics=[INCOMING_J3224_TOPIC])
+    reader, _type_map, _start = mcap_reader.open_bagfile(str(mcap_path), topics=[INCOMING_J3224_TOPIC])
     detections: List[Dict] = []
     while reader.has_next():
         _topic, message, log_time_ns = reader.read_next()
@@ -174,7 +174,7 @@ def sdsm_object_positions(mcap_path, window=None) -> List[Dict]:
 
     Returns ``{object_id, latitude, longitude, receive_time_sec}`` per object.
     """
-    counts = mcap_backend.topic_message_counts(mcap_path)
+    counts = mcap_reader.topic_message_counts(mcap_path)
     if not counts.get(INCOMING_J3224_TOPIC):
         return []
 
@@ -184,7 +184,7 @@ def sdsm_object_positions(mcap_path, window=None) -> List[Dict]:
     sys.path.append(str(Path(__file__).resolve().parent.parent.parent / "carma-streets"))
     from sdsm_location_spoofing_verification import enu_to_geodetic
 
-    reader, _type_map, _start = mcap_backend.open_bagfile(
+    reader, _type_map, _start = mcap_reader.open_bagfile(
         str(mcap_path), topics=[INCOMING_J3224_TOPIC])
     positions: List[Dict] = []
     while reader.has_next():
@@ -330,7 +330,7 @@ def rsu_transmission_drop_rate(
         if window[0] <= message["timestamp"] <= window[1]
     ]
     received = [
-        message for message in mcap_backend.extract_mcap_binary_messages(mcap_path)["inbound"]
+        message for message in mcap_reader.extract_mcap_binary_messages(mcap_path)["inbound"]
         if message["msg_type"] == "SDSM"
     ]
 
@@ -425,10 +425,10 @@ def topic_active_intervals(mcap_path, topic, window, gap_sec) -> List[Tuple[floa
     Returns an empty list if the topic is absent or has too few messages, which
     makes the caller fall back to the whole window.
     """
-    counts = mcap_backend.topic_message_counts(mcap_path)
+    counts = mcap_reader.topic_message_counts(mcap_path)
     if not counts.get(topic):
         return []
-    reader, _type_map, _start = mcap_backend.open_bagfile(str(mcap_path), topics=[topic])
+    reader, _type_map, _start = mcap_reader.open_bagfile(str(mcap_path), topics=[topic])
     times = []
     while reader.has_next():
         _topic, _message, log_time_ns = reader.read_next()
@@ -478,7 +478,7 @@ def message_rate(mcap_path, topic, expected_rate_hz, window, stats_dir=None,
     check is inapplicable, not failed. MAP and SPAT are in exactly that position
     for this session -- they were never recorded, so there is nothing to regress.
     """
-    counts = mcap_backend.topic_message_counts(mcap_path)
+    counts = mcap_reader.topic_message_counts(mcap_path)
     label = stats_name or topic.strip("/").replace("/", "_")
     if topic not in counts:
         stats = {
@@ -490,7 +490,7 @@ def message_rate(mcap_path, topic, expected_rate_hz, window, stats_dir=None,
         _write_stats(stats_dir, f"pl01_{label}_rate", stats)
         return None, stats
 
-    reader, _type_map, start_ns = mcap_backend.open_bagfile(str(mcap_path), topics=[topic])
+    reader, _type_map, start_ns = mcap_reader.open_bagfile(str(mcap_path), topics=[topic])
     origin = start_ns / 1e9
     timestamps = []
     while reader.has_next():
@@ -561,14 +561,14 @@ def obu_radio_activity(obu_capture, capture_date, mcap_path, window, stats_dir=N
     """
     capture = obu_capture_reader.read_obu_capture(obu_capture, capture_date)
     counts = obu_capture_reader.count_by_type(capture, window[0], window[1])
-    topic_counts = mcap_backend.topic_message_counts(mcap_path)
+    topic_counts = mcap_reader.topic_message_counts(mcap_path)
 
     ros_bsm = 0
     ros_sdsm = 0
     for topic, expected in ((BSM_OUTBOUND_TOPIC, "bsm"), (INCOMING_SDSM_TOPIC, "sdsm")):
         if topic not in topic_counts:
             continue
-        reader, _type_map, _start = mcap_backend.open_bagfile(str(mcap_path), topics=[topic])
+        reader, _type_map, _start = mcap_reader.open_bagfile(str(mcap_path), topics=[topic])
         total = 0
         while reader.has_next():
             _topic, _message, log_time_ns = reader.read_next()

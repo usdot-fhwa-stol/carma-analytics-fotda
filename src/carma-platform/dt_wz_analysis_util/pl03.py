@@ -38,7 +38,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from . import metrics
-from .portable import mcap_backend
+from .readers import mcap_reader
 
 # The geodesy lives in the carma-streets tree; cs01 already imports from there.
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent / "carma-streets"))
@@ -233,10 +233,10 @@ def _enu(latitudes, longitudes) -> Tuple[np.ndarray, np.ndarray]:
 
 def _read_topic(mcap_path, topic, extract, window=None):
     """(times, values) for one topic, windowed only if a window is given."""
-    counts = mcap_backend.topic_message_counts(mcap_path)
+    counts = mcap_reader.topic_message_counts(mcap_path)
     if not counts.get(topic):
         return np.array([]), []
-    reader, _type_map, _start = mcap_backend.open_bagfile(str(mcap_path), topics=[topic])
+    reader, _type_map, _start = mcap_reader.open_bagfile(str(mcap_path), topics=[topic])
     times, values = [], []
     while reader.has_next():
         _topic, message, log_time_ns = reader.read_next()

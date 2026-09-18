@@ -21,7 +21,7 @@ good ones, with nothing in the data to mark which is which.
 
 Times in ``runs.csv`` are America/New_York wall clock. The OBU captures are UTC
 and carry no date, so the run's date is taken from here (see
-``portable.tcpdump_text``).
+``readers.tcpdump_text``).
 """
 
 from __future__ import annotations
