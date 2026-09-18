@@ -26,25 +26,26 @@ import pandas as pd
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
+from .. import config as cfg  # noqa: E402
 from . import cascade_config as config  # noqa: E402
 
-COLORMAP = "viridis"
+COLORMAP = cfg.STYLE.stage_colormap
 # Full range: with ~10 stages this widens adjacent-pair OKLab separation from
 # ~6.9 to ~7.9 (x100) at no cost. A sequential ramp this finely stepped still
 # cannot carry identity by colour alone -- adjacent pairs fall to dE ~2.7 under
 # deuteranopia -- so every figure here also encodes the stage by position, with
 # axis tick labels on the boxplots and direct labels on the cascade.
-CMAP_RANGE = (0.0, 1.0)
+CMAP_RANGE = cfg.STYLE.stage_cmap_range
 
 # Cascade rows are thinned past this count to keep the figure a readable shape.
-MAX_CASCADE_ROWS = 420
+MAX_CASCADE_ROWS = cfg.LATENCY_CASCADE.max_cascade_rows
 # Minimum gap between two direct labels, as a fraction of the plotted x-range.
 LABEL_MIN_SEPARATION_FRAC = 0.055
 
 
-def _despine(axis):
-    axis.spines["top"].set_visible(False)
-    axis.spines["right"].set_visible(False)
+# The suite's shared despine, re-exported under the name this module already
+# uses so the cascade figures cannot drift from the rest.
+_despine = cfg.despine
 
 
 def stage_colors(stages, colormap=COLORMAP, cmap_range=CMAP_RANGE):
@@ -165,11 +166,10 @@ def plot_latency_by_stage(table: pd.DataFrame, title: str, output_path,
     if beyond:
         subtitle += f"   ·   {beyond} points beyond axis, up to {max(v.max() for v in series):,.0f} ms"
     axis.set_title(f"{title}\n{subtitle}", loc="left", fontsize=11)
-    axis.grid(axis="x", alpha=0.25, linewidth=0.6)
-    axis.set_axisbelow(True)
+    cfg.grid(axis, "x")
     _despine(axis)
     figure.tight_layout()
-    figure.savefig(output_path, dpi=200)
+    figure.savefig(output_path, dpi=cfg.STYLE.figure_dpi)
     plt.close(figure)
     return output_path
 
@@ -215,8 +215,7 @@ def plot_cascade(table: pd.DataFrame, title: str, output_path,
     axis.set_ylabel(f"Detections, sorted by end-to-end latency (n = {len(frame)})")
     axis.set_title(title, loc="left", fontsize=11, pad=26)
     axis.set_yticks([])
-    axis.grid(axis="x", alpha=0.25, linewidth=0.6)
-    axis.set_axisbelow(True)
+    cfg.grid(axis, "x")
     _despine(axis)
     axis.legend(
         loc="lower right", frameon=False, fontsize=8, markerscale=3,
@@ -249,7 +248,7 @@ def plot_cascade(table: pd.DataFrame, title: str, output_path,
     for label, color in zip(top.get_xticklabels(), tick_colors):
         label.set_color(color)
     figure.tight_layout()
-    figure.savefig(output_path, dpi=200)
+    figure.savefig(output_path, dpi=cfg.STYLE.figure_dpi)
     plt.close(figure)
     return output_path
 
@@ -308,22 +307,25 @@ def plot_condition_comparison(tables: Dict[str, pd.DataFrame], title: str, outpu
     axis.set_ylabel("End-to-end latency (ms)")
     axis.set_xlabel("Pedestrian dwell condition")
     axis.set_title(title, loc="left", fontsize=11)
-    axis.grid(axis="y", alpha=0.25, linewidth=0.6)
-    axis.set_axisbelow(True)
+    cfg.grid(axis, "y")
     _despine(axis)
     figure.tight_layout()
-    figure.savefig(output_path, dpi=200)
+    figure.savefig(output_path, dpi=cfg.STYLE.figure_dpi)
     plt.close(figure)
     return output_path
 
 
-def plot_drop_rates(summary: pd.DataFrame, title: str, output_path):
-    """Per-run drop rates for the two drop metrics, grouped by condition."""
-    metrics = [
-        ("cp02_drop_rate_pct", "Detection → SDSM (CP-02)"),
-        ("cp03_drop_rate_pct", "RSU → vehicle (CP-03)"),
-    ]
-    present = [(column, label) for column, label in metrics if column in summary.columns]
+def plot_drop_rates(summary: pd.DataFrame, title: str, output_path,
+                    columns=None,
+                    threshold_pct: float = cfg.DETECTION_DELIVERY.max_drop_rate_pct):
+    """Per-run drop rates for the two drop metrics, grouped by condition.
+
+    ``columns`` names the drop-rate columns to plot, and ``threshold_pct``
+    draws the acceptance line. The two delivery measurements share a limit, so
+    one line serves both; pass a different one if they ever diverge.
+    """
+    columns = columns or cfg.LATENCY_CASCADE.drop_rate_columns
+    present = [(column, label) for column, label in columns if column in summary.columns]
     if not present or summary.empty:
         return None
 
@@ -342,14 +344,12 @@ def plot_drop_rates(summary: pd.DataFrame, title: str, output_path):
     axis.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
     axis.set_ylabel("Drop rate (%)")
     axis.set_title(title, loc="left", fontsize=11)
-    axis.axhline(2.0, color="#b00020", linestyle="--", linewidth=1.0, alpha=0.7)
-    axis.text(len(labels) - 0.4, 2.0, " 2% threshold", color="#b00020",
-              fontsize=8, va="bottom", ha="right")
-    axis.grid(axis="y", alpha=0.25, linewidth=0.6)
-    axis.set_axisbelow(True)
+    cfg.threshold_line(axis, threshold_pct, f"{threshold_pct:g}% threshold",
+                       right_at=len(labels) - 0.4)
+    cfg.grid(axis, "y")
     _despine(axis)
     axis.legend(frameon=False, fontsize=8)
     figure.tight_layout()
-    figure.savefig(output_path, dpi=200)
+    figure.savefig(output_path, dpi=cfg.STYLE.figure_dpi)
     plt.close(figure)
     return output_path

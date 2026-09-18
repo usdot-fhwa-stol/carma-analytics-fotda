@@ -29,14 +29,15 @@ from __future__ import annotations
 import csv
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# runs.csv wall-clock times. Fixed offset rather than a tz database lookup so the
-# module stays dependency-free; sessions run inside a single afternoon, well away
-# from a DST transition.
-SESSION_TZ = timezone(timedelta(hours=-4), name="America/New_York (EDT)")
+from . import config as cfg
+
+# runs.csv wall-clock times. Defined once in ``config``; re-exported here
+# because this module is where the manifest is parsed.
+SESSION_TZ = cfg.SESSION_TZ
 
 # Seconds the pedestrian dwells in the detection zone, read out of the
 # run_condition name ("20sec" -> 20). Parsed rather than tabulated so a session
@@ -119,23 +120,19 @@ def _find(root: Path, *patterns: str) -> Optional[Path]:
     return None
 
 
-def discover_session(data_root) -> SessionPaths:
+def discover_session(data_root, layout: cfg.SessionLayout = cfg.LAYOUT) -> SessionPaths:
     """Locate the session-wide logs under ``data_root``.
 
     These are found by pattern because their names carry a session date that
     varies; the per-run files are not, because ``runs.csv`` names them exactly.
+    The patterns are a property of the deployment, so they come from
+    ``config.SessionLayout`` rather than from this function.
     """
     root = Path(data_root)
     if not root.is_dir():
         raise NotADirectoryError(f"Data root does not exist: {root}")
-    return SessionPaths(
-        root=root,
-        pc2_v2xhub=_find(root, "v2xhub_pc2_*.log"),
-        pc1_v2xhub=_find(root, "v2xhub_pc1_*.log"),
-        sdss=_find(root, "sdss_*.log"),
-        kafka_detected_object=_find(root, "v2xhub_sim_sensor_detected_object*.log"),
-        kafka_sdsm=_find(root, "v2xhub_sdsm_sub*.log"),
-    )
+    found = {field: _find(root, pattern) for pattern, field in layout.session_logs}
+    return SessionPaths(root=root, **found)
 
 
 def _resolve(root: Path, subdir: str, filename: str) -> Path:
@@ -147,7 +144,24 @@ def _resolve(root: Path, subdir: str, filename: str) -> Path:
     return matches[0] if matches else direct
 
 
-def load_runs_csv(runs_csv, data_root=None) -> List[RunSpec]:
+def session_manifest(data_root, layout: cfg.SessionLayout = cfg.LAYOUT) -> Path:
+    """The run manifest inside a session directory.
+
+    Every entry point needs this path, so it is built here rather than by each
+    script joining the filename itself.
+    """
+    return Path(data_root) / layout.manifest
+
+
+def load_session(data_root, layout: cfg.SessionLayout = cfg.LAYOUT):
+    """``(runs, session)`` for one session directory: the usual first step."""
+    root = Path(data_root)
+    return (load_runs_csv(session_manifest(root, layout), root, layout),
+            discover_session(root, layout))
+
+
+def load_runs_csv(runs_csv, data_root=None,
+                  layout: cfg.SessionLayout = cfg.LAYOUT) -> List[RunSpec]:
     """Parse ``runs.csv`` into RunSpecs, resolving each named file to a real path.
 
     The header and every field are whitespace-stripped: the file is written with
@@ -175,18 +189,18 @@ def load_runs_csv(runs_csv, data_root=None) -> List[RunSpec]:
             if clean.get("start_time_etc"):
                 start = datetime.strptime(
                     clean["start_time_etc"], "%Y-%m-%d %H:%M:%S"
-                ).replace(tzinfo=SESSION_TZ)
+                ).replace(tzinfo=cfg.SESSION_TZ)
             runs.append(
                 RunSpec(
                     condition=clean["run_condition"],
                     run_id=int(clean["run_id"]),
                     start_time=start,
                     rsu_pcap=(
-                        _resolve(root, "rsu_pcap", clean["rsu_pcap_fn"])
+                        _resolve(root, layout.rsu_pcap_dir, clean["rsu_pcap_fn"])
                         if clean.get("rsu_pcap_fn") else None
                     ),
-                    obu_capture=_resolve(root, "obu", clean["obu_pcap_fn"]),
-                    mcap=_resolve(root, "rosbags", clean["rosbag_fn"]),
+                    obu_capture=_resolve(root, layout.obu_capture_dir, clean["obu_pcap_fn"]),
+                    mcap=_resolve(root, layout.rosbag_dir, clean["rosbag_fn"]),
                 )
             )
 

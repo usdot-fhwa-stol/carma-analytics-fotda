@@ -10,18 +10,21 @@ regression in windowing or payload matching -- both of which fail by producing
 plausible-looking numbers rather than by raising.
 """
 
+import dataclasses
 import os
 import sys
 import tempfile
+import types
 import unittest
 from datetime import date, datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dt_wz_analysis_util import cp01  # noqa: E402
-from dt_wz_analysis_util import cs01  # noqa: E402
-from dt_wz_analysis_util import pl03  # noqa: E402
+from dt_wz_analysis_util import camera_detections  # noqa: E402
+from dt_wz_analysis_util import config as cfg  # noqa: E402
+from dt_wz_analysis_util import location_spoofing  # noqa: E402
+from dt_wz_analysis_util import vehicle_yield  # noqa: E402
 from dt_wz_analysis_util.readers import (  # noqa: E402
     kafka_log, obu_capture, pcap_reader, tcpdump_text,
 )
@@ -235,26 +238,26 @@ class TestCp01Anchoring(unittest.TestCase):
     def test_false_start_before_the_dwell_is_ignored(self):
         # 18-frame false start, 2.9 s pause, then the real 200-frame dwell.
         frames = self._frames((0, 18), (4700, 200))
-        result = cp01.measure_run(self._Run(self.BASE, 20), frames)
+        result = camera_detections.measure_run(self._Run(self.BASE, 20), frames)
         self.assertEqual(result.received_frames, 200)
         self.assertEqual(result.dropped_frames, 0)
 
     def test_gap_inside_the_dwell_still_counts_as_dropped(self):
         # 100 frames, a 1 s hole (10 frames lost), then 90 more: 190 of 200.
         frames = self._frames((0, 100), (11000, 90))
-        result = cp01.measure_run(self._Run(self.BASE, 20), frames)
+        result = camera_detections.measure_run(self._Run(self.BASE, 20), frames)
         self.assertEqual(result.received_frames, 190)
         self.assertEqual(result.dropped_frames, 10)
 
     def test_false_start_and_internal_gap_together(self):
         frames = self._frames((0, 18), (4700, 100), (15700, 90))
-        result = cp01.measure_run(self._Run(self.BASE, 20), frames)
+        result = camera_detections.measure_run(self._Run(self.BASE, 20), frames)
         self.assertEqual(result.received_frames, 190)
 
     def test_extra_frame_is_not_a_negative_drop(self):
         # A camera running a shade fast fits 51 frames into a 5 s window. That is
         # a cadence artefact, not a negative drop, and must floor at zero.
-        result = cp01.measure_run(
+        result = camera_detections.measure_run(
             self._Run(self.BASE, 5), self._frames((0, 51), cadence_ms=98.0)
         )
         self.assertEqual(result.received_frames, 51)
@@ -262,7 +265,7 @@ class TestCp01Anchoring(unittest.TestCase):
 
     def test_no_detections_reports_everything_dropped(self):
         import numpy as np
-        result = cp01.measure_run(self._Run(self.BASE, 20), np.array([], dtype=float))
+        result = camera_detections.measure_run(self._Run(self.BASE, 20), np.array([], dtype=float))
         self.assertEqual(result.received_frames, 0)
         self.assertEqual(result.dropped_frames, 200)
 
@@ -273,14 +276,14 @@ class TestCp01Anchoring(unittest.TestCase):
             {"timestamp": 1000.0, "objectId": 2},
             {"timestamp": 1100.0, "objectId": 1},
         ]
-        self.assertEqual(len(cp01.camera_frame_times(records)), 2)
+        self.assertEqual(len(camera_detections.camera_frame_times(records)), 2)
 
     def test_summary_totals_and_headline(self):
         results = [
-            cp01.RunDrops("a", "5sec", 5, 50, 47),
-            cp01.RunDrops("b", "20sec", 20, 200, 200),
+            camera_detections.RunDrops("a", "5sec", 5, 50, 47),
+            camera_detections.RunDrops("b", "20sec", 20, 200, 200),
         ]
-        summary = cp01.summarise(results)
+        summary = camera_detections.summarise(results)
         self.assertEqual(summary["total_expected_frames"], 250)
         self.assertEqual(summary["total_dropped_frames"], 3)
         self.assertEqual(summary["headline"], "3 frames out of 250 frames dropped")
@@ -312,7 +315,7 @@ class TestCs01Windowing(unittest.TestCase):
         path = self._log([(1000, '{"a":1}'), (2000, '{"a":2}'), (3000, '{"a":3}')])
         out = tempfile.NamedTemporaryFile("w", suffix=".log", delete=False).name
         try:
-            kept = cs01._window_kafka_log(
+            kept = location_spoofing._window_kafka_log(
                 Path(path), Path(out), (self.BASE + 1500, self.BASE + 2500)
             )
             self.assertEqual(kept, 1)
@@ -328,7 +331,7 @@ class TestCs01Windowing(unittest.TestCase):
             path = handle.name
         out = tempfile.NamedTemporaryFile("w", suffix=".log", delete=False).name
         try:
-            cs01._window_kafka_log(
+            location_spoofing._window_kafka_log(
                 Path(path), Path(out), (self.BASE + 1500, self.BASE + 2500)
             )
             records = kafka_log.parse_kafka_log_records(out)
@@ -346,7 +349,7 @@ class TestCs01Windowing(unittest.TestCase):
         entries += [(2000, '{"timestamp":%d,"projString":"%s"}' % (self.BASE + 2000, new))] * 3
         path = self._log(entries)
         try:
-            lat, lon, detail = cs01.detect_reference(
+            lat, lon, detail = location_spoofing.detect_reference(
                 path, (self.BASE + 1500, self.BASE + 2500)
             )
             self.assertAlmostEqual(lat, 38.955027, places=6)
@@ -364,7 +367,7 @@ class TestCs01Windowing(unittest.TestCase):
         entries += [(2100, '{"timestamp":%d,"projString":"%s"}' % (self.BASE + 2100, old))] * 2
         path = self._log(entries)
         try:
-            _lat, _lon, detail = cs01.detect_reference(
+            _lat, _lon, detail = location_spoofing.detect_reference(
                 path, (self.BASE + 1500, self.BASE + 2500)
             )
             self.assertEqual(len(detail["origins_in_window"]), 2)
@@ -378,7 +381,7 @@ class TestCs01Windowing(unittest.TestCase):
         path = self._log([(9000, body)])
         try:
             with self.assertRaises(ValueError):
-                cs01.detect_reference(path, (self.BASE + 1000, self.BASE + 2000))
+                location_spoofing.detect_reference(path, (self.BASE + 1000, self.BASE + 2000))
         finally:
             os.unlink(path)
 
@@ -398,7 +401,7 @@ class TestPl03Yield(unittest.TestCase):
         times = self._np.arange(0.0, 10.0, 0.1)
         speeds = self._np.where(times < 3.0, 0.0, 5.0)
         travelled = self._np.clip((times - 3.0) * 5.0, 0, None)
-        self.assertEqual(pl03.find_stops(times, speeds, travelled), [])
+        self.assertEqual(vehicle_yield.find_stops(times, speeds, travelled), [])
 
     def test_a_halt_after_setting_off_is_a_stop(self):
         times = self._np.arange(0.0, 20.0, 0.1)
@@ -406,7 +409,7 @@ class TestPl03Yield(unittest.TestCase):
         speeds[times < 2.0] = 0.0                         # parked start
         speeds[(times >= 10.0) & (times < 14.0)] = 0.0    # the yield
         travelled = self._np.clip((times - 2.0) * 5.0, 0, None)
-        stops = pl03.find_stops(times, speeds, travelled)
+        stops = vehicle_yield.find_stops(times, speeds, travelled)
         self.assertEqual(len(stops), 1)
         self.assertAlmostEqual(stops[0][0], 10.0, places=6)
 
@@ -414,7 +417,7 @@ class TestPl03Yield(unittest.TestCase):
         times = self._np.arange(0.0, 20.0, 0.1)
         speeds = self._np.full_like(times, 5.0)
         speeds[(times >= 10.0) & (times < 10.2)] = 0.0    # 0.2 s, under the minimum
-        self.assertEqual(pl03.find_stops(times, speeds, times * 5.0), [])
+        self.assertEqual(vehicle_yield.find_stops(times, speeds, times * 5.0), [])
 
     def _eastbound(self, stop_east):
         times = self._np.arange(0.0, 100.0, 1.0)
@@ -422,30 +425,30 @@ class TestPl03Yield(unittest.TestCase):
 
     def test_pedestrian_ahead_is_positive(self):
         times, east, north, stop = self._eastbound(50.0)
-        distance, ahead = pl03.score_stop(stop, times, east, north, 60.0, 0.0)
+        distance, ahead = vehicle_yield.score_stop(stop, times, east, north, 60.0, 0.0)
         self.assertAlmostEqual(distance, 10.0, places=3)
         self.assertGreater(ahead, 9.0)
 
     def test_pedestrian_behind_is_negative(self):
         """The vehicle drove past. Distance alone cannot say so; the sign can."""
         times, east, north, stop = self._eastbound(70.0)
-        distance, ahead = pl03.score_stop(stop, times, east, north, 60.0, 0.0)
+        distance, ahead = vehicle_yield.score_stop(stop, times, east, north, 60.0, 0.0)
         self.assertAlmostEqual(distance, 10.0, places=3)
         self.assertLess(ahead, -9.0)
 
     def test_stop_just_past_the_crossing_is_still_a_yield(self):
         """3 m past is inside GPS and median-position error, not an overshoot."""
         times, east, north, stop = self._eastbound(63.0)
-        _distance, ahead = pl03.score_stop(stop, times, east, north, 60.0, 0.0)
-        self.assertGreater(ahead, -pl03.YIELD_TOLERANCE_M)
+        _distance, ahead = vehicle_yield.score_stop(stop, times, east, north, 60.0, 0.0)
+        self.assertGreater(ahead, -cfg.VEHICLE_YIELD.yield_tolerance_m)
 
     def test_stop_well_past_the_crossing_is_not_a_yield(self):
         times, east, north, stop = self._eastbound(80.0)
-        _distance, ahead = pl03.score_stop(stop, times, east, north, 60.0, 0.0)
-        self.assertLess(ahead, -pl03.YIELD_TOLERANCE_M)
+        _distance, ahead = vehicle_yield.score_stop(stop, times, east, north, 60.0, 0.0)
+        self.assertLess(ahead, -cfg.VEHICLE_YIELD.yield_tolerance_m)
 
     def _result(self, name, valid, yielded):
-        item = pl03.RunYield(run=name, condition="20sec", dwell_sec=20)
+        item = vehicle_yield.RunYield(run=name, condition="20sec", dwell_sec=20)
         item.valid, item.yielded = valid, yielded
         item.approach_distance_m = 38.0
         if not valid:
@@ -455,7 +458,7 @@ class TestPl03Yield(unittest.TestCase):
     def test_invalid_runs_are_excluded_but_still_reported(self):
         results = [self._result("a", True, True), self._result("b", True, True),
                    self._result("c", False, False)]
-        summary = pl03.summarise(results)
+        summary = vehicle_yield.summarise(results)
         self.assertEqual(summary["valid_runs"], 2)
         self.assertEqual(summary["invalid_runs"], 1)
         self.assertEqual(summary["success_rate_pct"], 100.0)
@@ -469,7 +472,7 @@ class TestPl03Yield(unittest.TestCase):
         """Invalid runs must neither drag the rate down nor prop it up."""
         results = [self._result(str(i), True, i < 8) for i in range(10)]
         results += [self._result(f"bad{i}", False, False) for i in range(5)]
-        summary = pl03.summarise(results)
+        summary = vehicle_yield.summarise(results)
         self.assertEqual(summary["valid_runs"], 10)
         self.assertEqual(summary["success_rate_pct"], 80.0)
         self.assertFalse(summary["is_passed"])      # under the 90% target
@@ -487,9 +490,9 @@ class TestPl03Yield(unittest.TestCase):
             "stop": (5.0, 0.1),
         }
         with tempfile.TemporaryDirectory() as scratch:
-            path = Path(scratch) / pl03.CACHE_NAME
-            pl03.save_tracks([item], path)
-            loaded = pl03.load_tracks(path)
+            path = Path(scratch) / cfg.VEHICLE_YIELD.cache_name
+            vehicle_yield.save_tracks([item], path)
+            loaded = vehicle_yield.load_tracks(path)
         self.assertEqual(list(loaded), ["a"])
         self._np.testing.assert_allclose(loaded["a"]["east"], item.track["east"])
         self._np.testing.assert_allclose(loaded["a"]["ped_east"], item.track["ped_east"])
@@ -505,18 +508,18 @@ class TestPl03Yield(unittest.TestCase):
             "stop": None,
         }
         with tempfile.TemporaryDirectory() as scratch:
-            path = Path(scratch) / pl03.CACHE_NAME
-            pl03.save_tracks([item], path)
-            self.assertIsNone(pl03.load_tracks(path)["a"]["stop"])
+            path = Path(scratch) / cfg.VEHICLE_YIELD.cache_name
+            vehicle_yield.save_tracks([item], path)
+            self.assertIsNone(vehicle_yield.load_tracks(path)["a"]["stop"])
 
     def test_missing_cache_reads_as_empty_rather_than_raising(self):
         with tempfile.TemporaryDirectory() as scratch:
-            self.assertEqual(pl03.load_tracks(Path(scratch) / pl03.CACHE_NAME), {})
+            self.assertEqual(vehicle_yield.load_tracks(Path(scratch) / cfg.VEHICLE_YIELD.cache_name), {})
 
     def test_row_round_trips_the_fields_the_plots_need(self):
         item = self._result("a", False, True)
         item.pedestrian_ahead_m = 7.5
-        rebuilt = pl03.RunYield.from_row(item.as_row())
+        rebuilt = vehicle_yield.RunYield.from_row(item.as_row())
         self.assertEqual(rebuilt.run, "a")
         self.assertFalse(rebuilt.valid)
         self.assertTrue(rebuilt.yielded)
@@ -524,7 +527,7 @@ class TestPl03Yield(unittest.TestCase):
         self.assertIn("camera detection gap", rebuilt.invalid_reason)
 
     def test_no_valid_runs_reports_rather_than_dividing_by_zero(self):
-        summary = pl03.summarise([self._result("a", False, False)])
+        summary = vehicle_yield.summarise([self._result("a", False, False)])
         self.assertIsNone(summary["success_rate_pct"])
         self.assertIsNone(summary["is_passed"])
         self.assertEqual(summary["headline"], "no valid runs")
@@ -631,6 +634,82 @@ class TestGoldenRun(unittest.TestCase):
         # change in the system but tight enough to catch a broken time base.
         self.assertTrue(0.05 < stats["median_latency_s"] < 0.20,
                         f"implausible median latency {stats['median_latency_s']}")
+
+
+class TestConfigDrivesTheCommandLine(unittest.TestCase):
+    """The generated options must reach the measurement, not only the report.
+
+    Two of the old per-test scripts declared a ``--max-drop-rate-pct`` and then
+    never passed it on, so a report could state a 5% limit while judging every
+    run at 2%. These tests pin the wiring that replaced that.
+    """
+
+    def test_every_test_case_has_a_handler(self):
+        from dt_wz_analysis_util import run_dt_wz_analysis as runner
+        for case in cfg.TESTS:
+            self.assertIn(case.analysis, runner.HANDLERS, case.code)
+
+    def test_every_test_case_builds_a_parser(self):
+        from dt_wz_analysis_util import run_dt_wz_analysis as runner
+        parser = runner.build_parser()
+        for case in cfg.TESTS:
+            args = parser.parse_args(
+                [case.code, "--data-root", "x", "--output-dir", "y"])
+            self.assertEqual(args.test, case.code)
+
+    def test_a_settings_field_becomes_an_option(self):
+        flags = [flag for flag, *_ in cfg.cli_fields(cfg.DETECTION_DELIVERY)]
+        self.assertIn("--max-drop-rate-pct", flags)
+        self.assertIn("--match-tolerance-sec", flags)
+
+    def test_a_field_without_help_is_not_exposed(self):
+        # ``unit`` carries no cli_help entry: it is configuration, not a knob.
+        names = [name for _flag, name, *_ in cfg.cli_fields(cfg.DELIVERY_LATENCY)]
+        self.assertNotIn("unit", names)
+
+    def test_an_override_replaces_only_what_was_given(self):
+        changed = cfg.apply_overrides(
+            cfg.DETECTION_DELIVERY,
+            {"max_drop_rate_pct": 5.0, "match_tolerance_sec": None})
+        self.assertEqual(changed.max_drop_rate_pct, 5.0)
+        self.assertEqual(changed.match_tolerance_sec,
+                         cfg.DETECTION_DELIVERY.match_tolerance_sec)
+
+    def test_an_override_leaves_the_configured_default_untouched(self):
+        cfg.apply_overrides(cfg.DETECTION_DELIVERY, {"max_drop_rate_pct": 5.0})
+        self.assertEqual(cfg.DETECTION_DELIVERY.max_drop_rate_pct, 2.0)
+
+    def test_the_overridden_limit_reaches_the_measurement(self):
+        from dt_wz_analysis_util import run_dt_wz_analysis as runner
+        parser = runner.build_parser()
+        args = parser.parse_args(["cp02", "--data-root", "x", "--output-dir", "y",
+                                  "--max-drop-rate-pct", "5"])
+        settings = cfg.apply_overrides(cfg.BY_CODE["cp02"].settings, vars(args))
+
+        seen = {}
+
+        def fake_drop_rate(_mcap, _records, _window, **kwargs):
+            seen.update(kwargs)
+            return True, {}
+
+        measure = runner._detection_delivery_measure(settings)
+        original = runner.metrics.detection_to_sdsm_drop_rate
+        runner.metrics.detection_to_sdsm_drop_rate = fake_drop_rate
+        try:
+            measure(types.SimpleNamespace(mcap="m"), (0.0, 1.0), [])
+        finally:
+            runner.metrics.detection_to_sdsm_drop_rate = original
+        self.assertEqual(seen["max_drop_rate_pct"], 5.0)
+
+    def test_the_camera_rate_is_not_hardcoded_anywhere(self):
+        # frame_interval_ms used to be a second, independent copy of 10 Hz, so
+        # overriding the rate changed the expected count but not the cadence.
+        faster = dataclasses.replace(cfg.CAMERA_DETECTIONS, detection_rate_hz=20.0)
+        self.assertEqual(faster.frame_interval_ms, 50.0)
+
+    def test_every_test_case_names_a_distinct_output(self):
+        prefixes = [case.prefix for case in cfg.TESTS if case.prefix]
+        self.assertEqual(len(prefixes), len(set(prefixes)))
 
 
 if __name__ == "__main__":

@@ -1,47 +1,42 @@
-#!/usr/bin/env python3
-"""End-to-end SDSM latency cascade, pooled across sessions.
+"""Build the end-to-end SDSM latency cascade and write its outputs.
 
-One row per camera detection, carrying a timestamp for each of the ~19 stages
-between the FLIR camera and the vehicle's fused output::
-
-    python run_cascade_analysis.py \\
-        --data-root .../20260914_verification_test \\
-        --data-root .../20260915_verification_test \\
-        --output-dir out/cascade
+One row per FLIR camera detection, carrying a timestamp for each of the ~19
+stages between the camera and the vehicle's fused output.
 
 This is not a pass/fail metric. It is the latency breakdown that says *where*
-the time goes and where detections are lost, which is what explains the CP-02
-result rather than merely reporting it.
+the time goes and where detections are lost, which is what explains the
+detection-delivery result rather than merely reporting it.
 
 Session-wide logs (pc1/pc2 V2XHub, SDSS, Kafka) are parsed once per session --
 pc2 alone is over a million lines -- and then windowed per run.
-
-Writes ``detections.csv``, ``stage_summary.csv``, ``qa_report.txt``,
-``detections_columns.md`` and the latency plots, grouped by dwell condition.
 """
 
 from __future__ import annotations
 
-import argparse
-import sys
 from pathlib import Path
+from typing import Dict, List, Tuple
 
 import pandas as pd
 
-from dt_wz_analysis_util import dataset, metrics, report
-from dt_wz_analysis_util.cascade import build as cascade_build
-from dt_wz_analysis_util.cascade import cascade_config
-from dt_wz_analysis_util.cascade import plots as cascade_plots
-from dt_wz_analysis_util.cascade import qa as cascade_qa
-from dt_wz_analysis_util.readers import obu_capture
+from .. import config as cfg
+from .. import dataset, report
+from ..readers import obu_capture
+from . import build as cascade_build
+from . import cascade_config
+from . import plots as cascade_plots
+from . import qa as cascade_qa
+
+# Stages whose median latency is worth a line in the console rollup.
+_HEADLINE_STAGES = (("ros_inbound", "to the vehicle"), ("ros_fused", "to fused output"))
 
 
-def build_run(run, session_logs, window):
+def build_run(run, session_logs, window) -> Tuple[pd.DataFrame, bool]:
     """The per-detection stage table for one run."""
     capture = obu_capture.read_obu_capture(run.obu_capture, run.start_time.date())
     radio = [
         {"timestamp": message["timestamp"] * 1e3, "payload_hex": message["payload_hex"]}
-        for message in obu_capture.messages_of_type(capture, "SDSM", window[0], window[1])
+        for message in obu_capture.messages_of_type(
+            capture, "SDSM", window[0], window[1])
     ]
     table = cascade_build.build_run_table(run, session_logs, window)
     if table.empty:
@@ -54,19 +49,18 @@ def build_run(run, session_logs, window):
     return table, capture["payloads_available"]
 
 
-def collect(data_roots):
+def collect(data_roots, layout: cfg.SessionLayout = cfg.LAYOUT):
     """Every run's cascade table, plus a per-run summary row."""
     tables, rows = [], []
     for root in data_roots:
-        runs = dataset.load_runs_csv(root / "runs.csv", root)
-        session = dataset.discover_session(root)
-        print(f"{root.name}: {len(runs)} runs")
+        runs, session = dataset.load_session(root, layout)
+        print(f"{Path(root).name}: {len(runs)} runs")
         print("  parsing session-wide logs (once for all runs) ...", flush=True)
         session_logs = cascade_build.SessionLogs.load(session)
 
         for run in runs:
-            row = {"session": root.name, "run": run.name, "condition": run.condition,
-                   "dwell_sec": run.dwell_sec}
+            row = {"session": Path(root).name, "run": run.name,
+                   "condition": run.condition, "dwell_sec": run.dwell_sec}
             try:
                 window = report.engaged_window(run)
                 table, payload_matched = build_run(run, session_logs, window)
@@ -78,8 +72,7 @@ def collect(data_roots):
                         column = f"lat_{stage[2:]}_ms"
                         if column in table.columns and table[column].notna().any():
                             row[f"median_to_{stage[2:]}_ms"] = round(
-                                float(table[column].median()), 1
-                            )
+                                float(table[column].median()), 1)
                     tables.append(table)
             except Exception as error:
                 print(f"  ERROR on {run.name}: {error}")
@@ -91,7 +84,10 @@ def collect(data_roots):
     return tables, rows
 
 
-def write_outputs(tables, rows, output_dir: Path):
+def write_outputs(tables: List[pd.DataFrame], rows: List[Dict],
+                  output_dir: Path) -> None:
+    """The detection table, the QA report, the column docs and the figures."""
+    output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     plots_dir = output_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
@@ -104,10 +100,10 @@ def write_outputs(tables, rows, output_dir: Path):
     everything = pd.concat(tables, ignore_index=True)
     everything.to_csv(output_dir / "detections.csv", index=False, float_format="%.17g")
     (output_dir / "qa_report.txt").write_text(
-        cascade_qa.report(everything, "Cascade QA — all runs")
-    )
-    cascade_qa.stage_summary(everything).to_csv(output_dir / "stage_summary.csv", index=False)
-    _write_column_docs(output_dir)
+        cascade_qa.report(everything, "Cascade QA — all runs"))
+    cascade_qa.stage_summary(everything).to_csv(
+        output_dir / "stage_summary.csv", index=False)
+    write_column_docs(output_dir)
 
     grouped = {}
     for condition, group in everything.groupby("condition", sort=False):
@@ -132,14 +128,19 @@ def write_outputs(tables, rows, output_dir: Path):
 
     print()
     print(f"Cascade: {len(everything)} detections across {len(rows)} runs")
-    for stage, label in (("ros_inbound", "to the vehicle"), ("ros_fused", "to fused output")):
+    for stage, label in _HEADLINE_STAGES:
         column = f"lat_{stage}_ms"
         if column in everything.columns and everything[column].notna().any():
             print(f"       median {label:<16} {everything[column].median():.0f} ms")
     print(f"  -> {output_dir}")
 
 
-def _write_column_docs(output_dir: Path):
+def write_column_docs(output_dir: Path) -> None:
+    """A data dictionary for ``detections.csv``, generated from the stage table.
+
+    Generated rather than written by hand so a stage added to
+    ``cascade_config.STAGES`` documents itself.
+    """
     lines = [
         "# `detections.csv` columns", "",
         "One row per FLIR camera detection. Every `t_*` column is an absolute epoch",
@@ -165,21 +166,3 @@ def _write_column_docs(output_dir: Path):
         "| `last_stage_reached` | The furthest stage reached, i.e. where it was lost |",
     ]
     (output_dir / "detections_columns.md").write_text("\n".join(lines) + "\n")
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    parser.add_argument("--data-root", type=Path, action="append", required=True,
-                        help="Session directory with runs.csv; repeat to pool sessions")
-    parser.add_argument("--output-dir", type=Path, required=True)
-    args = parser.parse_args(argv)
-
-    tables, rows = collect(args.data_root)
-    write_outputs(tables, rows, args.output_dir)
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

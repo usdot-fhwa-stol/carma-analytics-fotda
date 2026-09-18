@@ -1,11 +1,11 @@
-"""CP-01: FLIR camera detection drop rate, measured at the camera's websocket.
+"""FLIR camera detection drop rate, measured at the camera's websocket.
 
 Measures how many of the camera frames that *should* have arrived during each
 pedestrian dwell actually did. At a nominal 10 Hz, a 20-second dwell should
 yield 200 frames.
 
-**Measured at the websocket, not at Kafka.** CP-01 asks for a property of the
-camera, so it has to be measured as close to the camera as the logs allow. The
+**Measured at the websocket, not at Kafka.** This is a property of the camera,
+so it has to be measured as close to the camera as the logs allow. The
 pc2 V2XHub log records every websocket message verbatim, before the plugin
 parses, queues or forwards anything.
 
@@ -38,8 +38,8 @@ them: during the 2026-09-15 stalls every frame still arrived, just late and in a
 burst, and one stall window shows no gap over 150 ms at all. Because the count
 is keyed on the camera's own capture time, a late frame still lands in the dwell
 window it belongs to, so a stall does not inflate this figure. The downstream
-staleness rejections that fail CP-02 are likewise invisible here, since they
-happen well after the websocket.
+staleness rejections that fail the detection-delivery check are likewise
+invisible here, since they happen well after the websocket.
 
 **Two numbers come with the count.** ``counter_gaps`` is how many camera frames
 the ``dataNumber`` sequence accounts for that carried no message -- frames in
@@ -60,43 +60,31 @@ so the window the number came from can be checked against the recording.
 
 from __future__ import annotations
 
+import csv
+import json
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Optional
 
+import matplotlib
 import numpy as np
 
-from .readers import flir_websocket, kafka_log
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
 
-# Nominal FLIR frame rate. 100 ms cadence, confirmed against the websocket logs:
-# the median inter-arrival is 100.0 ms and ~90% of intervals fall in 90-110 ms.
-DETECTION_RATE_HZ = 10.0
-
-# Detections further apart than this start a new burst. Chosen from the data:
-# the largest gap observed *inside* a dwell is 1.5 s, and the smallest pause
-# separating a false start from the real dwell is 2.9 s. 2 s sits between them,
-# so a dwell containing dropped frames stays one burst while a false start stays
-# separate. A threshold below ~1.5 s would split a dwell at its own drops, which
-# is the very thing being measured.
-BURST_GAP_MS = 2000.0
-
-# One frame period at the nominal rate.
-FRAME_INTERVAL_MS = 1000.0 / 10.0
-
-# runs.csv wall clock, used only to render burst times for a human to check.
-SESSION_TZ = timezone(timedelta(hours=-4))
-
-# How far around the nominal start time to look for a run's detections. Runs are
-# at least four minutes apart, so this cannot reach a neighbouring run.
-SEARCH_BEFORE_MS = 60_000.0
-SEARCH_AFTER_MS = 240_000.0
+from . import config as cfg  # noqa: E402
+from . import dataset  # noqa: E402
+from .cascade.plots import stage_colors  # noqa: E402
+from .readers import flir_websocket, kafka_log  # noqa: E402
 
 
 def _iso(epoch_ms: Optional[float]) -> Optional[str]:
     """Local (America/New_York) wall clock, so a burst can be checked by eye."""
     if epoch_ms is None:
         return None
-    return datetime.fromtimestamp(epoch_ms / 1000.0, SESSION_TZ).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    return datetime.fromtimestamp(
+        epoch_ms / 1000.0, cfg.SESSION_TZ).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
 
 @dataclass
@@ -160,7 +148,7 @@ def camera_frame_times(detection_records) -> np.ndarray:
     """Sorted, de-duplicated camera frame timestamps (epoch ms).
 
     De-duplicated because a frame carrying two tracked objects produces two
-    detection records sharing one camera timestamp; CP-01 counts camera frames,
+    detection records sharing one camera timestamp; this counts camera frames,
     not objects, so those must collapse to one.
     """
     return np.array(
@@ -169,26 +157,31 @@ def camera_frame_times(detection_records) -> np.ndarray:
     )
 
 
-def _bursts(frames: np.ndarray):
-    """Split frames into continuous bursts on gaps longer than BURST_GAP_MS."""
+def _bursts(frames: np.ndarray, burst_gap_ms: float):
+    """Split frames into continuous bursts on gaps longer than ``burst_gap_ms``."""
     if len(frames) == 0:
         return []
-    breaks = np.flatnonzero(np.diff(frames) > BURST_GAP_MS)
+    breaks = np.flatnonzero(np.diff(frames) > burst_gap_ms)
     return np.split(frames, breaks + 1)
 
 
-def measure_run(run, frames: np.ndarray, rate_hz: float = DETECTION_RATE_HZ,
+def measure_run(run, frames: np.ndarray, config: cfg.CameraDetectionConfig = cfg.CAMERA_DETECTIONS,
                 websocket_frames=None, kafka_frames=None) -> RunDrops:
     """Frame accounting for one run's dwell window.
 
     ``frames`` is the sorted camera-time array the count is taken from -- the
-    websocket times for CP-01 proper. ``websocket_frames`` are the full websocket
+    websocket times. ``websocket_frames`` are the full websocket
     records, used for the ``dataNumber`` gap count, and ``kafka_frames`` is the
     Kafka camera-time array, used to report the plugin-side loss separately.
+
+    ``config`` supplies the nominal rate, the burst split and the search span;
+    see ``config.Cp01Config``.
     """
-    expected = round(run.dwell_sec * rate_hz)
+    frame_interval_ms = config.frame_interval_ms
+    expected = round(run.dwell_sec * config.detection_rate_hz)
     start = run.start_time.timestamp() * 1000.0
-    window = frames[(frames >= start - SEARCH_BEFORE_MS) & (frames <= start + SEARCH_AFTER_MS)]
+    window = frames[(frames >= start - config.search_before_ms)
+                    & (frames <= start + config.search_after_ms)]
 
     result = RunDrops(
         run=run.name, condition=run.condition, dwell_sec=run.dwell_sec,
@@ -200,7 +193,7 @@ def measure_run(run, frames: np.ndarray, rate_hz: float = DETECTION_RATE_HZ,
     # Split into bursts, then take the burst whose duration is closest to this
     # run's condition. The pedestrian's real dwell is never exactly the nominal
     # time, so the burst itself defines the measurement window.
-    bursts = _bursts(window)
+    bursts = _bursts(window, config.burst_gap_ms)
     result.bursts_in_window = len(bursts)
     nominal_ms = run.dwell_sec * 1000.0
     best = min(bursts, key=lambda burst: abs((burst[-1] - burst[0]) - nominal_ms))
@@ -209,7 +202,7 @@ def measure_run(run, frames: np.ndarray, rate_hz: float = DETECTION_RATE_HZ,
     span_ms = float(dwell_frames[-1] - dwell_frames[0])
     # Frames a continuous stream would hold over this same span. Fence-post: a
     # 1.0 s span at 10 Hz spans 11 frames, not 10, because both ends are frames.
-    expected = int(round(span_ms / FRAME_INTERVAL_MS)) + 1 if len(dwell_frames) > 1 else 1
+    expected = int(round(span_ms / frame_interval_ms)) + 1 if len(dwell_frames) > 1 else 1
 
     result.expected_frames = expected
     result.received_frames = len(dwell_frames)
@@ -218,7 +211,10 @@ def measure_run(run, frames: np.ndarray, rate_hz: float = DETECTION_RATE_HZ,
     result.burst_duration_sec = round(span_ms / 1000.0, 3)
     if len(dwell_frames) > 1:
         gaps = np.diff(dwell_frames)
-        result.gap_spans_ms = [float(gap) for gap in gaps if gap > FRAME_INTERVAL_MS * 1.5]
+        result.gap_spans_ms = [
+            float(gap) for gap in gaps
+            if gap > frame_interval_ms * config.gap_report_factor
+        ]
 
     # The burst is inclusive of its last frame, so the window closes just after it.
     low, high = float(dwell_frames[0]), float(dwell_frames[-1]) + 1.0
@@ -238,16 +234,17 @@ def measure_run(run, frames: np.ndarray, rate_hz: float = DETECTION_RATE_HZ,
     return result
 
 
-def analyse_session(runs, session, rate_hz: float = DETECTION_RATE_HZ) -> List[RunDrops]:
-    """CP-01 for every run of one session.
+def analyse_session(runs, session,
+                    config: cfg.CameraDetectionConfig = cfg.CAMERA_DETECTIONS) -> List[RunDrops]:
+    """Frame accounting for every run of one session.
 
-    ``session`` is a ``dt_wz_dataset.SessionPaths``. The count comes from the pc2
+    ``session`` is a ``dataset.SessionPaths``. The count comes from the pc2
     V2XHub log's websocket messages; the Kafka detection topic is read only to
     report the plugin-side loss alongside it.
     """
     if session.pc2_v2xhub is None:
         raise FileNotFoundError(
-            "CP-01 needs the pc2 V2XHub log: it carries the camera's websocket stream"
+            "the pc2 V2XHub log is required: it carries the camera's websocket stream"
         )
     websocket_frames = flir_websocket.parse_camera_frames(session.pc2_v2xhub)
     frames = np.array([frame["camera_time_ms"] for frame in websocket_frames], dtype=float)
@@ -259,13 +256,30 @@ def analyse_session(runs, session, rate_hz: float = DETECTION_RATE_HZ) -> List[R
         )
 
     return [
-        measure_run(run, frames, rate_hz,
+        measure_run(run, frames, config,
                     websocket_frames=websocket_frames, kafka_frames=kafka_frames)
         for run in runs
     ]
 
 
-def summarise(results: List[RunDrops], rate_hz: float = DETECTION_RATE_HZ) -> Dict:
+def analyse_sessions(data_roots, config: cfg.CameraDetectionConfig = cfg.CAMERA_DETECTIONS,
+                     layout: cfg.SessionLayout = cfg.LAYOUT) -> List[RunDrops]:
+    """Frame accounting over every run of every session, pooled into one list."""
+    results: List[RunDrops] = []
+    for root in data_roots:
+        runs, session = dataset.load_session(root, layout)
+        if session.pc2_v2xhub is None:
+            raise FileNotFoundError(
+                f"{root}: no pc2 V2XHub log; the count comes from the camera's "
+                f"websocket stream"
+            )
+        print(f"{root.name}: {len(runs)} runs, camera frames from "
+              f"{session.pc2_v2xhub.name}")
+        results.extend(analyse_session(runs, session, config))
+    return results
+
+
+def summarise(results: List[RunDrops], config: cfg.CameraDetectionConfig = cfg.CAMERA_DETECTIONS) -> Dict:
     """Pooled totals plus a per-condition breakdown."""
     expected = sum(item.expected_frames for item in results)
     received = sum(item.received_frames for item in results)
@@ -298,10 +312,93 @@ def summarise(results: List[RunDrops], rate_hz: float = DETECTION_RATE_HZ) -> Di
         "total_dropped_frames": dropped,
         "total_drop_pct": round(dropped / expected * 100.0, 3) if expected else 0.0,
         "headline": f"{dropped} frames out of {expected} frames dropped",
-        "detection_rate_hz": rate_hz,
+        "detection_rate_hz": config.detection_rate_hz,
         "measured_at": "camera websocket (pc2 V2XHub log)",
         "camera_counter_gaps": counter_gaps,
         "lost_after_camera": lost_after,
         "by_condition": dict(sorted(by_condition.items(), key=lambda kv: kv[1]["runs"])),
         "runs_detail": [item.as_row() for item in results],
     }
+
+
+# --------------------------------------------------------------------------
+# Output
+# --------------------------------------------------------------------------
+
+def plot_drops(results: List[RunDrops], summary: Dict, output_path, title: str):
+    """Per-run drop counts, grouped by dwell condition."""
+    if not results:
+        return None
+    conditions = list(summary["by_condition"])
+    colors = dict(zip(conditions, stage_colors(range(max(len(conditions), 2)))))
+
+    figure, axis = plt.subplots(figsize=(11, 4.6))
+    values = [item.dropped_frames for item in results]
+    axis.bar(
+        range(len(results)), values,
+        color=[colors[item.condition] for item in results],
+        edgecolor="white", linewidth=0.8,
+    )
+    for index, item in enumerate(results):
+        if item.dropped_frames:
+            axis.text(index, item.dropped_frames, f"{item.dropped_frames}",
+                      ha="center", va="bottom", fontsize=7,
+                      color=cfg.STYLE.annotation_color)
+
+    axis.set_xticks(range(len(results)))
+    axis.set_xticklabels([item.run for item in results],
+                         rotation=45, ha="right", fontsize=7)
+    axis.set_ylabel("Camera frames dropped")
+    axis.set_title(
+        f"{title} — {summary['headline']} ({summary['total_drop_pct']:.2f}%)",
+        loc="left", fontsize=11,
+    )
+    axis.legend(handles=[
+        plt.Line2D([], [], marker="s", linestyle="", markersize=7,
+                   color=colors[condition],
+                   label=f"{condition} ({summary['by_condition'][condition]['runs']} runs)")
+        for condition in conditions
+    ], frameon=False, fontsize=8)
+    cfg.grid(axis)
+    cfg.despine(axis)
+    figure.tight_layout()
+    figure.savefig(output_path, dpi=cfg.STYLE.figure_dpi)
+    plt.close(figure)
+    return output_path
+
+
+def write_outputs(results: List[RunDrops], summary: Dict, output_dir: Path,
+                  case: cfg.TestCase) -> None:
+    """The JSON, the per-run CSV and the plot, and the console rollup.
+
+    ``case`` supplies the file stem and the headings. This module measures
+    camera frames and does not know which test asked it to.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / f"{case.prefix}.json").write_text(json.dumps(summary, indent=2))
+
+    rows = summary["runs_detail"]
+    with open(output_dir / f"{case.prefix}.csv", "w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    plot_drops(results, summary, output_dir / f"{case.prefix}.png", case.title)
+
+    print()
+    for condition, bucket in summary["by_condition"].items():
+        print(f"  {condition:<8} {bucket['runs']:>2} runs  "
+              f"{bucket['dropped_frames']:>4}/{bucket['expected_frames']:<5} dropped  "
+              f"({bucket['drop_pct']:.2f}%)")
+    print()
+    print(f"{case.metric}: {summary['headline']} "
+          f"({summary['total_drop_pct']:.2f}%)")
+    print(f"       measured at the {summary['measured_at']}")
+    print(f"       camera frames with no detection (counter gaps): "
+          f"{summary['camera_counter_gaps']}")
+    print(f"       additionally lost after the camera, inside the plugin: "
+          f"{summary['lost_after_camera']}")
+    print(f"       across {summary['runs']} runs / "
+          f"{summary['total_measured_burst_sec']} s of measured dwell")
+    print(f"  -> {output_dir}")

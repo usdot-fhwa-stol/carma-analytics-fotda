@@ -1,16 +1,21 @@
-"""Per-run DT-WZ metrics for a verification session.
+"""Per-run measurements for a verification session.
 
 Each function analyses one run over its engaged window and returns
 ``(is_passed, stats)``, writing ``stats`` to a JSON file whose keys are additive
 counters so the session rollup can glob-and-sum them, matching the convention
 already used by ``run_session_analysis``.
 
+Each function is named for what it measures and takes its acceptance limit as
+an argument, so it belongs to no particular test. Which test runs which
+measurement, and against what, is declared in ``config.TESTS``.
+
 ``is_passed`` is tri-state: True, False, or **None meaning "not applicable"** --
-the metric could not be evaluated because the data to evaluate it was never
-recorded. That is distinct from a failure and from an error, and conflating them
-is the difference between "SPAT regressed" and "SPAT was never recorded". These
-MCAPs contain no ``/message/incoming_map`` or ``/message/incoming_spat`` at all,
-so those two PL-01 checks are N/A for the whole session.
+the measurement could not be evaluated because the data to evaluate it was
+never recorded. That is distinct from a failure and from an error, and
+conflating them is the difference between "SPAT regressed" and "SPAT was never
+recorded". These MCAPs contain no ``/message/incoming_map`` or
+``/message/incoming_spat`` at all, so those two rate checks are not applicable
+for the whole session.
 
 All timestamps here are epoch seconds unless a name says ``_ms``.
 """
@@ -24,6 +29,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+from . import config as cfg
 from .readers import kafka_log, mcap_reader
 from .readers import obu_capture as obu_capture_reader  # aliased: the parameter is also obu_capture
 from .readers.pcap_reader import extract_pcap_messages
@@ -33,18 +39,16 @@ from utils import calculate_error_statistics
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent / "j2735-pcap"))
 from correlate_pcap_mcap import correlate_across_boundary  # noqa: E402
 
+# Topic names fixed by V2XHub's message set, not by this test plan, so they stay
+# with the code that decodes them. Vehicle hardware-interface topics, whose names
+# depend on the fitted sensors, are in ``config.VehicleTopics``.
 INCOMING_SDSM_TOPIC = "/message/incoming_sdsm"
 INCOMING_J3224_TOPIC = "/message/incoming_j3224_sdsm"
 BSM_OUTBOUND_TOPIC = "/message/bsm_outbound"
 
-# Thresholds, carried over from carma_cooperative_perception_scripts so results
-# stay comparable with previous sessions.
-SDSM_DROP_RATE_THRESHOLD_PCT = 2.0
-SDSM_DROP_RATE_MATCH_TOLERANCE_SEC = 0.05
-RSU_TRANSMISSION_DROP_RATE_THRESHOLD_PCT = 2.0
-DETECTION_TO_SDSM_RECEIPT_LATENCY_THRESHOLD_SEC = 0.3
-# Above this |rx - tx| a matched pair is counted as late rather than on time.
-TRANSMISSION_LATE_THRESHOLD_MS = 200.0
+# Every acceptance limit and tolerance below is supplied by the caller. The
+# defaults name a ``config`` value rather than repeating a number, so a report
+# can never print one limit while the measurement applies another.
 
 
 def _write_stats(stats_dir, name: str, stats: Dict) -> None:
@@ -179,7 +183,7 @@ def sdsm_object_positions(mcap_path, window=None) -> List[Dict]:
         return []
 
     # Imported here rather than at module scope: the geodesy lives in the
-    # carma-streets tree, which cs01 puts on sys.path.
+    # carma-streets tree, which the spoofing check puts on sys.path.
     import sys
     sys.path.append(str(Path(__file__).resolve().parent.parent.parent / "carma-streets"))
     from sdsm_location_spoofing_verification import enu_to_geodetic
@@ -230,13 +234,13 @@ def sdsm_object_positions(mcap_path, window=None) -> List[Dict]:
 
 
 # --------------------------------------------------------------------------
-# CP-02: raw detection -> SDSM drop rate
+# Raw detection -> SDSM received at the vehicle
 # --------------------------------------------------------------------------
 
 def detection_to_sdsm_drop_rate(
     mcap_path, detection_records, window, stats_dir=None,
-    max_drop_rate_pct=SDSM_DROP_RATE_THRESHOLD_PCT,
-    match_tolerance_sec=SDSM_DROP_RATE_MATCH_TOLERANCE_SEC,
+    max_drop_rate_pct=cfg.DETECTION_DELIVERY.max_drop_rate_pct,
+    match_tolerance_sec=cfg.DETECTION_DELIVERY.match_tolerance_sec,
 ):
     """Fraction of FLIR detections that never reached the vehicle inside an SDSM.
 
@@ -253,7 +257,7 @@ def detection_to_sdsm_drop_rate(
             "match_tolerance_sec": match_tolerance_sec, "is_passed": None,
             "note": "no raw detections inside the engaged window",
         }
-        _write_stats(stats_dir, "cp02_sdsm_detection_drop_rate", stats)
+        _write_stats(stats_dir, "sdsm_detection_drop_rate", stats)
         return None, stats
 
     reported: Dict[int, List[float]] = {}
@@ -306,17 +310,18 @@ def detection_to_sdsm_drop_rate(
         "is_passed": bool(drop_rate <= max_drop_rate_pct),
         "per_object_id": per_object,
     }
-    _write_stats(stats_dir, "cp02_sdsm_detection_drop_rate", stats)
+    _write_stats(stats_dir, "sdsm_detection_drop_rate", stats)
     return stats["is_passed"], stats
 
 
 # --------------------------------------------------------------------------
-# CP-03: RSU broadcast -> CARMA Platform receipt
+# RSU broadcast -> CARMA Platform receipt
 # --------------------------------------------------------------------------
 
 def rsu_transmission_drop_rate(
     mcap_path, rsu_pcap, window, stats_dir=None,
-    max_drop_rate_pct=RSU_TRANSMISSION_DROP_RATE_THRESHOLD_PCT,
+    max_drop_rate_pct=cfg.BROADCAST_DELIVERY.max_drop_rate_pct,
+    late_threshold_ms=cfg.BROADCAST_DELIVERY.late_threshold_ms,
 ):
     """SDSMs the RSU broadcast that CARMA Platform never received.
 
@@ -342,11 +347,11 @@ def rsu_transmission_drop_rate(
             "max_drop_rate_pct": max_drop_rate_pct, "is_passed": None,
             "note": "no RSU SDSM broadcasts inside the engaged window",
         }
-        _write_stats(stats_dir, "cp03_rsu_sdsm_transmission_drop_rate", stats)
+        _write_stats(stats_dir, "rsu_sdsm_transmission_drop_rate", stats)
         return None, stats
 
     latencies, drops, stale, out_of_window = correlate_across_boundary(
-        broadcasts, received, TRANSMISSION_LATE_THRESHOLD_MS
+        broadcasts, received, late_threshold_ms
     )
     checked = len(broadcasts) - len(out_of_window)
     drop_rate = (len(drops) / checked * 100.0) if checked else None
@@ -360,21 +365,21 @@ def rsu_transmission_drop_rate(
         "total_outside_recording_window": len(out_of_window),
         "drop_rate_pct": drop_rate,
         "max_drop_rate_pct": max_drop_rate_pct,
-        "late_threshold_ms": TRANSMISSION_LATE_THRESHOLD_MS,
+        "late_threshold_ms": late_threshold_ms,
         "receive_latency_ms": _percentiles([entry[2] for entry in latencies]),
         "is_passed": None if drop_rate is None else bool(drop_rate <= max_drop_rate_pct),
     }
-    _write_stats(stats_dir, "cp03_rsu_sdsm_transmission_drop_rate", stats)
+    _write_stats(stats_dir, "rsu_sdsm_transmission_drop_rate", stats)
     return stats["is_passed"], stats
 
 
 # --------------------------------------------------------------------------
-# DT-05: detection -> SDSM receipt latency at the vehicle
+# Detection -> SDSM receipt latency at the vehicle
 # --------------------------------------------------------------------------
 
 def detection_to_sdsm_receipt_latency(
     mcap_path, window, stats_dir=None,
-    threshold_sec=DETECTION_TO_SDSM_RECEIPT_LATENCY_THRESHOLD_SEC,
+    threshold_sec=cfg.DELIVERY_LATENCY.max_median_latency_sec,
 ):
     """End-to-end: camera observation -> CARMA Platform receiving it in an SDSM."""
     detections = sdsm_object_detections(mcap_path, window)
@@ -383,7 +388,7 @@ def detection_to_sdsm_receipt_latency(
             "sample_count": 0, "median_latency_s": None, "is_passed": None,
             "note": "no SDSM object detections inside the engaged window",
         }
-        _write_stats(stats_dir, "dt05_detection_to_sdsm_receipt_latency", stats)
+        _write_stats(stats_dir, "detection_to_sdsm_receipt_latency", stats)
         return None, stats
 
     latency_sec = np.array(
@@ -399,7 +404,7 @@ def detection_to_sdsm_receipt_latency(
         "threshold_s": threshold_sec,
         "is_passed": bool(median < threshold_sec),
     }
-    _write_stats(stats_dir, "dt05_detection_to_sdsm_receipt_latency", stats)
+    _write_stats(stats_dir, "detection_to_sdsm_receipt_latency", stats)
     return stats["is_passed"], (
         stats | {
             "_detection_times_sec": np.array([d["detection_time_sec"] for d in detections]),
@@ -409,7 +414,7 @@ def detection_to_sdsm_receipt_latency(
 
 
 # --------------------------------------------------------------------------
-# PL-01: message rates, and the OBU radio side
+# Message rates, and the OBU radio side
 # --------------------------------------------------------------------------
 
 def topic_active_intervals(mcap_path, topic, window, gap_sec) -> List[Tuple[float, float]]:
@@ -444,7 +449,7 @@ def topic_active_intervals(mcap_path, topic, window, gap_sec) -> List[Tuple[floa
     return [(float(a), float(b)) for a, b in zip(starts, ends) if b > a]
 
 
-def detection_intervals(detection_records, window, gap_sec=0.5) -> List[Tuple[float, float]]:
+def detection_intervals(detection_records, window, gap_sec=cfg.MESSAGE_RATES.detection_gap_sec) -> List[Tuple[float, float]]:
     """Periods inside ``window`` during which the camera was reporting detections.
 
     Consecutive detections more than ``gap_sec`` apart start a new period. Needed
@@ -467,7 +472,8 @@ def detection_intervals(detection_records, window, gap_sec=0.5) -> List[Tuple[fl
 
 
 def message_rate(mcap_path, topic, expected_rate_hz, window, stats_dir=None,
-                 tolerance_pct=0.2, stats_name=None, active_intervals=None):
+                 tolerance_pct=cfg.MESSAGE_RATES.rate_tolerance_pct, stats_name=None,
+                 active_intervals=None):
     """Average receive/broadcast rate of one topic over the engaged window.
 
     ``active_intervals`` restricts both the message count and the duration to
@@ -476,7 +482,8 @@ def message_rate(mcap_path, topic, expected_rate_hz, window, stats_dir=None,
 
     Returns ``is_passed=None`` when the topic is absent from the recording: the
     check is inapplicable, not failed. MAP and SPAT are in exactly that position
-    for this session -- they were never recorded, so there is nothing to regress.
+    for the verification sessions -- they were never recorded, so there is
+    nothing to regress.
     """
     counts = mcap_reader.topic_message_counts(mcap_path)
     label = stats_name or topic.strip("/").replace("/", "_")
@@ -487,7 +494,7 @@ def message_rate(mcap_path, topic, expected_rate_hz, window, stats_dir=None,
             "not_applicable": True,
             "note": "topic absent from this recording; nothing to evaluate",
         }
-        _write_stats(stats_dir, f"pl01_{label}_rate", stats)
+        _write_stats(stats_dir, f"{label}_rate", stats)
         return None, stats
 
     reader, _type_map, start_ns = mcap_reader.open_bagfile(str(mcap_path), topics=[topic])
@@ -536,7 +543,7 @@ def message_rate(mcap_path, topic, expected_rate_hz, window, stats_dir=None,
             "topic is present in the recording but no messages fall inside the "
             "analysis window; this is absence, not a slow rate"
         )
-    _write_stats(stats_dir, f"pl01_{label}_rate", stats)
+    _write_stats(stats_dir, f"{label}_rate", stats)
     return stats["is_passed"], stats
 
 
@@ -618,5 +625,5 @@ def obu_radio_activity(obu_capture, capture_date, mcap_path, window, stats_dir=N
         stats["ota_reception_rate_pct"] = (
             matched / len(broadcast) * 100.0 if broadcast else None
         )
-    _write_stats(stats_dir, "pl01_obu_radio_activity", stats)
+    _write_stats(stats_dir, "obu_radio_activity", stats)
     return stats

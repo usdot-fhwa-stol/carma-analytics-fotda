@@ -1,9 +1,9 @@
-"""CS-01: verify that SDSMs place the spoofed pedestrian at the configured reference.
+"""Verify that SDSMs place the spoofed pedestrian at the configured reference.
 
 FLIRCameraDriver discards the camera's true location. It reports each detection
 as a cartesian offset from a configured remote reference point, and it writes
 that reference into the ``lat_0``/``lon_0`` of the detection's projection string.
-CS-01 checks that each SDSM puts the object at the reference plus the same
+This checks that each SDSM puts the object at the reference plus the same
 offset, and that the reported heading agrees with the detection velocity.
 
 The geometry and the pass criteria come from
@@ -17,13 +17,15 @@ the metric silently verify the wrong session, so the reference is read from the
 detections that fall inside the session's own runs.
 
 **It windows the logs to the session.** A Kafka dump holds the broker's whole
-retention. Unwindowed, CS-01 verifies every detection back to 2026-09-09 and
-reports a figure for several days of testing rather than for the session asked
-about.
+retention. Unwindowed, the check verifies every detection back to 2026-09-09
+and reports a figure for several days of testing rather than for the session
+asked about.
 """
 
 from __future__ import annotations
 
+import csv
+import json
 import re
 import sys
 import tempfile
@@ -31,6 +33,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from . import config as cfg
+from . import dataset
 from .readers import kafka_log
 
 # carma-streets is a hyphenated directory, so it is not importable by name
@@ -49,17 +53,14 @@ from sdsm_location_spoofing_verification import (  # noqa: E402
 # the SDSM dumps share in the same format.
 _CREATE_TIME = re.compile(r"CreateTime:\s*(\d{10,13})")
 
-# Margin added around the session's runs before windowing.
-WINDOW_MARGIN_MS = 120_000.0
-
-
-def session_window_ms(runs) -> Tuple[float, float]:
+def session_window_ms(runs, margin_ms: float = cfg.LOCATION_SPOOFING.window_margin_ms
+                      ) -> Tuple[float, float]:
     """Epoch-millisecond span that covers every run, plus a margin."""
     starts = [run.start_time.timestamp() * 1000.0 for run in runs]
     ends = [
         run.start_time.timestamp() * 1000.0 + run.dwell_sec * 1000.0 for run in runs
     ]
-    return min(starts) - WINDOW_MARGIN_MS, max(ends) + WINDOW_MARGIN_MS
+    return min(starts) - margin_ms, max(ends) + margin_ms
 
 
 def detect_reference(detection_log_path, window_ms) -> Tuple[float, float, Dict]:
@@ -126,8 +127,9 @@ def analyse_sessions(
     plots_dir: Optional[Path] = None,
     max_mean_position_error_m: float = DEFAULT_MAX_MEAN_POSITION_ERROR_M,
     max_mean_heading_error_deg: float = DEFAULT_MAX_MEAN_HEADING_ERROR_DEG,
+    window_margin_ms: float = cfg.LOCATION_SPOOFING.window_margin_ms,
 ) -> Dict:
-    """Run CS-01 once over the pooled runs of one or more sessions.
+    """Verify once over the pooled runs of one or more sessions.
 
     ``specs`` is a sequence of ``(name, runs, session)``. Each session is windowed
     to its own runs, then the windowed records are concatenated and verified
@@ -141,15 +143,15 @@ def analyse_sessions(
     """
     specs = list(specs)
     if not specs:
-        raise ValueError("CS-01 needs at least one session")
+        raise ValueError("verification needs at least one session")
 
     prepared = []
     for name, runs, session in specs:
         if session.kafka_detected_object is None:
-            raise FileNotFoundError(f"{name}: CS-01 needs the v2xhub_sim_sensor_detected_object log")
+            raise FileNotFoundError(f"{name}: the v2xhub_sim_sensor_detected_object log is required")
         if session.kafka_sdsm is None:
-            raise FileNotFoundError(f"{name}: CS-01 needs the v2xhub_sdsm_sub log")
-        window = session_window_ms(runs)
+            raise FileNotFoundError(f"{name}: the v2xhub_sdsm_sub log is required")
+        window = session_window_ms(runs, window_margin_ms)
         ref_lat, ref_lon, detail = detect_reference(session.kafka_detected_object, window)
         prepared.append((name, runs, session, window, ref_lat, ref_lon, detail))
 
@@ -164,7 +166,7 @@ def analyse_sessions(
             )
 
     per_session = []
-    with tempfile.TemporaryDirectory(prefix="cs01_") as scratch:
+    with tempfile.TemporaryDirectory(prefix="spoofing_") as scratch:
         scratch_path = Path(scratch)
         detections = scratch_path / "v2xhub_sim_sensor_detected_object.log"
         sdsms = scratch_path / "v2xhub_sdsm_sub.log"
@@ -215,5 +217,74 @@ def analyse_sessions(
 
 
 def analyse_session(runs, session, **kwargs) -> Dict:
-    """Run CS-01 over a single session. Thin wrapper over ``analyse_sessions``."""
+    """Verify a single session. Thin wrapper over ``analyse_sessions``."""
     return analyse_sessions([("session", runs, session)], **kwargs)
+
+
+# --------------------------------------------------------------------------
+# Driving the analysis, and its output
+# --------------------------------------------------------------------------
+
+def analyse_data_roots(data_roots, output_dir=None,
+                       config: cfg.LocationSpoofingConfig = cfg.LOCATION_SPOOFING,
+                       layout: cfg.SessionLayout = cfg.LAYOUT,
+                       **limits) -> Dict:
+    """Verify one or more session directories, pooled into one result.
+
+    ``limits`` passes ``max_mean_position_error_m`` and
+    ``max_mean_heading_error_deg`` through unchanged; their defaults live with
+    the verification tool in carma-streets so the two cannot disagree.
+    """
+    specs = []
+    for root in data_roots:
+        runs, session = dataset.load_session(root, layout)
+        specs.append((Path(root).name, runs, session))
+        print(f"{Path(root).name}: {len(runs)} runs")
+    if output_dir is not None:
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+    return analyse_sessions(specs, plots_dir=output_dir,
+                            window_margin_ms=config.window_margin_ms, **limits)
+
+
+def write_outputs(result: Dict, output_dir: Path, case: cfg.TestCase) -> None:
+    """The JSON, the per-object CSV and the console rollup.
+
+    ``case`` supplies the file stem and the label printed with the verdict.
+
+    ``result`` is consumed: the per-object rows are removed before the JSON is
+    written, because several thousand of them do not belong in a summary file.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    rows = result.pop("rows", [])
+    (output_dir / f"{case.prefix}.json").write_text(json.dumps(result, indent=2, default=float))
+    if rows:
+        with open(output_dir / f"{case.prefix}.csv", "w", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
+
+    nan = float("nan")
+    print()
+    print(f"  sessions pooled : {', '.join(result['sessions'])}")
+    print(f"  runs            : {result['total_runs']}")
+    for item in result["per_session"]:
+        print(f"      {item['session']}: {item['runs']} runs, "
+              f"{item['detection_records_in_window']} detections, "
+              f"{item['sdsm_records_in_window']} SDSMs")
+    print(f"  reference       : {result['reference_lat']:.7f}, {result['reference_lon']:.7f}")
+    print(f"  driver rotation : {result['driver_rotation_deg']:.2f} deg clockwise")
+    print(f"  verified        : {result.get('verified_objects', 0)} objects "
+          f"({result.get('unmatched_objects', 0)} unmatched)")
+    print(f"  position error  : mean {result.get('mean_position_error_m', nan):.4f} m  "
+          f"p95 {result.get('p95_position_error_m', nan):.4f} m  "
+          f"max {result.get('max_position_error_m', nan):.4f} m   "
+          f"-> {'PASS' if result.get('position_pass') else 'FAIL'} "
+          f"(< {result['max_mean_position_error_m']} m)")
+    print(f"  heading error   : mean {result.get('mean_heading_error_deg', nan):.4f} deg "
+          f"over {result.get('heading_objects', 0)} moving objects   "
+          f"-> {'PASS' if result.get('heading_pass') else 'FAIL'} "
+          f"(< {result['max_mean_heading_error_deg']} deg)")
+    print()
+    print(f"{case.metric}: {'PASS' if result['pass'] else 'FAIL'}")
+    print(f"  -> {output_dir}")

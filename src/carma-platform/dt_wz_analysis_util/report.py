@@ -1,9 +1,11 @@
-"""Shared reporting for the per-run CP metrics pooled across sessions.
+"""Shared reporting for the per-run measurements pooled across sessions.
 
-CP-02 and CP-03 are both "of N things checked, how many were lost", evaluated
-once per run against a 2% limit. They differ only in what they count, so the
-windowing, the pooling, the output files and the plot live here and each metric
-supplies its own measurement function.
+Several of the measurements are the same shape: "of N things checked, how many
+were lost", evaluated once per run against a limit. They differ only in what
+they count, so the windowing, the pooling, the output files and the plot live
+here and each measurement supplies its own per-run function. A latency
+measurement is the same shape with a median in place of a count, so it shares
+everything but the rollup.
 
 Pooling across sessions is the point: a per-run pass rate says how often the
 system met the limit, and the pooled rate says how much was actually lost. Both
@@ -15,7 +17,7 @@ from __future__ import annotations
 
 import csv
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, List
 
@@ -25,18 +27,18 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
+from . import config as cfg  # noqa: E402
 from . import dataset  # noqa: E402
 from . import metrics  # noqa: E402
 from .cascade.plots import stage_colors  # noqa: E402
 from guidance_scripts import get_engage_time  # noqa: E402
 
-SESSION_TZ = timezone(timedelta(hours=-4))
-
 
 def _iso(epoch_sec):
     if epoch_sec is None:
         return None
-    return datetime.fromtimestamp(epoch_sec, SESSION_TZ).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    return datetime.fromtimestamp(
+        epoch_sec, cfg.SESSION_TZ).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
 
 def engaged_window(run):
@@ -51,17 +53,17 @@ def engaged_window(run):
 
 
 def analyse_runs(data_roots: List[Path], measure: Callable, prepare: Callable = None,
-                 verbose: bool = True) -> List[Dict]:
+                 verbose: bool = True,
+                 layout: cfg.SessionLayout = cfg.LAYOUT) -> List[Dict]:
     """Run ``measure`` over every run of every session.
 
     ``prepare(session)`` may return a value passed to each ``measure`` call --
-    used by CP-02 to parse the session-wide detection log once rather than once
-    per run.
+    used by the detection-delivery measurement to parse the session-wide
+    detection log once rather than once per run.
     """
     rows: List[Dict] = []
     for root in data_roots:
-        runs = dataset.load_runs_csv(root / "runs.csv", root)
-        session = dataset.discover_session(root)
+        runs, session = dataset.load_session(root, layout)
         if verbose:
             print(f"{root.name}: {len(runs)} runs")
         context = prepare(session) if prepare else None
@@ -201,10 +203,9 @@ def plot_latency(rows: List[Dict], summary: Dict, title: str, output_path,
     axis.bar(range(len(usable)), values,
              color=[colors[row["condition"]] for row in usable],
              edgecolor="white", linewidth=0.8)
-    axis.axhline(summary["threshold"], color="#b00020", linestyle="--", linewidth=1.0)
-    axis.text(len(usable) - 0.4, summary["threshold"],
-              f" {summary['threshold']:g} {summary['unit']} limit", color="#b00020",
-              fontsize=8, va="bottom", ha="right")
+    cfg.threshold_line(axis, summary["threshold"],
+                       f"{summary['threshold']:g} {summary['unit']} limit",
+                       right_at=len(usable) - 0.4)
 
     axis.set_xticks(range(len(usable)))
     axis.set_xticklabels([row["run"] for row in usable], rotation=45, ha="right", fontsize=7)
@@ -220,12 +221,10 @@ def plot_latency(rows: List[Dict], summary: Dict, title: str, output_path,
         for condition in conditions
     ]
     axis.legend(handles=handles, frameon=False, fontsize=8)
-    axis.grid(axis="y", alpha=0.25, linewidth=0.6)
-    axis.set_axisbelow(True)
-    axis.spines["top"].set_visible(False)
-    axis.spines["right"].set_visible(False)
+    cfg.grid(axis)
+    cfg.despine(axis)
     figure.tight_layout()
-    figure.savefig(output_path, dpi=200)
+    figure.savefig(output_path, dpi=cfg.STYLE.figure_dpi)
     plt.close(figure)
     return output_path
 
@@ -246,12 +245,12 @@ def plot_rates(rows: List[Dict], summary: Dict, title: str, output_path):
     for index, row in enumerate(usable):
         if row["drop_rate_pct"]:
             axis.text(index, row["drop_rate_pct"], f"{row['dropped']}",
-                      ha="center", va="bottom", fontsize=7, color="#333333")
+                      ha="center", va="bottom", fontsize=7,
+                      color=cfg.STYLE.annotation_color)
 
-    axis.axhline(summary["threshold_pct"], color="#b00020", linestyle="--", linewidth=1.0)
-    axis.text(len(usable) - 0.4, summary["threshold_pct"],
-              f" {summary['threshold_pct']:g}% limit", color="#b00020",
-              fontsize=8, va="bottom", ha="right")
+    cfg.threshold_line(axis, summary["threshold_pct"],
+                       f"{summary['threshold_pct']:g}% limit",
+                       right_at=len(usable) - 0.4)
 
     axis.set_xticks(range(len(usable)))
     axis.set_xticklabels([row["run"] for row in usable], rotation=45, ha="right", fontsize=7)
@@ -267,18 +266,16 @@ def plot_rates(rows: List[Dict], summary: Dict, title: str, output_path):
         for condition in conditions
     ]
     axis.legend(handles=handles, frameon=False, fontsize=8)
-    axis.grid(axis="y", alpha=0.25, linewidth=0.6)
-    axis.set_axisbelow(True)
-    axis.spines["top"].set_visible(False)
-    axis.spines["right"].set_visible(False)
+    cfg.grid(axis)
+    cfg.despine(axis)
     figure.tight_layout()
-    figure.savefig(output_path, dpi=200)
+    figure.savefig(output_path, dpi=cfg.STYLE.figure_dpi)
     plt.close(figure)
     return output_path
 
 
 def write_outputs(summary: Dict, output_dir: Path, prefix: str, title: str) -> None:
-    """Write the JSON, the per-run CSV and the plot, mirroring CP-01's layout."""
+    """Write the JSON, the per-run CSV and the plot, in the suite's layout."""
     output_dir.mkdir(parents=True, exist_ok=True)
     rows = summary["runs_detail"]
 

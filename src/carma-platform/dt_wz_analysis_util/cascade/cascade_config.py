@@ -24,9 +24,13 @@ similarly-named ones in those tables:
 
 from __future__ import annotations
 
-# V2XHub logs the bracketed wall clock in UTC; the SDSS logs local time (UTC-4).
-V2XHUB_UTC_OFFSET_H = 0
-SDSS_UTC_OFFSET_H = -4
+from .. import config as _cfg
+
+# V2XHub logs the bracketed wall clock in UTC; the SDSS logs local time. Both
+# are properties of the session's hosts, so they are defined in the suite
+# config and re-exported here for the parsers that read these logs.
+V2XHUB_UTC_OFFSET_H = _cfg.V2XHUB_UTC_OFFSET_H
+SDSS_UTC_OFFSET_H = _cfg.SDSS_UTC_OFFSET_H
 
 # (column, host, label) in causal order.
 STAGES = (
@@ -113,5 +117,6 @@ ROS_TOPICS = (
 )
 
 # Tolerance when matching a fused track back to the detection that produced it.
-FUSED_MATCH_WINDOW_MS = 600.0
-FUSED_MATCH_RADIUS_M = 15.0
+# Tuning, not pipeline structure, so it lives with the other test settings.
+FUSED_MATCH_WINDOW_MS = _cfg.LATENCY_CASCADE.fused_match_window_ms
+FUSED_MATCH_RADIUS_M = _cfg.LATENCY_CASCADE.fused_match_radius_m
