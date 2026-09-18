@@ -87,6 +87,7 @@ src/carma-platform/
 | `run_pl01_analysis.py` | per-topic message rates, OBU radio activity | rate within +/-20% |
 
 | `run_cs01_analysis.py` | SDSM places the pedestrian at the reference | < 0.2 m, < 1 deg |
+| `run_pl03_analysis.py` | vehicle yields to the pedestrian it was warned about | >= 90% of valid runs |
 | `run_cascade_analysis.py` | per-hop latency, camera to fused output | reported, no limit |
 
 Every run is windowed to its **engaged interval**, taken from `/guidance/state`.
@@ -137,6 +138,14 @@ actually use, so the analysis runs on a plain Python venv:
 
 `parse_ros2_bags` falls back to `mcap_backend` automatically when `rosbag2_py` is
 absent, so the other analyses in this directory gain the same portability.
+
+**PL-03 scores only the valid runs.** A run counts toward the yield rate only if
+its camera detections were consistent and its SDSMs were consistently received,
+so the metric measures vehicle behaviour rather than sensing faults. Both checks
+are applied and every excluded run records which one excluded it. The trial is
+bounded by the engaged window; the start and end points confirm the vehicle drove
+the intended route, with the end checked over the whole recording since CARMA
+normally disengages once past the pedestrian.
 
 ## Reading the results carefully
 

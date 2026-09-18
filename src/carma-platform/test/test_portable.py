@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from dt_wz_analysis_util import cp01  # noqa: E402
 from dt_wz_analysis_util import cs01  # noqa: E402
+from dt_wz_analysis_util import pl03  # noqa: E402
 from dt_wz_analysis_util.portable import (  # noqa: E402
     kafka_log, obu_capture, pcap_backend, tcpdump_text,
 )
@@ -380,6 +381,104 @@ class TestCs01Windowing(unittest.TestCase):
                 cs01.detect_reference(path, (self.BASE + 1000, self.BASE + 2000))
         finally:
             os.unlink(path)
+
+
+class TestPl03Yield(unittest.TestCase):
+    """PL-03 turns geometry into a pass/fail, so the geometry is pinned here.
+
+    Two mistakes would each give a confident wrong answer rather than an error:
+    counting the stationary start as a yield, and losing the sign that separates
+    stopping short of the pedestrian from stopping beyond them.
+    """
+
+    import numpy as _np
+
+    def test_stationary_start_is_not_a_stop(self):
+        """Every run begins parked; that must not read as yielding."""
+        times = self._np.arange(0.0, 10.0, 0.1)
+        speeds = self._np.where(times < 3.0, 0.0, 5.0)
+        travelled = self._np.clip((times - 3.0) * 5.0, 0, None)
+        self.assertEqual(pl03.find_stops(times, speeds, travelled), [])
+
+    def test_a_halt_after_setting_off_is_a_stop(self):
+        times = self._np.arange(0.0, 20.0, 0.1)
+        speeds = self._np.full_like(times, 5.0)
+        speeds[times < 2.0] = 0.0                         # parked start
+        speeds[(times >= 10.0) & (times < 14.0)] = 0.0    # the yield
+        travelled = self._np.clip((times - 2.0) * 5.0, 0, None)
+        stops = pl03.find_stops(times, speeds, travelled)
+        self.assertEqual(len(stops), 1)
+        self.assertAlmostEqual(stops[0][0], 10.0, places=6)
+
+    def test_a_momentary_dip_is_not_a_stop(self):
+        times = self._np.arange(0.0, 20.0, 0.1)
+        speeds = self._np.full_like(times, 5.0)
+        speeds[(times >= 10.0) & (times < 10.2)] = 0.0    # 0.2 s, under the minimum
+        self.assertEqual(pl03.find_stops(times, speeds, times * 5.0), [])
+
+    def _eastbound(self, stop_east):
+        times = self._np.arange(0.0, 100.0, 1.0)
+        return times, times.copy(), self._np.zeros_like(times), float(stop_east)
+
+    def test_pedestrian_ahead_is_positive(self):
+        times, east, north, stop = self._eastbound(50.0)
+        distance, ahead = pl03.score_stop(stop, times, east, north, 60.0, 0.0)
+        self.assertAlmostEqual(distance, 10.0, places=3)
+        self.assertGreater(ahead, 9.0)
+
+    def test_pedestrian_behind_is_negative(self):
+        """The vehicle drove past. Distance alone cannot say so; the sign can."""
+        times, east, north, stop = self._eastbound(70.0)
+        distance, ahead = pl03.score_stop(stop, times, east, north, 60.0, 0.0)
+        self.assertAlmostEqual(distance, 10.0, places=3)
+        self.assertLess(ahead, -9.0)
+
+    def test_stop_just_past_the_crossing_is_still_a_yield(self):
+        """3 m past is inside GPS and median-position error, not an overshoot."""
+        times, east, north, stop = self._eastbound(63.0)
+        _distance, ahead = pl03.score_stop(stop, times, east, north, 60.0, 0.0)
+        self.assertGreater(ahead, -pl03.YIELD_TOLERANCE_M)
+
+    def test_stop_well_past_the_crossing_is_not_a_yield(self):
+        times, east, north, stop = self._eastbound(80.0)
+        _distance, ahead = pl03.score_stop(stop, times, east, north, 60.0, 0.0)
+        self.assertLess(ahead, -pl03.YIELD_TOLERANCE_M)
+
+    def _result(self, name, valid, yielded):
+        item = pl03.RunYield(run=name, condition="20sec", dwell_sec=20)
+        item.valid, item.yielded = valid, yielded
+        item.approach_distance_m = 38.0
+        if not valid:
+            item.invalid_reason = "camera detection gap of 3.3 s"
+        return item
+
+    def test_invalid_runs_are_excluded_but_still_reported(self):
+        results = [self._result("a", True, True), self._result("b", True, True),
+                   self._result("c", False, False)]
+        summary = pl03.summarise(results)
+        self.assertEqual(summary["valid_runs"], 2)
+        self.assertEqual(summary["invalid_runs"], 1)
+        self.assertEqual(summary["success_rate_pct"], 100.0)
+        self.assertTrue(summary["is_passed"])
+        # The excluded run still appears, with the reason it was excluded.
+        self.assertEqual(len(summary["runs_detail"]), 3)
+        self.assertEqual(summary["invalid_detail"][0]["run"], "c")
+        self.assertIn("camera detection gap", summary["invalid_detail"][0]["reason"])
+
+    def test_success_rate_is_measured_over_valid_runs_only(self):
+        """Invalid runs must neither drag the rate down nor prop it up."""
+        results = [self._result(str(i), True, i < 8) for i in range(10)]
+        results += [self._result(f"bad{i}", False, False) for i in range(5)]
+        summary = pl03.summarise(results)
+        self.assertEqual(summary["valid_runs"], 10)
+        self.assertEqual(summary["success_rate_pct"], 80.0)
+        self.assertFalse(summary["is_passed"])      # under the 90% target
+
+    def test_no_valid_runs_reports_rather_than_dividing_by_zero(self):
+        summary = pl03.summarise([self._result("a", False, False)])
+        self.assertIsNone(summary["success_rate_pct"])
+        self.assertIsNone(summary["is_passed"])
+        self.assertEqual(summary["headline"], "no valid runs")
 
 
 @unittest.skipUnless(HAS_DATA, f"verification session not present at {DATA_ROOT}")

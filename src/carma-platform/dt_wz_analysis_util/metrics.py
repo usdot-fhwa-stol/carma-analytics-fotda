@@ -157,6 +157,78 @@ def sdsm_object_detections(mcap_path, window=None) -> List[Dict]:
     return detections
 
 
+# J3224 wire units.
+SDSM_LAT_LON_UNITS_DEG = 1e-7
+SDSM_OFFSET_UNITS_M = 0.1
+
+
+def sdsm_object_positions(mcap_path, window=None) -> List[Dict]:
+    """Where each SDSM placed its detected object, in WGS84.
+
+    Companion to ``sdsm_object_detections``, which returns ids and times but no
+    position. Both decode ``/message/incoming_j3224_sdsm``, so they live together.
+
+    An object's location is the message's ``ref_pos`` plus the object's own
+    offsets. The offsets are **``offset_x`` north and ``offset_y`` east** -- not
+    the x-east convention the names suggest -- and both are in 0.1 m units.
+
+    Returns ``{object_id, latitude, longitude, receive_time_sec}`` per object.
+    """
+    counts = mcap_backend.topic_message_counts(mcap_path)
+    if not counts.get(INCOMING_J3224_TOPIC):
+        return []
+
+    # Imported here rather than at module scope: the geodesy lives in the
+    # carma-streets tree, which cs01 puts on sys.path.
+    import sys
+    sys.path.append(str(Path(__file__).resolve().parent.parent.parent / "carma-streets"))
+    from sdsm_location_spoofing_verification import enu_to_geodetic
+
+    reader, _type_map, _start = mcap_backend.open_bagfile(
+        str(mcap_path), topics=[INCOMING_J3224_TOPIC])
+    positions: List[Dict] = []
+    while reader.has_next():
+        _topic, message, log_time_ns = reader.read_next()
+        receive_sec = log_time_ns / 1e9
+        if window is not None and not (window[0] <= receive_sec <= window[1]):
+            continue
+        raw = message.to_dict()
+        reference = raw.get("ref_pos") or {}
+        if "latitude" not in reference or "longitude" not in reference:
+            continue
+        ref_lat = reference["latitude"] * SDSM_LAT_LON_UNITS_DEG
+        ref_lon = reference["longitude"] * SDSM_LAT_LON_UNITS_DEG
+
+        objects = raw.get("objects", [])
+        if isinstance(objects, dict):
+            objects = objects.get("detected_object_data", [])
+        for entry in objects:
+            if not isinstance(entry, dict):
+                continue
+            if "detected_object_common_data" not in entry:
+                entry = entry.get("detected_object_data") or {}
+            common = entry.get("detected_object_common_data") or {}
+            offsets = common.get("pos") or {}
+            north = (offsets.get("offset_x") or {}).get("object_distance")
+            east = (offsets.get("offset_y") or {}).get("object_distance")
+            if north is None or east is None:
+                continue
+            object_id = common.get("detected_id", {})
+            object_id = object_id.get("object_id") if isinstance(object_id, dict) else object_id
+            latitude, longitude = enu_to_geodetic(
+                np.array([east * SDSM_OFFSET_UNITS_M]),
+                np.array([north * SDSM_OFFSET_UNITS_M]),
+                ref_lat, ref_lon,
+            )
+            positions.append({
+                "object_id": int(object_id) if object_id is not None else None,
+                "latitude": float(latitude[0]),
+                "longitude": float(longitude[0]),
+                "receive_time_sec": receive_sec,
+            })
+    return positions
+
+
 # --------------------------------------------------------------------------
 # CP-02: raw detection -> SDSM drop rate
 # --------------------------------------------------------------------------

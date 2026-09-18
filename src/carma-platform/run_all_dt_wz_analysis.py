@@ -20,6 +20,7 @@ cp02/      detection -> SDSM received at the vehicle                   <= 2%
 cp03/      RSU broadcast -> CARMA Platform receipt                     <= 2%
 dt05/      detection -> SDSM receipt at the vehicle                    median < 0.3 s
 pl01/      per-topic message rates, OBU radio activity                 +/-20%
+pl03/      vehicle yields to the pedestrian                             >=90% of valid runs
 cs01/      SDSM location spoofing verification                         0.2 m, 1 deg
 cascade/   end-to-end per-detection latency breakdown                  (reported)
 =========  ==========================================================  ==========
@@ -47,6 +48,7 @@ from dt_wz_analysis_util import run_cp03_analysis
 from dt_wz_analysis_util import run_cs01_analysis
 from dt_wz_analysis_util import run_dt05_analysis
 from dt_wz_analysis_util import run_pl01_analysis
+from dt_wz_analysis_util import run_pl03_analysis
 
 # folder -> (module, the JSON it writes)
 ANALYSES = {
@@ -55,6 +57,7 @@ ANALYSES = {
     "cp03": (run_cp03_analysis, "cp03_rsu_to_vehicle.json"),
     "dt05": (run_dt05_analysis, "dt05_detection_to_sdsm_receipt.json"),
     "pl01": (run_pl01_analysis, "pl01_message_communication.json"),
+    "pl03": (run_pl03_analysis, "pl03_vehicle_yield.json"),
     "cs01": (run_cs01_analysis, "cs01_location_spoofing.json"),
     "cascade": (run_cascade_analysis, None),
 }
@@ -69,6 +72,7 @@ def _headline(name: str, result_path: Path):
     for key in ("metric", "headline", "pass_rate", "runs_passed", "runs_evaluated",
                 "pooled_drop_rate_pct", "pooled_median", "unit", "total_dropped",
                 "total_checked", "pass", "mean_position_error_m", "mean_heading_error_deg",
+                "success_rate_pct", "valid_runs", "invalid_runs", "is_passed",
                 "verified_objects", "failed_runs"):
         if key in summary:
             headline[key] = summary[key]

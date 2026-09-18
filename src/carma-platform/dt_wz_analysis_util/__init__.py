@@ -30,4 +30,5 @@ if _PARENT not in sys.path:
 
 __all__ = ["cascade", "cp01", "cs01", "dataset", "metrics", "portable", "report",
 "run_cp01_analysis", "run_cp02_analysis", "run_cp03_analysis", "run_cs01_analysis",
-"run_dt05_analysis", "run_pl01_analysis", "run_cascade_analysis"]
+"run_dt05_analysis", "run_pl01_analysis",
+    "run_pl03_analysis", "run_cascade_analysis"]
