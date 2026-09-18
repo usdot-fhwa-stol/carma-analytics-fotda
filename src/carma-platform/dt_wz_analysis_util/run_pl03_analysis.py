@@ -55,6 +55,14 @@ PEDESTRIAN_COLOR = "#6b6b6b"
 # teal, so the marker cannot be mistaken for a point on the speed ramp.
 STOP_COLOR = "#00707a"
 
+# Line width in points at the slowest and fastest speed observed. Width runs
+# *inverse* to speed, so a halted vehicle draws a thick stroke and a fast one a
+# thin thread. This encodes speed a second time, alongside the colour ramp: the
+# redundancy is the point, since it keeps the yield legible where the dark end of
+# the ramp is hard to separate by eye, and in print or greyscale.
+LINEWIDTH_SLOW = 5.0
+LINEWIDTH_FAST = 5.0
+
 
 def analyse(data_roots):
     """Score every run, then mark the ones whose detection data was unsound."""
@@ -144,7 +152,7 @@ def plot_summary(results, summary, output_path):
     handles.append(plt.Rectangle((0, 0), 1, 1, facecolor="white", edgecolor="#444444",
                                  hatch="//", label="invalid run"))
     axis.legend(handles=handles, frameon=False, fontsize=8, ncol=2)
-    axis.grid(axis="y", alpha=0.25, linewidth=0.6)
+    axis.grid(axis="y", alpha=0.1, linewidth=1.0)
     axis.set_axisbelow(True)
     axis.spines["top"].set_visible(False)
     axis.spines["right"].set_visible(False)
@@ -174,15 +182,29 @@ def plot_trajectories(results, output_path, cmap=DEFAULT_SPEED_CMAP):
     # The corridor is roughly 140 m by 25 m. Equal aspect is required -- these are
     # ground positions -- so the figure is shaped to match, otherwise the axes
     # box inflates the short dimension into empty space.
-    figure, axis = plt.subplots(figsize=(13, 4.8))
+    figure, axis = plt.subplots(figsize=(13, 4.8), dpi=300)
+
+    # Speed range across every run, so one line width means the same speed
+    # everywhere rather than being rescaled run by run.
+    slowest = min(float(np.nanmin(t["speed"])) for t in tracks)
+    span = peak - slowest
 
     for track in tracks:
         points = np.column_stack([track["east"], track["north"]]).reshape(-1, 1, 2)
         segments = np.concatenate([points[:-1], points[1:]], axis=1)
-        # Thick and translucent: thirty paths lie on top of one another, so weight
-        # carries the corridor while alpha keeps a single outlier visible through it.
-        collection = LineCollection(segments, cmap=cmap, norm=norm, linewidth=3.2, alpha=0.35)
-        collection.set_array(track["speed"][:-1])
+
+        # Width runs *inverse* to speed, alongside the colour. Two encodings of
+        # one quantity, which is redundancy rather than clutter: a halted vehicle
+        # draws a thick dark stroke and a fast one a thin bright thread, so the
+        # yield is legible from the line's shape even where the ramp's dark end
+        # is hard to separate by eye.
+        speed = track["speed"][:-1]
+        fraction = (speed - slowest) / span if span > 0 else np.zeros_like(speed)
+        widths = LINEWIDTH_SLOW + fraction * (LINEWIDTH_FAST - LINEWIDTH_SLOW)
+
+        collection = LineCollection(segments, cmap=cmap, norm=norm,
+                                    linewidths=widths, alpha=0.2)
+        collection.set_array(speed)
         axis.add_collection(collection)
 
     # Filled, edgeless, and very transparent. Roughly 6700 reports land in a few
@@ -191,8 +213,8 @@ def plot_trajectories(results, output_path, cmap=DEFAULT_SPEED_CMAP):
     # marker would draw 6700 rings and lose that.
     axis.scatter(np.concatenate([t["ped_east"] for t in tracks]),
                  np.concatenate([t["ped_north"] for t in tracks]),
-                 s=44, color=PEDESTRIAN_COLOR, edgecolors="none",
-                 alpha=0.05, zorder=3)
+                 s=10, color=PEDESTRIAN_COLOR, edgecolors="none",
+                 alpha=0.02, zorder=3)
 
     axis.legend(handles=[
         plt.Line2D([], [], color=plt.get_cmap(cmap)(0.6), linewidth=3.2, alpha=0.7,
@@ -215,6 +237,7 @@ def plot_trajectories(results, output_path, cmap=DEFAULT_SPEED_CMAP):
                          (float(np.median([s[0] for s in stops])),
                           float(np.median([s[1] for s in stops]))), (30, -46)))
     callouts.append(("trial end", (float(end_east[0]), float(end_north[0])), (48, 34)))
+    callouts.append(("pedestrian", (-75., -7.), (5, 40)))
 
     for label, (x, y), offset in callouts:
         axis.annotate(
