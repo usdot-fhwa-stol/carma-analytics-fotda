@@ -2,8 +2,7 @@
 
 Analyses a pedestrian-detection-to-SDSM verification session.
 
-Requires `pandas numpy matplotlib mcap scipy`. No ROS 2, no `tshark`, no
-`pycrate`.
+Requires `pandas numpy matplotlib mcap scipy`.
 
 ## Running it
 
@@ -28,14 +27,14 @@ Run them all:
 python src/carma-platform/run_all_dt_wz_analysis.py \
     --data-root <session-dir> \
     --data-root <another-session-dir> \
-    --pl01-data-root <message-rate-session-dir> \
+    --msg-rate-data-root <message-rate-session-dir> \
     --output-dir out
 ```
 
 Add `--only cp02 cp03` to run a subset.
 
 PL-01 needs two groups of sessions, because no single session carries every
-message type. `--pl01-data-root` supplies the second group to the wrapper;
+message type. `--msg-rate-data-root` supplies the second group to the wrapper;
 `--secondary-data-root` does the same for the single-test entry point.
 
 Every limit and tolerance is a field in `config.py` and has a generated flag:
