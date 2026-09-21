@@ -64,7 +64,7 @@ def main(argv=None):
                         help="Session directory with runs.csv; repeat to pool sessions")
     parser.add_argument("--output-dir", type=Path, required=True,
                         help="Parent directory; each test writes into its own sub-folder")
-    parser.add_argument("--pl01-data-root", type=Path, action="append",
+    parser.add_argument("--msg-rate-data-root", type=Path, action="append",
                         help="Session(s) carrying MAP/SPAT/MOM/BSM for PL-01. When "
                              "given, --data-root is used for PL-01's SDSM rate "
                              "instead. Needed because no single session carries "
