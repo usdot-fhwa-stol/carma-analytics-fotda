@@ -697,7 +697,7 @@ def plot_trajectories(results: List[RunYield], output_path, title: str, cmap=Non
         # Drawn at a readable alpha: at the alpha used on the plot a single
         # legend marker would be invisible.
         plt.Line2D([], [], marker="o", linestyle="", markersize=8, alpha=0.55,
-                   color=style.pedestrian_color, label="pedestrian location"),
+                   color=style.pedestrian_color, label="SDSM pedestrian location"),
     ], frameon=False, fontsize=9, loc="lower right")
 
     # Name the phases where they happen, on the valid panel only: repeating them
@@ -711,7 +711,7 @@ def plot_trajectories(results: List[RunYield], output_path, title: str, cmap=Non
                          (float(np.median([s[0] for s in stops])),
                           float(np.median([s[1] for s in stops]))), (30, -46)))
     callouts.append(("trial end", (float(end_east[0]), float(end_north[0])), (48, 34)))
-    callouts.append(("pedestrian", (-75., -7.), (5, 40)))
+    callouts.append(("SDSM pedestrian", (-75., -7.), (5, 40)))
 
     for label, (x, y), offset in callouts:
         axes[0].annotate(
