@@ -168,11 +168,18 @@ class CameraDetectionConfig:
     # A gap wider than this many frame periods is reported as a stall span.
     gap_report_factor: float = 1.5
 
-    # How far either side of the nominal start time to look for a run's
-    # detections. The search also stops at the next row's start in runs.csv
-    # (RunSpec.end_time), because runs can be closer together than this: 2-4
-    # minutes on 2026-09-23.
-    search_before_ms: float = 60_000.0
+    # Where to look for a run's detections: from its runs.csv start to the next
+    # row's start (RunSpec.end_time), since the rows are chronological and a
+    # trial cannot outlast the start of the next one. search_after_ms caps the
+    # last row, which has no successor.
+    #
+    # No look-back before the start. Across all 41 runs the pedestrian's dwell
+    # begins 10-148 s after the recorded start. A 60 s look-back used to be
+    # allowed and its only effect was wrong: on 2026-09-14 5sec_run3 it reached
+    # a 4.3 s burst at 14:58:07, before the run began and outside its engaged
+    # window, and took it over the real 7.9 s dwell at 14:59:48 because 4.3 s
+    # is nearer the nominal 5 s.
+    search_before_ms: float = 0.0
     search_after_ms: float = 240_000.0
 
     # A frame whose arrival at V2XHub trails its capture by more than this is

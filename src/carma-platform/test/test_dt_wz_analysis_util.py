@@ -252,6 +252,35 @@ class TestCp01Anchoring(unittest.TestCase):
         self.assertEqual(got_a.first_detection_ms, self.BASE + 45_000)
         self.assertEqual(got_b.first_detection_ms, self.BASE + 225_000)
 
+    def test_a_burst_before_the_run_start_is_not_taken(self):
+        # 2026-09-14 5sec_run3: a 4.3 s burst 52 s before the run's start and
+        # the real 7.9 s dwell 48 s after it. The earlier one is nearer 5 s, so
+        # any look-back before the start picks the wrong one.
+        frames = self._frames((-52_000, 44), (48_000, 80))
+        got = camera_detections.measure_run(self._Run(self.BASE, 5), frames)
+        self.assertEqual(got.first_detection_ms, self.BASE + 48_000)
+        self.assertEqual(got.received_frames, 80)
+
+    def _engaged(self, start_ms, end_ms):
+        return ((self.BASE + start_ms) / 1000.0, (self.BASE + end_ms) / 1000.0)
+
+    def test_the_engaged_window_beats_a_walk_back_nearer_the_nominal(self):
+        # 2026-09-14 5sec_run3: the 7.9 s dwell is inside the engaged window, a
+        # 3.6 s walk-back comes after it and is nearer the nominal 5 s.
+        frames = self._frames((48_000, 80), (106_000, 37))
+        got = camera_detections.measure_run(
+            self._Run(self.BASE, 5), frames,
+            engaged_window=self._engaged(37_000, 73_000))
+        self.assertEqual(got.first_detection_ms, self.BASE + 48_000)
+
+    def test_the_engaged_window_beats_a_longer_burst_afterwards(self):
+        # 20sec_run5: the 21 s dwell is in the window, a 31.5 s burst follows.
+        frames = self._frames((10_000, 211), (85_000, 316))
+        got = camera_detections.measure_run(
+            self._Run(self.BASE, 20), frames,
+            engaged_window=self._engaged(0, 39_000))
+        self.assertEqual(got.first_detection_ms, self.BASE + 10_000)
+
     def test_a_claimed_burst_is_not_given_out_twice(self):
         frames = self._frames((45_000, 150))
         claimed = {self.BASE + 45_000}

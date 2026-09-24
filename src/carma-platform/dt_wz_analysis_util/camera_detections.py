@@ -75,6 +75,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 from . import config as cfg  # noqa: E402
 from . import dataset  # noqa: E402
+from . import report  # noqa: E402
 from .cascade.plots import stage_colors  # noqa: E402
 from .readers import flir_websocket, kafka_log  # noqa: E402
 
@@ -191,7 +192,8 @@ def _bursts(frames: np.ndarray, burst_gap_ms: float):
 def measure_run(run, frames: np.ndarray, config: cfg.CameraDetectionConfig = cfg.CAMERA_DETECTIONS,
                 websocket_frames=None, kafka_frames=None,
                 search_end_ms: Optional[float] = None,
-                claimed: Optional[set] = None) -> RunDrops:
+                claimed: Optional[set] = None,
+                engaged_window=None) -> RunDrops:
     """Frame accounting for one run's dwell window.
 
     ``frames`` is the sorted camera-time array the count is taken from -- the
@@ -209,6 +211,16 @@ def measure_run(run, frames: np.ndarray, config: cfg.CameraDetectionConfig = cfg
     can be closer together than the search span: on 2026-09-23 they were 2-4
     minutes apart, and without the bound four runs took their neighbour's
     burst, which happened to be nearer the nominal dwell.
+
+    ``engaged_window`` is the run's ``(start, end)`` under guidance, in epoch
+    seconds, from ``/guidance/state``. When given, the dwell is the burst that
+    overlaps it most -- the pedestrian the vehicle was actually driving at.
+    Burst length alone is not a reliable guide: the window can also hold the
+    pedestrian stepping in beforehand or walking back afterwards, and those
+    can be nearer the nominal dwell than the real one (2026-09-14 5sec_run3:
+    the 7.9 s dwell lost to a 3.6 s walk-back) or longer than it (31 s after
+    10sec_run3 and 20sec_run5). Without an engaged window, or where no burst
+    overlaps it, the nearest-to-nominal rule is the fallback.
     """
     frame_interval_ms = config.frame_interval_ms
     expected = round(run.dwell_sec * config.detection_rate_hz)
@@ -227,9 +239,11 @@ def measure_run(run, frames: np.ndarray, config: cfg.CameraDetectionConfig = cfg
     if len(window) == 0:
         return result
 
-    # Split into bursts, then take the burst whose duration is closest to this
-    # run's condition. The pedestrian's real dwell is never exactly the nominal
-    # time, so the burst itself defines the measurement window.
+    # Split into bursts, then take the one belonging to the trial: the burst
+    # that overlaps the engaged window most, ties and the no-window case going
+    # to the burst whose length is nearest the nominal dwell. The pedestrian's
+    # real dwell is never exactly the nominal time, so the burst itself then
+    # defines the measurement window.
     bursts = _bursts(window, config.burst_gap_ms)
     if claimed:
         bursts = [burst for burst in bursts if float(burst[0]) not in claimed]
@@ -237,7 +251,17 @@ def measure_run(run, frames: np.ndarray, config: cfg.CameraDetectionConfig = cfg
     if not bursts:
         return result
     nominal_ms = run.dwell_sec * 1000.0
-    best = min(bursts, key=lambda burst: abs((burst[-1] - burst[0]) - nominal_ms))
+
+    def off_nominal(burst):
+        return abs((burst[-1] - burst[0]) - nominal_ms)
+
+    def overlap(burst):
+        if engaged_window is None:
+            return 0.0
+        low, high = engaged_window[0] * 1000.0, engaged_window[1] * 1000.0
+        return max(0.0, min(float(burst[-1]), high) - max(float(burst[0]), low))
+
+    best = min(bursts, key=lambda burst: (-overlap(burst), off_nominal(burst)))
     if claimed is not None:
         claimed.add(float(best[0]))
 
@@ -302,14 +326,21 @@ def analyse_session(runs, session,
         )
 
     # runs.csv order is chronological and each run is bounded by the next
-    # one's start (RunSpec.end_time); no burst is given to two runs.
+    # one's start (RunSpec.end_time); no burst is given to two runs; and the
+    # dwell is the burst overlapping the run's engaged window.
     claimed: set = set()
-    return [
-        measure_run(run, frames, config,
-                    websocket_frames=websocket_frames, kafka_frames=kafka_frames,
-                    claimed=claimed)
-        for run in runs
-    ]
+    results = []
+    for run in runs:
+        try:
+            engaged = report.engaged_window(run)
+        except Exception as error:  # unreadable bag: fall back to burst length
+            print(f"  {run.name}: no engaged window ({error}); choosing by dwell length")
+            engaged = None
+        results.append(measure_run(
+            run, frames, config,
+            websocket_frames=websocket_frames, kafka_frames=kafka_frames,
+            claimed=claimed, engaged_window=engaged))
+    return results
 
 
 def analyse_sessions(data_roots, config: cfg.CameraDetectionConfig = cfg.CAMERA_DETECTIONS,
