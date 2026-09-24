@@ -1,8 +1,31 @@
-import rosbag2_py
+"""Read MCAP recordings, through rosbag2_py where available.
+
+When ROS 2 is not installed this module transparently falls back to
+``dt_wz_analysis_util.readers.mcap_reader``, which decodes CDR using the ros2msg schema text stored
+inside the MCAP itself. The public names below keep the same signatures and
+return shapes either way, so callers need not know which path they got. Set
+``USE_FALLBACK_READER`` to see which one is live.
+"""
+
 import numpy as np
 import os
-from rosidl_runtime_py.utilities import get_message
-from rclpy.serialization import deserialize_message
+
+try:
+    import rosbag2_py
+    from rosidl_runtime_py.utilities import get_message
+    from rclpy.serialization import deserialize_message
+
+    USE_FALLBACK_READER = False
+except ImportError:  # no ROS 2 on this machine
+    from dt_wz_analysis_util.readers import mcap_reader as _fallback
+
+    USE_FALLBACK_READER = True
+    # Keep the names bound so the module's attribute surface is the same either
+    # way: callers and test doubles can reference them without having to know
+    # which backend is live. They are only ever called on the rosbag2 path.
+    rosbag2_py = None
+    get_message = None
+    deserialize_message = None
 
 def get_rosbag_options(path, serialization_format="cdr", storage_id="sqlite3"):
     """
@@ -63,6 +86,11 @@ def open_bagfile(path, topics=[], serialization_format="cdr", storage_id="mcap")
     Raises:
         ValueError: If the bag file cannot be opened or if there are issues with the topics.
     """
+    if USE_FALLBACK_READER:
+        return _fallback.open_bagfile(
+            path, topics=topics, serialization_format=serialization_format, storage_id=storage_id
+        )
+
     storage_options, converter_options = get_rosbag_options(
         path, serialization_format=serialization_format, storage_id=storage_id
     )
@@ -163,8 +191,15 @@ def read_messages(reader, topics, type_map, field_extractors):
     while reader.has_next():
         topic, msg_data, timestamp = reader.read_next()
         if topic in topics:
-            msg_type = type_map[topic]
-            msg = deserialize_message(msg_data, get_message(msg_type))
+            if isinstance(msg_data, (bytes, bytearray)):
+                msg_type = type_map[topic]
+                msg = deserialize_message(msg_data, get_message(msg_type))
+            else:
+                # The fallback reader decodes as it reads -- it holds the schema
+                # table -- so it hands back a message rather than raw bytes.
+                # Branching on the payload rather than on which backend is loaded
+                # keeps this correct for any reader that does its own decoding.
+                msg = msg_data
 
             try:
                 extracted_value = field_extractors[topic](msg)
