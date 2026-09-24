@@ -152,6 +152,14 @@ def save_tracks(results: List["RunYield"], cache_path) -> Optional[Path]:
     for item in results:
         if not item.track:
             continue
+        if item.run in names:
+            # Run ids are only unique within a session, so pooling two sessions
+            # that both number a run the same way would silently overwrite one
+            # here and hand back fewer tracks than were saved. Fail instead:
+            # give the runs distinct ids in runs.csv.
+            raise ValueError(
+                f"duplicate run id {item.run!r} across the pooled sessions; "
+                f"the track cache keys on it, so the ids must be unique")
         names.append(item.run)
         for key in _TRACK_ARRAYS:
             payload[f"{item.run}|{key}"] = np.asarray(item.track[key], dtype=float)

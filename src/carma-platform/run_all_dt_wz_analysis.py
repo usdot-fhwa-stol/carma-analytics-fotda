@@ -82,11 +82,11 @@ def main(argv=None):
     for code in selected:
         output_dir = args.output_dir / code
         arguments = list(roots)
-        if code == "pl01" and args.pl01_data_root:
+        if code == "pl01" and args.msg_rate_data_root:
             # PL-01 measures MAP/SPAT/MOM/BSM on the dedicated session and SDSM
             # on the verification sessions, so its two groups swap roles here.
             arguments = []
-            for root in args.pl01_data_root:
+            for root in args.msg_rate_data_root:
                 arguments += ["--data-root", str(root)]
             for root in args.data_root:
                 arguments += ["--secondary-data-root", str(root)]

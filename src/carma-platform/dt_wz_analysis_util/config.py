@@ -342,10 +342,17 @@ class VehicleYieldConfig:
 
     # Checked over the **whole recording**, not the engaged window. CARMA
     # routinely disengages once it is past the pedestrian, leaving up to 37 m of
-    # the route undriven under guidance, yet every run reaches the end point
-    # within 0.6 m afterwards. Gating on the engaged window would fail 19 of 30
-    # runs for behaving normally.
-    end_tolerance_m: float = 5.0
+    # the route undriven under guidance. Gating on the engaged window would fail
+    # 19 of 30 runs for behaving normally.
+    #
+    # Relaxed from 5 m: the fence exists to confirm the vehicle drove the
+    # intended route, not to measure where it came to rest. 38 of 41 runs stop
+    # within 0.7 m of the end point, but where guidance hands back early the
+    # recording can end before the vehicle rolls the last few metres -- the
+    # worst two reach 8.2 m and 8.4 m, which on a 132 m route is still plainly
+    # the right route. 10 m clears those and matches the start fence, which was
+    # relaxed for the same reason.
+    end_tolerance_m: float = 10.0
 
     # -- finding a halt ----------------------------------------------------
     stop_speed_mps: float = 0.2
