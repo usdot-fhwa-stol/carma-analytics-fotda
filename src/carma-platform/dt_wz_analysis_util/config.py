@@ -635,6 +635,12 @@ class PlotStyle:
     # so a mid-speed segment cannot read as a fast one.
     speed_colormap: str = "plasma"
 
+    # Unit the speed figures are drawn in. Display only: the recorded speeds,
+    # the halt rule, the tables and the cache all stay in m/s, so changing this
+    # cannot change a result.
+    speed_unit: str = "mph"
+    speed_unit_per_mps: float = 2.2369362920544   # 1 m/s = 2.237 mph
+
     # Acceptance lines and the runs that cross them.
     threshold_color: str = "#b00020"
     annotation_color: str = "#333333"

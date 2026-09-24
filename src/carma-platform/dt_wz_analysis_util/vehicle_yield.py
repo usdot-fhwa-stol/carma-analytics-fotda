@@ -615,7 +615,7 @@ def _draw_corridor(axis, tracks, cmap, norm, slowest, span, limits,
 
         collection = LineCollection(segments, cmap=cmap, norm=norm,
                                     linewidths=widths, alpha=style.trajectory_alpha)
-        collection.set_array(speed)
+        collection.set_array(speed * style.speed_unit_per_mps)
         axis.add_collection(collection)
 
     # Filled, edgeless, and very transparent. Thousands of reports land in a few
@@ -670,7 +670,8 @@ def plot_trajectories(results: List[RunYield], output_path, title: str, cmap=Non
     peak = max(float(np.nanmax(t["speed"])) for t in tracks)
     slowest = min(float(np.nanmin(t["speed"])) for t in tracks)
     span = peak - slowest
-    norm = plt.Normalize(0.0, peak)
+    # Colour is drawn in the display unit; the width fraction above is unitless.
+    norm = plt.Normalize(0.0, peak * style.speed_unit_per_mps)
 
     all_east = np.concatenate([t["east"] for t in tracks] + [t["ped_east"] for t in tracks])
     all_north = np.concatenate([t["north"] for t in tracks] + [t["ped_north"] for t in tracks])
@@ -731,7 +732,7 @@ def plot_trajectories(results: List[RunYield], output_path, title: str, cmap=Non
 
     bar = figure.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=axes,
                           pad=0.02, shrink=0.42)
-    bar.set_label("Vehicle speed (m/s)")
+    bar.set_label(f"Vehicle speed ({style.speed_unit})")
     bar.outline.set_visible(False)
 
     figure.suptitle(f"{title} — vehicle trajectories and pedestrian positions "
@@ -800,8 +801,9 @@ def plot_speed_profile(results: List[RunYield], output_path, title: str,
     profiles, crossings = [], []
     for track, stop in tracks:
         distance = distance_along(track, stop)
-        profiles.append((distance, track["speed"]))
-        axis.plot(distance, track["speed"], color=style.individual_color,
+        shown = track["speed"] * style.speed_unit_per_mps
+        profiles.append((distance, shown))
+        axis.plot(distance, shown, color=style.individual_color,
                   linewidth=0.6, alpha=0.55, zorder=2)
         # Where this run's pedestrian sat, in the same distance coordinate.
         if len(track["ped_east"]):
@@ -849,7 +851,7 @@ def plot_speed_profile(results: List[RunYield], output_path, title: str,
                       fontsize=9, color="#444444", ha="right", va="top")
 
     axis.set_xlabel("Distance travelled, relative to where the vehicle stopped (m)")
-    axis.set_ylabel("Vehicle speed (m/s)")
+    axis.set_ylabel(f"Vehicle speed ({style.speed_unit})")
     axis.set_title(f"{title} — speed profile along the trial", loc="left", fontsize=11)
     axis.set_xlim(grid.min(), grid.max())
     axis.set_ylim(bottom=0)
