@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import csv
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -65,6 +65,10 @@ class RunSpec:
     # are found from the recording itself.
     start_time: Optional[datetime] = None
     rsu_pcap: Optional[Path] = None
+    # The next row's start time. runs.csv lists runs in chronological order, so
+    # a trial can extend no further than the moment the next one began. None
+    # for the last row, and for sessions that record no start times.
+    end_time: Optional[datetime] = None
 
     @property
     def name(self) -> str:
@@ -203,6 +207,20 @@ def load_runs_csv(runs_csv, data_root=None,
                     mcap=_resolve(root, layout.rosbag_dir, clean["rosbag_fn"]),
                 )
             )
+
+    # Rows are in chronological order, which bounds each trial by the next
+    # row's start. Checked rather than assumed: a mistyped date -- 2026-09-23
+    # runs once entered as 2026-09-14 -- would otherwise shift every window.
+    timed = [run for run in runs if run.start_time is not None]
+    for earlier, later in zip(timed, timed[1:]):
+        if later.start_time <= earlier.start_time:
+            raise ValueError(
+                f"{runs_csv}: rows must be in chronological order, but "
+                f"{later.name} ({later.start_time:%Y-%m-%d %H:%M:%S}) does not start "
+                f"after {earlier.name} ({earlier.start_time:%Y-%m-%d %H:%M:%S})")
+    for index, run in enumerate(runs[:-1]):
+        if run.start_time is not None and runs[index + 1].start_time is not None:
+            runs[index] = replace(run, end_time=runs[index + 1].start_time)
 
     if not runs:
         raise ValueError(f"No runs parsed from {runs_csv}")

@@ -107,6 +107,16 @@ class RunDrops:
     # Frames that arrived over the websocket but never reached Kafka. Not a
     # camera fault; reported so the plugin-side loss stays visible and separate.
     lost_after_camera: Optional[int] = None
+    # Link stalls inside the dwell: frames that reached V2XHub late while the
+    # camera kept producing. See ``flir_websocket.find_stalls``. A stall does
+    # not change the drop count -- the frames still arrive -- but it is what
+    # makes them stale by the time they reach the SDSM service.
+    stalls: List[Dict] = field(default_factory=list)
+    max_lag_ms: Optional[float] = None
+
+    @property
+    def stalled_frames(self) -> int:
+        return sum(stall["frames"] for stall in self.stalls)
 
     @property
     def dropped_frames(self) -> int:
@@ -141,7 +151,20 @@ class RunDrops:
             "lost_after_camera": self.lost_after_camera,
             "bursts_in_window": self.bursts_in_window,
             "largest_gap_ms": round(max(self.gap_spans_ms), 1) if self.gap_spans_ms else 0.0,
+            "max_lag_ms": None if self.max_lag_ms is None else round(self.max_lag_ms, 1),
+            "stall_count": len(self.stalls),
+            "stalled_frames": self.stalled_frames,
+            "stall_detail": "; ".join(describe_stall(stall) for stall in self.stalls),
         }
+
+
+def describe_stall(stall: Dict) -> str:
+    """One stall as a short line a reader can check against the log."""
+    counter = ("counter contiguous" if stall["counter_missing"] == 0
+               else f"{stall['counter_missing']} counter values missing")
+    return (f"{stall['max_lag_ms'] / 1000:.1f} s lag at {_iso(stall['first_camera_ms'])}, "
+            f"{stall['frames']} frames held, {counter}, "
+            f"backlog arrived within {stall['arrival_span_ms'] / 1000:.2f} s")
 
 
 def camera_frame_times(detection_records) -> np.ndarray:
@@ -166,7 +189,9 @@ def _bursts(frames: np.ndarray, burst_gap_ms: float):
 
 
 def measure_run(run, frames: np.ndarray, config: cfg.CameraDetectionConfig = cfg.CAMERA_DETECTIONS,
-                websocket_frames=None, kafka_frames=None) -> RunDrops:
+                websocket_frames=None, kafka_frames=None,
+                search_end_ms: Optional[float] = None,
+                claimed: Optional[set] = None) -> RunDrops:
     """Frame accounting for one run's dwell window.
 
     ``frames`` is the sorted camera-time array the count is taken from -- the
@@ -175,13 +200,25 @@ def measure_run(run, frames: np.ndarray, config: cfg.CameraDetectionConfig = cfg
     Kafka camera-time array, used to report the plugin-side loss separately.
 
     ``config`` supplies the nominal rate, the burst split and the search span;
-    see ``config.Cp01Config``.
+    see ``config.CameraDetectionConfig``.
+
+    The search stops at ``run.end_time``, the next row's start in runs.csv,
+    since a trial cannot run past the start of the next one. ``search_end_ms``
+    overrides that. ``claimed`` holds the first-frame times of bursts already
+    given to another run, so none is counted twice. Both matter because runs
+    can be closer together than the search span: on 2026-09-23 they were 2-4
+    minutes apart, and without the bound four runs took their neighbour's
+    burst, which happened to be nearer the nominal dwell.
     """
     frame_interval_ms = config.frame_interval_ms
     expected = round(run.dwell_sec * config.detection_rate_hz)
     start = run.start_time.timestamp() * 1000.0
-    window = frames[(frames >= start - config.search_before_ms)
-                    & (frames <= start + config.search_after_ms)]
+    end = start + config.search_after_ms
+    if search_end_ms is None and getattr(run, "end_time", None) is not None:
+        search_end_ms = run.end_time.timestamp() * 1000.0
+    if search_end_ms is not None:
+        end = min(end, search_end_ms)
+    window = frames[(frames >= start - config.search_before_ms) & (frames < end)]
 
     result = RunDrops(
         run=run.name, condition=run.condition, dwell_sec=run.dwell_sec,
@@ -194,9 +231,15 @@ def measure_run(run, frames: np.ndarray, config: cfg.CameraDetectionConfig = cfg
     # run's condition. The pedestrian's real dwell is never exactly the nominal
     # time, so the burst itself defines the measurement window.
     bursts = _bursts(window, config.burst_gap_ms)
+    if claimed:
+        bursts = [burst for burst in bursts if float(burst[0]) not in claimed]
     result.bursts_in_window = len(bursts)
+    if not bursts:
+        return result
     nominal_ms = run.dwell_sec * 1000.0
     best = min(bursts, key=lambda burst: abs((burst[-1] - burst[0]) - nominal_ms))
+    if claimed is not None:
+        claimed.add(float(best[0]))
 
     dwell_frames = best
     span_ms = float(dwell_frames[-1] - dwell_frames[0])
@@ -219,9 +262,12 @@ def measure_run(run, frames: np.ndarray, config: cfg.CameraDetectionConfig = cfg
     # The burst is inclusive of its last frame, so the window closes just after it.
     low, high = float(dwell_frames[0]), float(dwell_frames[-1]) + 1.0
     if websocket_frames is not None:
-        result.counter_gaps = flir_websocket.counter_gaps(
-            flir_websocket.frames_in_window(websocket_frames, low, high)
-        )
+        in_dwell = flir_websocket.frames_in_window(websocket_frames, low, high)
+        result.counter_gaps = flir_websocket.counter_gaps(in_dwell)
+        lags = [f["arrival_ms"] - f["camera_time_ms"] for f in in_dwell
+                if f.get("arrival_ms") is not None]
+        result.max_lag_ms = max(lags) if lags else None
+        result.stalls = flir_websocket.find_stalls(in_dwell, config.stall_lag_ms)
     if kafka_frames is not None:
         in_kafka = kafka_frames[(kafka_frames >= low) & (kafka_frames < high)]
         # Both sides carry the camera's own capture time, so they are directly
@@ -255,9 +301,13 @@ def analyse_session(runs, session,
             kafka_log.parse_kafka_log_records(session.kafka_detected_object)
         )
 
+    # runs.csv order is chronological and each run is bounded by the next
+    # one's start (RunSpec.end_time); no burst is given to two runs.
+    claimed: set = set()
     return [
         measure_run(run, frames, config,
-                    websocket_frames=websocket_frames, kafka_frames=kafka_frames)
+                    websocket_frames=websocket_frames, kafka_frames=kafka_frames,
+                    claimed=claimed)
         for run in runs
     ]
 
@@ -316,6 +366,9 @@ def summarise(results: List[RunDrops], config: cfg.CameraDetectionConfig = cfg.C
         "measured_at": "camera websocket (pc2 V2XHub log)",
         "camera_counter_gaps": counter_gaps,
         "lost_after_camera": lost_after,
+        "stall_lag_ms": config.stall_lag_ms,
+        "runs_with_stalls": [item.run for item in results if item.stalls],
+        "total_stalled_frames": sum(item.stalled_frames for item in results),
         "by_condition": dict(sorted(by_condition.items(), key=lambda kv: kv[1]["runs"])),
         "runs_detail": [item.as_row() for item in results],
     }
@@ -399,6 +452,9 @@ def write_outputs(results: List[RunDrops], summary: Dict, output_dir: Path,
           f"{summary['camera_counter_gaps']}")
     print(f"       additionally lost after the camera, inside the plugin: "
           f"{summary['lost_after_camera']}")
+    print(f"       link stalls (lag > {summary['stall_lag_ms']:g} ms): "
+          f"{len(summary['runs_with_stalls'])} runs, "
+          f"{summary['total_stalled_frames']} frames held back")
     print(f"       across {summary['runs']} runs / "
           f"{summary['total_measured_burst_sec']} s of measured dwell")
     print(f"  -> {output_dir}")

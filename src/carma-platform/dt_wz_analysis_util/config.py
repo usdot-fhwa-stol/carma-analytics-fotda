@@ -149,6 +149,7 @@ class CameraDetectionConfig:
         "gap_report_factor": "frame periods a gap must exceed to be reported",
         "search_before_ms": "how far before the nominal start to look for frames",
         "search_after_ms": "how far after the nominal start to look for frames",
+        "stall_lag_ms": "capture-to-arrival lag above which a frame counts as stalled",
     }
 
     # Nominal FLIR frame rate. 100 ms cadence, confirmed against the websocket
@@ -168,10 +169,17 @@ class CameraDetectionConfig:
     gap_report_factor: float = 1.5
 
     # How far either side of the nominal start time to look for a run's
-    # detections. Runs are at least four minutes apart, so this cannot reach a
-    # neighbouring run.
+    # detections. The search also stops at the next row's start in runs.csv
+    # (RunSpec.end_time), because runs can be closer together than this: 2-4
+    # minutes on 2026-09-23.
     search_before_ms: float = 60_000.0
     search_after_ms: float = 240_000.0
+
+    # A frame whose arrival at V2XHub trails its capture by more than this is
+    # held back by a link stall. Normal lag is a few milliseconds (4 ms median,
+    # 11 ms p95), and the stalls found so far hold frames back for over 3 s, so
+    # the threshold sits far from both.
+    stall_lag_ms: float = 500.0
 
     @property
     def frame_interval_ms(self) -> float:

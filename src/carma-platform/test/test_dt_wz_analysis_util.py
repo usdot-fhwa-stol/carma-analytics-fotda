@@ -26,7 +26,7 @@ from dt_wz_analysis_util import config as cfg  # noqa: E402
 from dt_wz_analysis_util import location_spoofing  # noqa: E402
 from dt_wz_analysis_util import vehicle_yield  # noqa: E402
 from dt_wz_analysis_util.readers import (  # noqa: E402
-    kafka_log, obu_capture, pcap_reader, tcpdump_text,
+    flir_websocket, kafka_log, obu_capture, pcap_reader, tcpdump_text,
 )
 
 DATA_ROOT = Path(
@@ -234,6 +234,29 @@ class TestCp01Anchoring(unittest.TestCase):
         for offset, count in segments:
             out.extend(self.BASE + offset + cadence_ms * i for i in range(count))
         return np.array(sorted(out), dtype=float)
+
+    def test_a_run_does_not_take_the_next_runs_burst(self):
+        # 2026-09-23, 15 s runs three minutes apart: run A's own dwell is 15.6 s
+        # at +45 s, run B's is 15.0 s at +225 s. B's is nearer 15 s, and it sits
+        # inside A's 240 s search span, so without the cut-off A takes it.
+        frames = self._frames((45_000, 157), (225_000, 151))
+        a = self._Run(self.BASE, 15)
+        b = self._Run(self.BASE + 180_000, 15)
+        unclamped = camera_detections.measure_run(a, frames)
+        self.assertEqual(unclamped.first_detection_ms, self.BASE + 225_000)
+
+        claimed = set()
+        got_a = camera_detections.measure_run(
+            a, frames, search_end_ms=self.BASE + 180_000, claimed=claimed)
+        got_b = camera_detections.measure_run(b, frames, claimed=claimed)
+        self.assertEqual(got_a.first_detection_ms, self.BASE + 45_000)
+        self.assertEqual(got_b.first_detection_ms, self.BASE + 225_000)
+
+    def test_a_claimed_burst_is_not_given_out_twice(self):
+        frames = self._frames((45_000, 150))
+        claimed = {self.BASE + 45_000}
+        got = camera_detections.measure_run(self._Run(self.BASE, 15), frames, claimed=claimed)
+        self.assertEqual(got.received_frames, 0)
 
     def test_false_start_before_the_dwell_is_ignored(self):
         # 18-frame false start, 2.9 s pause, then the real 200-frame dwell.
@@ -710,6 +733,76 @@ class TestConfigDrivesTheCommandLine(unittest.TestCase):
     def test_every_test_case_names_a_distinct_output(self):
         prefixes = [case.prefix for case in cfg.TESTS if case.prefix]
         self.assertEqual(len(prefixes), len(set(prefixes)))
+
+
+class TestRunsCsvOrder(unittest.TestCase):
+    """runs.csv rows are chronological, and each run is bounded by the next."""
+
+    HEADER = "run_condition, run_id, start_time_etc, rsu_pcap_fn, obu_pcap_fn, rosbag_fn\n"
+
+    def _load(self, *rows):
+        from dt_wz_analysis_util import dataset
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "runs.csv"
+            path.write_text(self.HEADER + "".join(rows))
+            for name in ("a.pcap", "b.pcap", "a.mcap", "b.mcap"):
+                (Path(root) / name).write_text("")
+            return dataset.load_runs_csv(path, root)
+
+    def test_each_run_ends_where_the_next_begins(self):
+        runs = self._load("5sec, 1, 2026-09-23 16:08:00, a.pcap, a.pcap, a.mcap\n",
+                          "5sec, 2, 2026-09-23 16:12:00, b.pcap, b.pcap, b.mcap\n")
+        self.assertEqual(runs[0].end_time, runs[1].start_time)
+        self.assertIsNone(runs[1].end_time)
+
+    def test_out_of_order_rows_are_rejected(self):
+        with self.assertRaises(ValueError):
+            self._load("5sec, 1, 2026-09-23 16:08:00, a.pcap, a.pcap, a.mcap\n",
+                       "5sec, 2, 2026-09-14 16:12:00, b.pcap, b.pcap, b.mcap\n")
+
+
+class TestStallDetection(unittest.TestCase):
+    """The stall signature: counter contiguous, lag climbs, backlog lands at once."""
+
+    @staticmethod
+    def _frames(lags_ms, start=1_000_000.0, period=100.0, first_number=500):
+        return [{"camera_time_ms": start + i * period,
+                 "arrival_ms": start + i * period + lag,
+                 "data_number": first_number + i, "track_count": 1}
+                for i, lag in enumerate(lags_ms)]
+
+    def test_clean_stream_has_no_stall(self):
+        frames = self._frames([4, 5, 3, 11, 4, 6])
+        self.assertEqual(flir_websocket.find_stalls(frames), [])
+
+    def test_a_link_stall_is_found_with_its_signature(self):
+        # Delivery stops for ~3.3 s: frames 2..34 are held, then all arrive at
+        # once, so each successive frame is 100 ms less late than the last.
+        release = 1_000_000.0 + 2 * 100 + 3300
+        frames = self._frames([4, 5])
+        for i in range(2, 35):
+            capture = 1_000_000.0 + i * 100
+            frames.append({"camera_time_ms": capture,
+                           "arrival_ms": max(release + (i - 2) * 2, capture + 4),
+                           "data_number": 500 + i, "track_count": 1})
+        frames += self._frames([4, 4], start=1_000_000.0 + 35 * 100, first_number=535)
+        stalls = flir_websocket.find_stalls(frames, lag_threshold_ms=500)
+        self.assertEqual(len(stalls), 1)
+        stall = stalls[0]
+        self.assertAlmostEqual(stall["max_lag_ms"], 3300, delta=1)
+        self.assertEqual(stall["counter_missing"], 0)
+        self.assertLess(stall["arrival_span_ms"], 200)
+        self.assertGreater(stall["frames"], 20)
+
+    def test_counter_break_inside_a_stall_is_reported(self):
+        frames = self._frames([900, 900, 900])
+        frames[2]["data_number"] += 3
+        self.assertEqual(flir_websocket.find_stalls(frames)[0]["counter_missing"], 3)
+
+    def test_frames_without_an_arrival_stamp_are_ignored(self):
+        frames = self._frames([4, 900, 4])
+        frames[1]["arrival_ms"] = None
+        self.assertEqual(flir_websocket.find_stalls(frames), [])
 
 
 if __name__ == "__main__":
