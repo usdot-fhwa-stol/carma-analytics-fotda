@@ -3,23 +3,6 @@
 One row per FLIR camera detection, one column per stage it reached, each an
 absolute epoch-millisecond timestamp. Stages are listed in causal order so
 consecutive differences are the per-hop latencies.
-
-Two stages differ from earlier sessions and are **not** interchangeable with the
-similarly-named ones in those tables:
-
-``t_rsu_broadcast``
-    Previously ``t_ota_capture``, taken from a pcap on the *OBU*, so it meant
-    "the SDSM arrived over the air". This session captured the *RSU* instead, so
-    it now means "the RSU put the SDSM on the air" -- earlier in the chain by one
-    propagation hop. End-to-end totals are therefore slightly smaller than the
-    2026-09-11/2026-09-14_01 figures for reasons that have nothing to do with the
-    system getting faster.
-
-``t_obu_radio_rx``
-    New. The OBU's own receive instant, from its tcpdump text capture. Because
-    that capture carries no payload, this stage is paired by **time order within
-    the run**, not by payload identity like every other stage here. It is
-    reliable in aggregate and should not be trusted for any individual row.
 """
 
 from __future__ import annotations
