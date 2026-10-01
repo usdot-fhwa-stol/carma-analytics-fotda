@@ -111,3 +111,22 @@ Returns:
 - Saves statistics as JSON, data as NPZ, and plot as PNG (if directories are provided)
 
 ![Example Message Broadcast Rate Check Plot](example_message_broadcast_rate_check.png)
+
+### plot_message_time_intervals
+Plots the number of seconds between consecutive messages on a given topic, highlighting intervals that fall outside an expected tolerance band and annotating any interval that exceeds the plot's y-axis view. Optionally filters by `message_type` first, for topics like `INCOMING_BINARY_MSG_TOPIC` (`carma_driver_msgs/msg/ByteArray`) that carry multiple message types (`BINARY_MSG_TYPE_CHOICES`: SensorDataSharingMessage, BSM, SPAT, MAP) on one topic.
+
+#### Parameters
+- `mcap_path`: Path to MCAP file
+- `topic_name`: Name of the ROS topic to analyze (e.g., `INCOMING_SDSM_TOPIC`, `INCOMING_BINARY_MSG_TOPIC`)
+- `message_type`: Optional value to filter the topic's message_type field on (optional)
+- `expected_interval_sec`: Expected number of seconds between consecutive messages (default: 0.1)
+- `interval_tolerance_pct`: Tolerance percentage around the expected interval (default: 0.1 = 10%)
+- `save_plot_dir`: Directory to save generated plot (optional)
+
+#### Output
+Returns:
+- `figure`: Matplotlib figure object
+- `timestamps`: Array of message timestamps (seconds from start of recording)
+- `intervals`: Array of seconds between consecutive messages
+
+![Example SDSM Message Interval Plot](example_sdsm_message_intervals.png)
