@@ -54,13 +54,31 @@ A match with latency above `--drop-threshold-ms` (default 200ms — calibrated f
 
 When no match is found, it's further split by whether rx's own capture was actually recording at that moment: a tx message timestamped before rx's first packet or after rx's last packet is reported as **outside rx's recording window**, not **dropped**. Two independent `tcpdump`/`tshark` captures essentially never start and stop at exactly the same instant, so some tx messages near either edge are mechanically impossible for rx to have caught - that's not evidence of loss, it's evidence the two capture windows don't perfectly overlap. In practice this accounts for the overwhelming majority of "no match found" results on real captures - cross-check the `dropped` count specifically (not `dropped + outside window` combined) before treating a result as a real drop.
 
+### Same-device vs. cross-device captures (`--topology`)
+
+Direction labels describe the *capturing interface* (it received vs. sent the packet), so which labels hold the sender's and receiver's copy of a message depends on where the two captures were taken:
+
+- **`same-device`** (default) - two interfaces of one device, e.g. an OBU's radio (`rmnet`) and its ethernet link to the host (`eth0`). A message passes *through* the device: it is `incoming` on the radio and re-sent on the host link, which on a plain-Ethernet capture has no direction bit and lands in `other`. This is the behavior described above.
+- **`cross-device`** - each device's own radio capture, e.g. an RSU and an OBU. A message goes *from* one device *to* the other, so it is `outgoing` at the sender and `incoming` at the receiver. Both devices transmit (e.g. RSU SDSM/SPaT, OBU BSM), so both directions are reported from one run and file order doesn't matter. `other` is excluded, since without a direction bit a third-party broadcast heard by both devices would match itself.
+
+The two captures in `cross-device` mode come from two different clocks, so each measured latency includes the clock offset between the devices - with opposite sign in each direction. With both directions matched, the script reports the estimated offset (`(median_fwd - median_rev) / 2`) and one-way latency (`(median_fwd + median_rev) / 2`), assuming equal latency both ways.
+
+> [!NOTE]
+> Running RSU/OBU radio captures in the default `same-device` mode produces 0 matches in either file order: it compares `incoming` against `incoming` and `outgoing` against `outgoing`, while across devices the same message is `outgoing` on one side and `incoming` on the other.
+
+Payloads without the `03 80` unsecuredData marker (a WSMP header or vendor envelope in front of the MessageFrame) fall back to scanning for a bare `00 <msgid>` MessageFrame that actually UPER-decodes.
+
 Usage:
 ```
 python3 correlate_j2735_latency.py --tx-pcap earlier.pcap --rx-pcap later.pcap [--label NAME] [--drop-threshold-ms 200] [--json-out results.json]
+python3 correlate_j2735_latency.py --topology cross-device --tx-pcap rsu.pcap --rx-pcap obu.pcap [--json-out results.json]
 ```
 
-- `--tx-pcap`: the earlier/source capture point
-- `--rx-pcap`: the later/downstream capture point
+- `--tx-pcap`: same-device: the earlier/source capture point; cross-device: either device's capture
+- `--rx-pcap`: same-device: the later/downstream capture point; cross-device: the other device's capture
+- `--topology`: `same-device` (default) or `cross-device`, see above
+- `--match-mode`: overrides every flow's payload match (`exact`/`prefix`); by default the same-device host-request flow uses `prefix` (SCMS signing makes the broadcast longer than the request) and everything else `exact`
+- `--wsmp-direction`: direction to assign WSMP packets on captures with no direction bit (plain Ethernet); Linux-cooked captures always use their own direction bit
 - Requires `tshark` and `pycrate` (see `requirements.txt`); does not require `pyshark`.
 
 ## Correlating Latency Across the ROS<->Ethernet Boundary
