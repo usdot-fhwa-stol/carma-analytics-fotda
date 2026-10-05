@@ -56,11 +56,17 @@ When no match is found, it's further split by whether rx's own capture was actua
 
 Usage:
 ```
-python3 correlate_j2735_latency.py --tx-pcap earlier.pcap --rx-pcap later.pcap [--label NAME] [--drop-threshold-ms 200] [--json-out results.json]
+python3 correlate_j2735_latency.py --tx-pcap earlier.pcap --rx-pcap later.pcap [--label NAME] [--drop-threshold-ms 200] [--json-out results.json] [--plot-dir Path/To/Plots] [--match-mode exact] [--wsmp-direction outgoing]
 ```
 
 - `--tx-pcap`: the earlier/source capture point
 - `--rx-pcap`: the later/downstream capture point
+- `--label`: title of plot and related data
+- `--drop-threshold-ms`: maximum latency of a correlated message before it is labeled as stale
+- `--json-out`: path to json file to save analysis data
+- `--plot-dir`: path to the analysis plotting directory; directory to store analysis plots
+- `--match-mode`: determines how messages should be correlated. exact -> attempts to match payload + signature; prefix -> attempts to match only the payload
+- `--wsmp-direction`: explicitly state the direction for WSMP type packets. incoming -> For infrastructure originated messages; outgoing -> For CARMA originated packets
 - Requires `tshark` and `pycrate` (see `requirements.txt`); does not require `pyshark`.
 
 ## Correlating Latency Across the ROS<->Ethernet Boundary
