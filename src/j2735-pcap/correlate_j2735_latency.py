@@ -14,18 +14,28 @@ which it was based on) used that approach and it silently missed MAP
 messages entirely, because a coincidental "0012" byte pair elsewhere in a
 packet's payload would be found first and fail validation, while the real
 MAP marker - only locatable by walking the actual envelope structure - was
-never reached. The pcap/link-layer/UDP parsing and envelope decoding here
-are ported from carma-platform/engineering_tools/check_v2x_security_direction.py,
-which also classifies packet direction (incoming vs. outgoing) using the
+never reached. Payloads with no unsecuredData marker (a WSMP header or a
+vendor envelope in front of the MessageFrame) fall back to scanning for a
+bare `00 <msgid>` MessageFrame that actually UPER-decodes. The
+pcap/link-layer/UDP parsing and envelope decoding here are ported from
+carma-platform/engineering_tools/check_v2x_security_direction.py, which also
+classifies packet direction (incoming vs. outgoing) using the
 Linux-cooked-capture SLL header; that distinction matters for correlation,
 see below.
 
-Only messages captured going toward the OBU (`incoming`) are matched
-between tx and rx - a capture may also contain `outgoing` messages (e.g. a
-BSM the OBU broadcasts itself), which are a structurally different flow
-that isn't expected to reappear on a downstream/forwarding capture, so
-folding them into drop-rate math produces a false "100% drop" reading.
-`outgoing` messages are reported separately, for visibility only.
+Direction labels describe the capturing interface (it received vs. sent the
+packet), so which labels hold the sender's and receiver's copy of a message
+depends on where the two captures were taken (--topology):
+
+  same-device (default): two interfaces of one device, e.g. an OBU's radio
+    (tx) and its ethernet link to the host (rx). Messages pass through the
+    device: radio `incoming` is matched against host-link `incoming`/`other`,
+    and host requests (rx `outgoing`) against the radio broadcast
+    (tx `outgoing`).
+  cross-device: each device's own radio capture, e.g. RSU and OBU. Messages
+    go from one device to the other: sender `outgoing` is matched against
+    receiver `incoming`, in both directions, and the clock offset between
+    the two devices is estimated from the two directions' latencies.
 
 Each message's timestamp is sourced from `tshark -e frame.time_epoch` for
 the packet it was actually found in (matched back by packet number), since
@@ -34,9 +44,13 @@ per-packet timestamps.
 
 Usage:
     python3 correlate_j2735_latency.py --tx-pcap earlier.pcap --rx-pcap later.pcap
+    python3 correlate_j2735_latency.py --topology cross-device --tx-pcap rsu.pcap --rx-pcap obu.pcap
 """
+import contextlib
+import io
 import json
 import re
+import statistics
 import struct
 import subprocess
 import sys
@@ -132,7 +146,7 @@ def read_classic_pcap(path: Path) -> Iterator[PcapPacket]:
             yield PcapPacket(packet_number, packet_data)
 
 
-def parse_udp_with_linktype(data: bytes, linktype: int, wsmp_direction: str) -> Optional[UdpPacket]:
+def parse_udp_with_linktype(data: bytes, linktype: int, wsmp_direction: str = "unknown") -> Optional[UdpPacket]:
     direction = "unknown"
     if linktype == DLT_EN10MB:
         if len(data) < 14:
@@ -157,10 +171,11 @@ def parse_udp_with_linktype(data: bytes, linktype: int, wsmp_direction: str) -> 
     else:
         return None
 
-    #Placeholder, assume outgoing 
+    # --wsmp-direction only fills in for links with no direction bit (plain Ethernet).
     if ethertype == ETHERTYPE_WSMP:
-        return UdpPacket(payload=data[offset:], direction = wsmp_direction)
-    
+        return UdpPacket(payload=data[offset:],
+                         direction=wsmp_direction if direction == "unknown" else direction)
+
     if ethertype == ETHERTYPE_IPV4:
         if len(data) < offset + 20:
             return None
@@ -248,25 +263,30 @@ def find_message_offset(payload: bytes):
     return None
 
 def find_raw_j2735_message(payload: bytes):
-    """Recognize a bare J2735 MessageFrame directly in a UDP payload.
-
-    Raw J2735 MessageFrame begins with:
-        00 <DSRCmsgID>
-
-    This is used for UDP captures where there is no IEEE 1609.2
-    unsecuredData envelope.
-    """
-    if len(payload) < 2:
-        return None
-
-    if payload[0] != 0:
-        return None
-
-    message_id = payload[1]
-    if message_id not in J2735_MESSAGE_NAMES:
-        return None
-
-    return 0, message_id, J2735_MESSAGE_NAMES[message_id]
+    """Fallback for payloads with no 1609.2 unsecuredData marker: a bare
+    J2735 MessageFrame (00 <DSRCmsgID> ...) at any offset, e.g. behind a WSMP
+    header or a vendor envelope. A coincidental 00 <id> byte pair is common,
+    so a candidate only counts if it UPER-decodes; CARMA mobility messages
+    can't be decoded against J2735, so they are only accepted at offset 0."""
+    frame_asn1 = J2735_201603_2023_06_22.DSRC.MessageFrame
+    for offset in range(max(0, len(payload) - 1)):
+        if payload[offset] != 0:
+            continue
+        message_id = payload[offset + 1]
+        if message_id not in J2735_MESSAGE_NAMES:
+            continue
+        if message_id in CARMA_MOBILITY_MESSAGE_IDS:
+            if offset == 0:
+                return 0, message_id, J2735_MESSAGE_NAMES[message_id]
+            continue
+        try:
+            # pycrate prints diagnostics on failed decodes; probing offsets would flood stdout.
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                frame_asn1.from_uper(payload[offset:])
+        except Exception:
+            continue
+        return offset, message_id, J2735_MESSAGE_NAMES[message_id]
+    return None
 
 def convert_bytes(obj):
     if isinstance(obj, dict):
@@ -295,7 +315,7 @@ def get_frame_timestamps(pcap_path):
     return ts_by_number
 
 
-def extract_udp_messages(pcap_path,wsmp_direction):
+def extract_udp_messages(pcap_path, wsmp_direction="unknown"):
     """Extracts J2735 messages from a raw-UDP, 1609.2-enveloped capture
     (e.g. an RSU broadcast-receive interface). Returns (by_direction,
     decode_fail_count). by_direction has keys 'incoming', 'outgoing',
@@ -314,9 +334,6 @@ def extract_udp_messages(pcap_path,wsmp_direction):
             continue
         found = find_message_offset(udp.payload)
 
-        # Some Ethernet-facing interfaces expose the J2735
-        # MessageFrame directly in UDP without the IEEE 1609.2
-        # unsecuredData envelope.
         if found is None:
             found = find_raw_j2735_message(udp.payload)
 
@@ -489,7 +506,7 @@ def extract_commsignia_request_messages(pcap_path):
     return by_direction, decode_fail
 
 
-def extract_messages(pcap_path,wsmp_direction):
+def extract_messages(pcap_path, wsmp_direction="unknown"):
     """Extracts J2735 messages from a pcap, trying all three known
     ethernet-facing formats, since different OBU vendors (and different
     channels on the same vendor) expose messages differently: raw UDP with
@@ -498,7 +515,7 @@ def extract_messages(pcap_path,wsmp_direction):
     host-to-OBU broadcast request channel). A given file only produces
     results from whichever protocol(s) it actually carries - the other
     paths harmlessly find nothing."""
-    udp_by_dir, udp_fail = extract_udp_messages(pcap_path,wsmp_direction)
+    udp_by_dir, udp_fail = extract_udp_messages(pcap_path, wsmp_direction)
     mqtt_by_dir, mqtt_fail = extract_mqtt_messages(pcap_path)
     request_by_dir, request_fail = extract_commsignia_request_messages(pcap_path)
     by_direction = {key: udp_by_dir[key] + mqtt_by_dir[key] + request_by_dir[key] for key in udp_by_dir}
@@ -649,120 +666,154 @@ def slug(label: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", label).strip("_")
 
 
+# A flow pairs the sender's copy of each message with the receiver's copy.
+# Direction labels describe the capturing interface (sent vs received), so
+# which buckets hold each copy depends on where the two captures were taken:
+#   same-device:  a message passes *through* one device. It is received on
+#                 tx (radio) and re-sent on rx (host link). The rx host link is
+#                 typically plain Ethernet with no direction bit, hence "other".
+#   cross-device: a message goes *from* one device *to* another, so it is
+#                 outgoing at the sender and incoming at the receiver. Both
+#                 devices send something, so both directions are reported.
+#                 "other" is excluded: with no direction bit, a third-party
+#                 broadcast heard by both devices would match itself.
+# (json_key, plot_suffix, title, (sender_file, buckets), (receiver_file, buckets), default_match_mode)
+FLOWS = {
+    "same-device": [
+        ("incoming_flow", "incoming", "Incoming-flow correlation (radio receipt -> forwarded to host)",
+         ("tx", ("incoming",)), ("rx", ("incoming", "other")), "exact"),
+        # Prefix: with SCMS enabled the OBU wraps the host's unsecured request in
+        # a signed 1609.2 envelope, so the broadcast is longer than, but starts
+        # identically to, what the host sent.
+        ("outgoing_request_flow", "outgoing",
+         "Outgoing/request-flow correlation (host request -> over-the-air broadcast)",
+         ("rx", ("outgoing",)), ("tx", ("outgoing",)), "prefix"),
+    ],
+    "cross-device": [
+        ("tx_to_rx_flow", "tx_to_rx", "tx device -> rx device (tx outgoing -> rx incoming)",
+         ("tx", ("outgoing",)), ("rx", ("incoming",)), "exact"),
+        ("rx_to_tx_flow", "rx_to_tx", "rx device -> tx device (rx outgoing -> tx incoming)",
+         ("rx", ("outgoing",)), ("tx", ("incoming",)), "exact"),
+    ],
+}
+
+
+def run_flow(title, sender, receiver, match_mode, args, label, plot_suffix):
+    """Returns (json_summary or None if skipped, fresh latencies in ms)."""
+    if not sender:
+        print(f"\n-- {title} - no sender-side messages, skipped (receiver-side counts: "
+              f"{dict(Counter(m['msg_type'] for m in receiver))}) --")
+        return None, []
+    latencies, drops, stale, out_of_window, latency_stats, stale_stats = report_correlation(
+        title, sender, receiver, args.drop_threshold_ms, match_mode)
+    windowed_count_report(title, sender, receiver)
+    if args.plot_dir:
+        plot_flow(
+            args.plot_dir / f"{slug(label)}_{plot_suffix}.png", f"{label} - {title}",
+            latencies, stale, drops, out_of_window,
+            args.drop_threshold_ms, duplicate_content_types=find_duplicate_content_types(sender),
+        )
+    return {
+        "match_mode": match_mode,
+        "matched": len(latencies),
+        "stale": len(stale),
+        "dropped": len(drops),
+        "out_of_window": len(out_of_window),
+        "drops_by_type": dict(Counter(d[1] for d in drops)),
+        "latency_stats_ms": latency_stats,
+        "stale_latency_stats_ms": stale_stats,
+    }, [l[2] for l in latencies]
+
+
+def estimate_clock_offset(tx_to_rx_latencies, rx_to_tx_latencies):
+    """Each measured one-way latency includes the clock offset between the two
+    devices with opposite signs per direction (fwd = L + offset, rev = L - offset),
+    so with both directions measured the offset and latency can be separated,
+    assuming the true latency is the same both ways."""
+    if not tx_to_rx_latencies or not rx_to_tx_latencies:
+        return None
+    fwd = statistics.median(tx_to_rx_latencies)
+    rev = statistics.median(rx_to_tx_latencies)
+    return {"rx_minus_tx_clock_ms": (fwd - rev) / 2, "one_way_latency_ms": (fwd + rev) / 2}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--tx-pcap", required=True, help="Earlier capture point (e.g. radio-receive interface)")
-    ap.add_argument("--rx-pcap", required=True, help="Later capture point (e.g. ethernet-out to downstream host)")
+    ap.add_argument("--tx-pcap", required=True,
+                    help="same-device: earlier capture point (e.g. radio interface); "
+                         "cross-device: either device's capture (e.g. RSU)")
+    ap.add_argument("--rx-pcap", required=True,
+                    help="same-device: later capture point (e.g. ethernet-out to host); "
+                         "cross-device: the other device's capture (e.g. OBU)")
+    ap.add_argument("--topology", choices=sorted(FLOWS), default="same-device",
+                    help="same-device: two interfaces of one device (message passes through it); "
+                         "cross-device: two devices' radio captures (message goes from one to the other, "
+                         "both directions reported)")
     ap.add_argument("--drop-threshold-ms", type=float, default=DROP_LATENCY_THRESHOLD_MS,
                      help=f"Matched messages slower than this are counted as drops (default {DROP_LATENCY_THRESHOLD_MS} ms)")
     ap.add_argument("--label", default="")
     ap.add_argument("--json-out", type=Path, default=None, help="Optional path to write results as JSON")
     ap.add_argument("--plot-dir", type=Path, default=None,
                      help="Optional directory to write per-flow latency/drop PNG plots to")
-    ap.add_argument("--match-mode", default="exact", choices=["exact","prefix"], help="Mode used to compare messages between rx and tx")
-    ap.add_argument("--wsmp-direction", default="unknown", choices=["unknown","incoming","outgoing"], help="explicitly state the direction of wsmp pcap messages")
+    ap.add_argument("--match-mode", default=None, choices=["exact", "prefix"],
+                    help="Override every flow's payload match mode (default: per flow - prefix for "
+                         "the same-device host-request flow, exact otherwise)")
+    ap.add_argument("--wsmp-direction", default="unknown", choices=["unknown", "incoming", "outgoing"],
+                    help="Direction to assign WSMP packets on links with no direction bit (plain Ethernet); "
+                         "Linux-cooked captures always use their own direction bit")
     args = ap.parse_args()
     if args.plot_dir:
         args.plot_dir.mkdir(parents=True, exist_ok=True)
 
-    tx_by_dir, tx_fail = extract_messages(args.tx_pcap,args.wsmp_direction)
-    rx_by_dir, rx_fail = extract_messages(args.rx_pcap,args.wsmp_direction)
+    by_file = {}
+    fails = {}
+    by_file["tx"], fails["tx"] = extract_messages(args.tx_pcap, args.wsmp_direction)
+    by_file["rx"], fails["rx"] = extract_messages(args.rx_pcap, args.wsmp_direction)
 
     label = args.label or f"{Path(args.tx_pcap).name} -> {Path(args.rx_pcap).name}"
-    print(f"=== {label} ===")
-    for iface, by_dir, fail in (("tx", tx_by_dir, tx_fail), ("rx", rx_by_dir, rx_fail)):
-        counts = {d: dict(Counter(m["msg_type"] for m in msgs)) for d, msgs in by_dir.items() if msgs}
-        print(f"{iface}: {counts} (decode failures: {fail})")
+    print(f"=== {label} ({args.topology}) ===")
+    for iface in ("tx", "rx"):
+        counts = {d: dict(Counter(m["msg_type"] for m in msgs)) for d, msgs in by_file[iface].items() if msgs}
+        print(f"{iface}: {counts} (decode failures: {fails[iface]})")
+        if args.topology == "cross-device" and by_file[iface]["other"]:
+            print(f"WARNING: {len(by_file[iface]['other'])} {iface} messages have no direction information "
+                  f"(capture link type has no direction bit) and are excluded from cross-device flows. "
+                  f"Capture with a Linux-cooked link type (e.g. tcpdump -i any) to include them.")
 
-    # Incoming flow: message arrives at the OBU from the infrastructure
-    # (tx's "incoming"), then is forwarded to the host (rx's "incoming" or,
-    # for interfaces with no direction bit like plain Ethernet, "other").
-    tx_incoming = tx_by_dir["incoming"]
-    rx_incoming_pool = rx_by_dir["incoming"] + rx_by_dir["other"]
-    (incoming_latencies, incoming_drops, incoming_stale, incoming_out_of_window,
-     incoming_stats, incoming_stale_stats) = report_correlation(
-        "Incoming-flow correlation (radio receipt -> forwarded to host)",
-        tx_incoming, rx_incoming_pool, args.drop_threshold_ms, args.match_mode
-    )
-    windowed_count_report(
-        "Incoming-flow correlation (radio receipt -> forwarded to host)",
-        tx_incoming, rx_incoming_pool,
-    )
-    if args.plot_dir:
-        plot_flow(
-            args.plot_dir / f"{slug(label)}_incoming.png",
-            f"{label} - incoming flow (radio receipt -> forwarded to host)",
-            incoming_latencies, incoming_stale, incoming_drops, incoming_out_of_window,
-            args.drop_threshold_ms, duplicate_content_types=find_duplicate_content_types(tx_incoming),
-        )
+    flow_results = {}
+    flow_latencies = {}
+    for key, plot_suffix, title, (s_file, s_buckets), (r_file, r_buckets), default_mode in FLOWS[args.topology]:
+        sender = [m for b in s_buckets for m in by_file[s_file][b]]
+        receiver = [m for b in r_buckets for m in by_file[r_file][b]]
+        flow_results[key], flow_latencies[key] = run_flow(
+            title, sender, receiver, args.match_mode or default_mode, args, label, plot_suffix)
 
-    # Outgoing/request flow: the host asks the OBU to transmit something
-    # (rx's "outgoing", e.g. an MQTT '/req/' publish or a request captured
-    # on the ethernet interface), then the OBU actually broadcasts it over
-    # the air (tx's "outgoing"). Chronologically rx happens first here, so
-    # roles are swapped relative to the incoming-flow call above. Matched
-    # by prefix, not exact equality: when SCMS security is enabled, the
-    # OBU wraps the host's unsecured request in a signed IEEE 1609.2
-    # SignedData envelope (certificate + signature) before transmitting,
-    # so the broadcast payload is longer than, but starts identically to,
-    # what the host sent.
-    request_messages = rx_by_dir["outgoing"]
-    broadcast_pool = tx_by_dir["outgoing"]
-    outgoing_latencies = outgoing_drops = outgoing_stale = outgoing_out_of_window = None
-    outgoing_stats = outgoing_stale_stats = None
-    if request_messages and broadcast_pool:
-        (outgoing_latencies, outgoing_drops, outgoing_stale, outgoing_out_of_window,
-         outgoing_stats, outgoing_stale_stats) = report_correlation(
-            "Outgoing/request-flow correlation (host request -> over-the-air broadcast)",
-            request_messages, broadcast_pool, args.drop_threshold_ms, args.match_mode,
-        )
-        windowed_count_report(
-            "Outgoing/request-flow correlation (host request -> over-the-air broadcast)",
-            request_messages, broadcast_pool,
-        )
-        if args.plot_dir:
-            plot_flow(
-                args.plot_dir / f"{slug(label)}_outgoing.png",
-                f"{label} - outgoing/request flow (host request -> over-the-air broadcast)",
-                outgoing_latencies, outgoing_stale, outgoing_drops, outgoing_out_of_window,
-                args.drop_threshold_ms, duplicate_content_types=find_duplicate_content_types(request_messages),
-            )
-    elif broadcast_pool:
-        print(f"\n-- Outgoing flow (tx's own broadcast, e.g. BSM) - "
-              f"no host-request-side capture to compare against, informational only --")
-        print(f"tx outgoing counts: {dict(Counter(m['msg_type'] for m in broadcast_pool))}")
+    clock = None
+    if args.topology == "cross-device":
+        clock = estimate_clock_offset(flow_latencies["tx_to_rx_flow"], flow_latencies["rx_to_tx_flow"])
+        if clock:
+            print(f"\nEstimated clock offset (rx clock minus tx clock): {clock['rx_minus_tx_clock_ms']:.2f} ms, "
+                  f"estimated one-way latency: {clock['one_way_latency_ms']:.2f} ms "
+                  f"(from median fresh latency in each direction; assumes equal latency both ways)")
+        else:
+            print("\nClock offset not estimated: needs matched messages in both directions.")
 
     if args.json_out:
         result = {
             "label": label,
+            "topology": args.topology,
             "tx_pcap": str(args.tx_pcap),
             "rx_pcap": str(args.rx_pcap),
-            "tx_counts": {d: dict(Counter(m["msg_type"] for m in msgs)) for d, msgs in tx_by_dir.items() if msgs},
-            "rx_counts": {d: dict(Counter(m["msg_type"] for m in msgs)) for d, msgs in rx_by_dir.items() if msgs},
-            "tx_decode_failures": tx_fail,
-            "rx_decode_failures": rx_fail,
-            "incoming_flow": {
-                "matched": len(incoming_latencies),
-                "stale": len(incoming_stale),
-                "dropped": len(incoming_drops),
-                "out_of_window": len(incoming_out_of_window),
-                "drops_by_type": dict(Counter(d[1] for d in incoming_drops)),
-                "latency_stats_ms": incoming_stats,
-                "stale_latency_stats_ms": incoming_stale_stats,
-            },
-            "outgoing_request_flow": None if outgoing_latencies is None else {
-                "matched": len(outgoing_latencies),
-                "stale": len(outgoing_stale),
-                "dropped": len(outgoing_drops),
-                "out_of_window": len(outgoing_out_of_window),
-                "drops_by_type": dict(Counter(d[1] for d in outgoing_drops)),
-                "latency_stats_ms": outgoing_stats,
-                "stale_latency_stats_ms": outgoing_stale_stats,
-            },
+            "tx_counts": {d: dict(Counter(m["msg_type"] for m in msgs)) for d, msgs in by_file["tx"].items() if msgs},
+            "rx_counts": {d: dict(Counter(m["msg_type"] for m in msgs)) for d, msgs in by_file["rx"].items() if msgs},
+            "tx_decode_failures": fails["tx"],
+            "rx_decode_failures": fails["rx"],
+            **flow_results,
         }
+        if args.topology == "cross-device":
+            result["clock_offset_estimate"] = clock
         args.json_out.write_text(json.dumps(result, indent=2))
         print(f"Results saved to: {args.json_out}")
-
 
 if __name__ == "__main__":
     main()
