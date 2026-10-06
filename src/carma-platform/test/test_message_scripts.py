@@ -559,7 +559,8 @@ def test_check_message_broadcast_rate(mock_mcap_path, tmp_path):
         patch("matplotlib.pyplot.show") as mock_show :
 
         timestamps = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-        messages = np.array([1.0, 2.1, 3.1, 4.1, 5.1])
+        # ~1 Hz header stamps, spaced so each 1-second window holds exactly one message
+        messages = np.array([1.0, 2.05, 3.1, 4.15, 5.2])
 
         # Setup mock return value
         mock_extract.return_value = {
@@ -569,7 +570,7 @@ def test_check_message_broadcast_rate(mock_mcap_path, tmp_path):
         is_passed, stats, fig, broadcast_intervals, timestamps = check_message_broadcast_rate(
             mcap_path=mock_mcap_path,
             topic_name="test_topic",
-            expected_rate_hz=0.8,
+            expected_rate_hz=1.0,
             rate_tolerance_pct=0.1,  # 10% tolerance
             start_time=1.0,
             end_time=5.0,
@@ -579,6 +580,44 @@ def test_check_message_broadcast_rate(mock_mcap_path, tmp_path):
         )
 
         assert is_passed is True
+
+        # A ~1 Hz topic is outside an expected 0.8 Hz +/- 10% in every window
+        is_passed, _, _, _, _ = check_message_broadcast_rate(
+            mcap_path=mock_mcap_path,
+            topic_name="test_topic",
+            expected_rate_hz=0.8,
+            rate_tolerance_pct=0.1,
+            save_plot_dir=tmp_path,
+        )
+
+        assert is_passed is False
+
+        # Average rate is 4 intervals over 4.2 s = 0.95 Hz
+        is_passed, stats, _, _, _ = check_message_broadcast_rate(
+            mcap_path=mock_mcap_path,
+            topic_name="test_topic",
+            expected_rate_hz=0.9,
+            rate_tolerance_pct=0.1,
+            save_plot_dir=tmp_path,
+            pass_on_average_rate=True,
+        )
+
+        assert is_passed is True
+        assert stats["average_rate_hz"] == pytest.approx(4 / 4.2)
+
+        # Only messages received within the active intervals count: 3 messages over 2.5 s = 1.2 Hz
+        is_passed, stats, _, _, _ = check_message_broadcast_rate(
+            mcap_path=mock_mcap_path,
+            topic_name="test_topic",
+            expected_rate_hz=1.0,
+            rate_tolerance_pct=0.1,
+            save_plot_dir=tmp_path,
+            pass_on_average_rate=True,
+            active_intervals=[(0.5, 2.5), (2.5, 3.0)],
+        )
+
+        assert is_passed is False
+        assert stats["average_rate_hz"] == pytest.approx(3 / 2.5)
 
     # Test extract_timestamp
     mock_msg_with_header = MagicMock()
