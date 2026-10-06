@@ -132,7 +132,7 @@ def read_classic_pcap(path: Path) -> Iterator[PcapPacket]:
             yield PcapPacket(packet_number, packet_data)
 
 
-def parse_udp_with_linktype(data: bytes, linktype: int, wsmp_direction: str) -> Optional[UdpPacket]:
+def parse_udp_with_linktype(data: bytes, linktype: int, wsmp_direction_relative_to_vehicle: str) -> Optional[UdpPacket]:
     direction = "unknown"
     if linktype == DLT_EN10MB:
         if len(data) < 14:
@@ -157,9 +157,8 @@ def parse_udp_with_linktype(data: bytes, linktype: int, wsmp_direction: str) -> 
     else:
         return None
 
-    #Placeholder, assume outgoing 
     if ethertype == ETHERTYPE_WSMP:
-        return UdpPacket(payload=data[offset:], direction = wsmp_direction)
+        return UdpPacket(payload=data[offset:], direction = wsmp_direction_relative_to_vehicle)
     
     if ethertype == ETHERTYPE_IPV4:
         if len(data) < offset + 20:
@@ -295,7 +294,7 @@ def get_frame_timestamps(pcap_path):
     return ts_by_number
 
 
-def extract_udp_messages(pcap_path,wsmp_direction):
+def extract_udp_messages(pcap_path,wsmp_direction_relative_to_vehicle):
     """Extracts J2735 messages from a raw-UDP, 1609.2-enveloped capture
     (e.g. an RSU broadcast-receive interface). Returns (by_direction,
     decode_fail_count). by_direction has keys 'incoming', 'outgoing',
@@ -309,7 +308,7 @@ def extract_udp_messages(pcap_path,wsmp_direction):
     decode_fail = 0
 
     for packet in read_classic_pcap(Path(pcap_path)):
-        udp = parse_udp_with_linktype(packet.data, linktype, wsmp_direction)
+        udp = parse_udp_with_linktype(packet.data, linktype, wsmp_direction_relative_to_vehicle)
         if udp is None:
             continue
         found = find_message_offset(udp.payload)
@@ -489,7 +488,7 @@ def extract_commsignia_request_messages(pcap_path):
     return by_direction, decode_fail
 
 
-def extract_messages(pcap_path,wsmp_direction):
+def extract_messages(pcap_path,wsmp_direction_relative_to_vehicle):
     """Extracts J2735 messages from a pcap, trying all three known
     ethernet-facing formats, since different OBU vendors (and different
     channels on the same vendor) expose messages differently: raw UDP with
@@ -498,7 +497,7 @@ def extract_messages(pcap_path,wsmp_direction):
     host-to-OBU broadcast request channel). A given file only produces
     results from whichever protocol(s) it actually carries - the other
     paths harmlessly find nothing."""
-    udp_by_dir, udp_fail = extract_udp_messages(pcap_path,wsmp_direction)
+    udp_by_dir, udp_fail = extract_udp_messages(pcap_path,wsmp_direction_relative_to_vehicle)
     mqtt_by_dir, mqtt_fail = extract_mqtt_messages(pcap_path)
     request_by_dir, request_fail = extract_commsignia_request_messages(pcap_path)
     by_direction = {key: udp_by_dir[key] + mqtt_by_dir[key] + request_by_dir[key] for key in udp_by_dir}
@@ -660,13 +659,13 @@ def main():
     ap.add_argument("--plot-dir", type=Path, default=None,
                      help="Optional directory to write per-flow latency/drop PNG plots to")
     ap.add_argument("--match-mode", default="exact", choices=["exact","prefix"], help="Mode used to compare messages between rx and tx")
-    ap.add_argument("--wsmp-direction", default="unknown", choices=["unknown","incoming","outgoing"], help="explicitly state the direction of wsmp pcap messages")
+    ap.add_argument("--wsmp-direction-relative-to-vehicle", default="unknown", choices=["unknown","incoming","outgoing"], help="explicitly state the direction of wsmp pcap messages relative to the CARMA Platform")
     args = ap.parse_args()
     if args.plot_dir:
         args.plot_dir.mkdir(parents=True, exist_ok=True)
 
-    tx_by_dir, tx_fail = extract_messages(args.tx_pcap,args.wsmp_direction)
-    rx_by_dir, rx_fail = extract_messages(args.rx_pcap,args.wsmp_direction)
+    tx_by_dir, tx_fail = extract_messages(args.tx_pcap,args.wsmp_direction_relative_to_vehicle)
+    rx_by_dir, rx_fail = extract_messages(args.rx_pcap,args.wsmp_direction_relative_to_vehicle)
 
     label = args.label or f"{Path(args.tx_pcap).name} -> {Path(args.rx_pcap).name}"
     print(f"=== {label} ===")

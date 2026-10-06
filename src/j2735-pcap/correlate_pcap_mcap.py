@@ -220,12 +220,12 @@ def main():
     ap.add_argument("--json-out", type=Path, default=None)
     ap.add_argument("--plot-dir", type=Path, default=None,
                      help="Optional directory to write per-flow latency/drop PNG plots to")
-    ap.add_argument("--wsmp-direction", default="unknown", choices=["unknown","incoming","outgoing"], help="explicitly state the direction of wsmp pcap messages")
+    ap.add_argument("--wsmp-direction-relative-to-vehicle", default="unknown", choices=["unknown","incoming","outgoing"], help="explicitly state the direction of wsmp pcap messages")
     args = ap.parse_args()
     if args.plot_dir:
         args.plot_dir.mkdir(parents=True, exist_ok=True)
 
-    pcap_by_dir, pcap_fail = base.extract_messages(args.eth0_pcap,args.wsmp_direction)
+    pcap_by_dir, pcap_fail = base.extract_messages(args.eth0_pcap,args.wsmp_direction_relative_to_vehicle)
     mcap_by_dir = extract_mcap_binary_messages(args.mcap)
 
     label = args.label or f"{Path(args.eth0_pcap).name} <-> {Path(args.mcap).name}"
