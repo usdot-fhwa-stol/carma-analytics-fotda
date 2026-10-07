@@ -136,6 +136,8 @@ def correlate_across_boundary(tx_messages, rx_messages, drop_threshold_ms, match
 def report_boundary_correlation(title, tx_messages, rx_messages, drop_threshold_ms, match_mode="exact"):
     latencies, drops, stale, out_of_window = correlate_across_boundary(
         tx_messages, rx_messages, drop_threshold_ms, match_mode)
+    latency_breakout = base.message_breakout(latencies)
+    stale_breakout = base.message_breakout(stale)
     n_total = len(tx_messages)
     print(f"\n-- {title} (tx candidates: {n_total}, rx pool: {len(rx_messages)}) --")
     if n_total:
@@ -152,25 +154,16 @@ def report_boundary_correlation(title, tx_messages, rx_messages, drop_threshold_
         print("Dropped (no match found, within rx's own recording window): 0/0")
         print("Outside rx's recording window: 0/0")
 
-    latency_stats = None
     if latencies:
-        latency_stats = base.summarize(latencies)
-        print(f"Latency (ms, signed rx-tx): min={latency_stats['min']:.1f} mean={latency_stats['mean']:.1f} "
-              f"median={latency_stats['median']:.1f} p95={latency_stats['p95']:.1f} "
-              f"p99={latency_stats['p99']:.1f} max={latency_stats['max']:.1f}")
+        base.print_latency(latency_breakout,"Fresh Latency")
 
-    stale_stats = None
     if stale:
-        stale_stats = base.summarize(stale)
-        print(f"Stale latency (ms, signed rx-tx): min={stale_stats['min']:.1f} mean={stale_stats['mean']:.1f} "
-              f"median={stale_stats['median']:.1f} p95={stale_stats['p95']:.1f} "
-              f"p99={stale_stats['p99']:.1f} max={stale_stats['max']:.1f} "
-              f"(by type: {dict(Counter(s[1] for s in stale))})")
+        base.print_latency(stale_breakout, "Stale Latency")
 
     if drops:
         print(f"Drops by message type: {dict(Counter(d[1] for d in drops))}")
 
-    return latencies, drops, stale, out_of_window, latency_stats, stale_stats
+    return latencies, drops, stale, out_of_window, latency_breakout, stale_breakout
 
 
 def extract_mcap_binary_messages(mcap_path):
@@ -227,11 +220,12 @@ def main():
     ap.add_argument("--json-out", type=Path, default=None)
     ap.add_argument("--plot-dir", type=Path, default=None,
                      help="Optional directory to write per-flow latency/drop PNG plots to")
+    ap.add_argument("--wsmp-direction-relative-to-vehicle", default="unknown", choices=["unknown","incoming","outgoing"], help="explicitly state the direction of wsmp pcap messages")
     args = ap.parse_args()
     if args.plot_dir:
         args.plot_dir.mkdir(parents=True, exist_ok=True)
 
-    pcap_by_dir, pcap_fail = base.extract_messages(args.eth0_pcap)
+    pcap_by_dir, pcap_fail = base.extract_messages(args.eth0_pcap,args.wsmp_direction_relative_to_vehicle)
     mcap_by_dir = extract_mcap_binary_messages(args.mcap)
 
     label = args.label or f"{Path(args.eth0_pcap).name} <-> {Path(args.mcap).name}"

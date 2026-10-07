@@ -58,6 +58,7 @@ DLT_LINUX_SLL = 113
 ETHERTYPE_IPV4 = 0x0800
 ETHERTYPE_IPV6 = 0x86DD
 ETHERTYPE_VLAN = 0x8100
+ETHERTYPE_WSMP = 0x88DC
 
 # SAE J2735 DSRCmsgID values worth identifying by name.
 J2735_MESSAGE_NAMES = {
@@ -131,7 +132,7 @@ def read_classic_pcap(path: Path) -> Iterator[PcapPacket]:
             yield PcapPacket(packet_number, packet_data)
 
 
-def parse_udp_with_linktype(data: bytes, linktype: int) -> Optional[UdpPacket]:
+def parse_udp_with_linktype(data: bytes, linktype: int, wsmp_direction_relative_to_vehicle: str) -> Optional[UdpPacket]:
     direction = "unknown"
     if linktype == DLT_EN10MB:
         if len(data) < 14:
@@ -156,6 +157,9 @@ def parse_udp_with_linktype(data: bytes, linktype: int) -> Optional[UdpPacket]:
     else:
         return None
 
+    if ethertype == ETHERTYPE_WSMP:
+        return UdpPacket(payload=data[offset:], direction = wsmp_direction_relative_to_vehicle)
+    
     if ethertype == ETHERTYPE_IPV4:
         if len(data) < offset + 20:
             return None
@@ -242,6 +246,26 @@ def find_message_offset(payload: bytes):
         return content_offset, message_id, J2735_MESSAGE_NAMES[message_id]
     return None
 
+def find_raw_j2735_message(payload: bytes):
+    """Recognize a bare J2735 MessageFrame directly in a UDP payload.
+
+    Raw J2735 MessageFrame begins with:
+        00 <DSRCmsgID>
+
+    This is used for UDP captures where there is no IEEE 1609.2
+    unsecuredData envelope.
+    """
+    if len(payload) < 2:
+        return None
+
+    if payload[0] != 0:
+        return None
+
+    message_id = payload[1]
+    if message_id not in J2735_MESSAGE_NAMES:
+        return None
+
+    return 0, message_id, J2735_MESSAGE_NAMES[message_id]
 
 def convert_bytes(obj):
     if isinstance(obj, dict):
@@ -270,7 +294,7 @@ def get_frame_timestamps(pcap_path):
     return ts_by_number
 
 
-def extract_udp_messages(pcap_path):
+def extract_udp_messages(pcap_path,wsmp_direction_relative_to_vehicle):
     """Extracts J2735 messages from a raw-UDP, 1609.2-enveloped capture
     (e.g. an RSU broadcast-receive interface). Returns (by_direction,
     decode_fail_count). by_direction has keys 'incoming', 'outgoing',
@@ -284,12 +308,20 @@ def extract_udp_messages(pcap_path):
     decode_fail = 0
 
     for packet in read_classic_pcap(Path(pcap_path)):
-        udp = parse_udp_with_linktype(packet.data, linktype)
+        udp = parse_udp_with_linktype(packet.data, linktype, wsmp_direction_relative_to_vehicle)
         if udp is None:
             continue
         found = find_message_offset(udp.payload)
+
+        # Some Ethernet-facing interfaces expose the J2735
+        # MessageFrame directly in UDP without the IEEE 1609.2
+        # unsecuredData envelope.
+        if found is None:
+            found = find_raw_j2735_message(udp.payload)
+
         if found is None:
             continue
+
         content_offset, message_id, message_name = found
         data_hex = udp.payload[content_offset:].hex()
 
@@ -456,7 +488,7 @@ def extract_commsignia_request_messages(pcap_path):
     return by_direction, decode_fail
 
 
-def extract_messages(pcap_path):
+def extract_messages(pcap_path,wsmp_direction_relative_to_vehicle):
     """Extracts J2735 messages from a pcap, trying all three known
     ethernet-facing formats, since different OBU vendors (and different
     channels on the same vendor) expose messages differently: raw UDP with
@@ -465,7 +497,7 @@ def extract_messages(pcap_path):
     host-to-OBU broadcast request channel). A given file only produces
     results from whichever protocol(s) it actually carries - the other
     paths harmlessly find nothing."""
-    udp_by_dir, udp_fail = extract_udp_messages(pcap_path)
+    udp_by_dir, udp_fail = extract_udp_messages(pcap_path,wsmp_direction_relative_to_vehicle)
     mqtt_by_dir, mqtt_fail = extract_mqtt_messages(pcap_path)
     request_by_dir, request_fail = extract_commsignia_request_messages(pcap_path)
     by_direction = {key: udp_by_dir[key] + mqtt_by_dir[key] + request_by_dir[key] for key in udp_by_dir}
@@ -524,10 +556,12 @@ def correlate(tx_messages, rx_messages, drop_threshold_ms=DROP_LATENCY_THRESHOLD
             rx = rx_messages[i]
             if rx["timestamp"] is None:
                 continue
-            payloads_match = (
-                rx["payload_hex"] == tx["payload_hex"] if match_mode == "exact"
-                else rx["payload_hex"].startswith(tx["payload_hex"])
-            )
+
+            if(match_mode == "exact"):
+                payloads_match = rx["payload_hex"] == tx["payload_hex"]
+            else:
+                payloads_match = (rx["payload_hex"].startswith(tx["payload_hex"]) or tx["payload_hex"].startswith(rx["payload_hex"]))
+                
             if payloads_match and rx["timestamp"] >= tx["timestamp"]:
                 match_idx = i
                 break
@@ -559,12 +593,29 @@ def summarize(latencies):
         "max": vals[-1],
     }
 
+def message_breakout(latencies):
+    latency_dict = {}
+    for entry in latencies:
+        if(entry[1] not in latency_dict):
+            latency_dict[entry[1]]={"latency_list":[]}
+        latency_dict[entry[1]].get("latency_list").append(entry)
+    return latency_dict
+
+def print_latency(latency_dict:dict, latency_type:str):
+    for key,value in latency_dict.items():
+        value |= summarize(value.get("latency_list"))
+        value.pop("latency_list",None)
+        print(f"{key} {latency_type} (ms): min={value['min']:.1f} mean={value['mean']:.1f} "
+                    f"median={value['median']:.1f} p95={value['p95']:.1f} "
+                    f"p99={value['p99']:.1f} max={value['max']:.1f}")
 
 def report_correlation(title, tx_messages, rx_messages, drop_threshold_ms, match_mode="exact"):
     """Runs correlate() and prints a summary. Returns (latencies, drops,
     stale, out_of_window, latency_stats, stale_stats) for callers that also
     want the raw numbers (e.g. for --json-out)."""
     latencies, drops, stale, out_of_window = correlate(tx_messages, rx_messages, drop_threshold_ms, match_mode)
+    latency_breakout = message_breakout(latencies)
+    stale_breakout = message_breakout(stale)
     n_total = len(tx_messages)
     print(f"\n-- {title} (tx candidates: {n_total}, rx pool: {len(rx_messages)}) --")
     if n_total:
@@ -581,25 +632,16 @@ def report_correlation(title, tx_messages, rx_messages, drop_threshold_ms, match
         print("Dropped (no match found, within rx's own recording window): 0/0")
         print("Outside rx's recording window: 0/0")
 
-    latency_stats = None
     if latencies:
-        latency_stats = summarize(latencies)
-        print(f"Latency (ms): min={latency_stats['min']:.1f} mean={latency_stats['mean']:.1f} "
-              f"median={latency_stats['median']:.1f} p95={latency_stats['p95']:.1f} "
-              f"p99={latency_stats['p99']:.1f} max={latency_stats['max']:.1f}")
+        print_latency(latency_breakout,"Fresh Latency")
 
-    stale_stats = None
     if stale:
-        stale_stats = summarize(stale)
-        print(f"Stale latency (ms): min={stale_stats['min']:.1f} mean={stale_stats['mean']:.1f} "
-              f"median={stale_stats['median']:.1f} p95={stale_stats['p95']:.1f} "
-              f"p99={stale_stats['p99']:.1f} max={stale_stats['max']:.1f} "
-              f"(by type: {dict(Counter(s[1] for s in stale))})")
+        print_latency(stale_breakout, "Stale Latency")
 
     if drops:
         print(f"Drops by message type: {dict(Counter(d[1] for d in drops))}")
 
-    return latencies, drops, stale, out_of_window, latency_stats, stale_stats
+    return latencies, drops, stale, out_of_window, latency_breakout, stale_breakout
 
 
 def slug(label: str) -> str:
@@ -616,12 +658,14 @@ def main():
     ap.add_argument("--json-out", type=Path, default=None, help="Optional path to write results as JSON")
     ap.add_argument("--plot-dir", type=Path, default=None,
                      help="Optional directory to write per-flow latency/drop PNG plots to")
+    ap.add_argument("--match-mode", default="exact", choices=["exact","prefix"], help="Mode used to compare messages between rx and tx")
+    ap.add_argument("--wsmp-direction-relative-to-vehicle", default="unknown", choices=["unknown","incoming","outgoing"], help="explicitly state the direction of wsmp pcap messages relative to the CARMA Platform")
     args = ap.parse_args()
     if args.plot_dir:
         args.plot_dir.mkdir(parents=True, exist_ok=True)
 
-    tx_by_dir, tx_fail = extract_messages(args.tx_pcap)
-    rx_by_dir, rx_fail = extract_messages(args.rx_pcap)
+    tx_by_dir, tx_fail = extract_messages(args.tx_pcap,args.wsmp_direction_relative_to_vehicle)
+    rx_by_dir, rx_fail = extract_messages(args.rx_pcap,args.wsmp_direction_relative_to_vehicle)
 
     label = args.label or f"{Path(args.tx_pcap).name} -> {Path(args.rx_pcap).name}"
     print(f"=== {label} ===")
@@ -637,7 +681,7 @@ def main():
     (incoming_latencies, incoming_drops, incoming_stale, incoming_out_of_window,
      incoming_stats, incoming_stale_stats) = report_correlation(
         "Incoming-flow correlation (radio receipt -> forwarded to host)",
-        tx_incoming, rx_incoming_pool, args.drop_threshold_ms,
+        tx_incoming, rx_incoming_pool, args.drop_threshold_ms, args.match_mode
     )
     windowed_count_report(
         "Incoming-flow correlation (radio receipt -> forwarded to host)",
@@ -669,7 +713,7 @@ def main():
         (outgoing_latencies, outgoing_drops, outgoing_stale, outgoing_out_of_window,
          outgoing_stats, outgoing_stale_stats) = report_correlation(
             "Outgoing/request-flow correlation (host request -> over-the-air broadcast)",
-            request_messages, broadcast_pool, args.drop_threshold_ms, match_mode="prefix",
+            request_messages, broadcast_pool, args.drop_threshold_ms, args.match_mode,
         )
         windowed_count_report(
             "Outgoing/request-flow correlation (host request -> over-the-air broadcast)",
