@@ -859,11 +859,37 @@ def Parse_Comm_Node_Names(comm_log_lines):
     ]
     nodes = set()
     for line in comm_log_lines:
+        if is_cdas_event(line, "network_node_added"):
+            node_id = cdas_event_field(line, "node_id")
+            if node_id:
+                nodes.add(node_id)
         for pattern in patterns:
             match = pattern.search(line)
             if match:
                 nodes.add(match.group("node"))
     return sorted(nodes)
+
+
+def Parse_Comm_Nodes_By_Type(comm_log_lines, node_type):
+    """Return node IDs from structured node-added events with the requested type."""
+    nodes = set()
+    for line in comm_log_lines:
+        if not is_cdas_event(line, "network_node_added"):
+            continue
+        if cdas_event_field(line, "node_type") != node_type:
+            continue
+        node_id = cdas_event_field(line, "node_id")
+        if node_id:
+            nodes.add(node_id)
+    return sorted(nodes)
+
+
+def _rsu_nodes(comm_log_lines, nodes):
+    """Use explicit structured node types, with legacy RSU prefixes as fallback."""
+    return sorted(
+        set(Parse_Comm_Nodes_By_Type(comm_log_lines, "rsu"))
+        | set(_nodes_with_prefix(nodes, "rsu_"))
+    )
 
 
 def _nodes_with_prefix(nodes, prefix):
@@ -994,7 +1020,7 @@ def Evaluate_CDAS_15_Msger_To_Carma(comm_log_lines):
 def Evaluate_CDAS_16_Carma_To_Msger_And_Rsu(comm_log_lines, vehicle_name):
     """CDAS-16"""
     nodes = Parse_Comm_Node_Names(comm_log_lines)
-    target_nodes = _nodes_with_prefix(nodes, "msger_") + _nodes_with_prefix(nodes, "rsu_")
+    target_nodes = _nodes_with_prefix(nodes, "msger_") + _rsu_nodes(comm_log_lines, nodes)
     return Evaluate_Node_To_Node_Delivery(
         comm_log_lines,
         "cdas-16",
@@ -1006,7 +1032,7 @@ def Evaluate_CDAS_16_Carma_To_Msger_And_Rsu(comm_log_lines, vehicle_name):
 def Evaluate_CDAS_17_Rsu_To_Carma(comm_log_lines, vehicle_name):
     """CDAS-17"""
     nodes = Parse_Comm_Node_Names(comm_log_lines)
-    rsu_nodes = _nodes_with_prefix(nodes, "rsu_")
+    rsu_nodes = _rsu_nodes(comm_log_lines, nodes)
 
     if not rsu_nodes:
         write_analysis(
