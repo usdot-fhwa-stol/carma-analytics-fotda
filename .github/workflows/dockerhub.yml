@@ -22,6 +22,8 @@ jobs:
     with:
       runner: ubuntu-latest-8-cores
       file: src/cdasim_data_analysis_scripts/docker/Dockerfile
+      # The reusable workflow prepends usdotfhwastoldev,
+      # usdotfhwastolcandidate, or usdotfhwastol for the current Git ref.
       image_name: cdasim-data-analysis
       tag_name_suffix: humble
       remove_suffix: true

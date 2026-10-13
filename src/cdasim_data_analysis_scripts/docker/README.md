@@ -11,10 +11,19 @@ Build it locally from the repository root with:
 ./src/cdasim_data_analysis_scripts/docker/build-image.sh
 ```
 
-Override the local image name or tag when needed:
+The default local image is:
+
+```text
+usdotfhwastoldev/cdasim-data-analysis:develop
+```
+
+Override the organization, image name, tag, or base image when needed:
 
 ```bash
-IMAGE_NAME=usdotfhwastoldev/cdasim-data-analysis \
-IMAGE_TAG=develop \
+DOCKER_ORG=usdotfhwastol \
+IMAGE_NAME=cdasim-data-analysis \
+IMAGE_TAG=carma-system-x.y.z \
+BASE_IMAGE_ORG=usdotfhwastol \
+BASE_IMAGE_TAG=carma-system-x.y.z-humble \
 ./src/cdasim_data_analysis_scripts/docker/build-image.sh
 ```

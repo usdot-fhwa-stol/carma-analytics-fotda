@@ -42,4 +42,18 @@ RUN echo "source /opt/ros/humble/setup.bash" >> /home/carma/.bashrc && \
 
 ENV ROS_DISTRO=humble
 SHELL ["/bin/bash", "-c"]
+
+ARG VERSION
+ARG VCS_REF
+ARG BUILD_DATE
+LABEL org.label-schema.schema-version="1.0" \
+      org.label-schema.name="cdasim-data-analysis" \
+      org.label-schema.description="CDASim and CARMA Platform data analysis tools" \
+      org.label-schema.vendor="Leidos" \
+      org.label-schema.version=${VERSION} \
+      org.label-schema.url="https://highways.dot.gov/research/research-programs/operations/CARMA" \
+      org.label-schema.vcs-url="https://github.com/usdot-fhwa-stol/carma-analytics-fotda" \
+      org.label-schema.vcs-ref=${VCS_REF} \
+      org.label-schema.build-date=${BUILD_DATE}
+
 CMD ["bash"]
