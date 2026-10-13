@@ -8,7 +8,7 @@ repository checkout used to build the image.
 Build it locally from the repository root with:
 
 ```bash
-./docker/cdasim-data-analysis/build-image.sh
+./src/cdasim_data_analysis_scripts/docker/build-image.sh
 ```
 
 Override the local image name or tag when needed:
@@ -16,5 +16,5 @@ Override the local image name or tag when needed:
 ```bash
 IMAGE_NAME=usdotfhwastoldev/cdasim-data-analysis \
 IMAGE_TAG=develop \
-./docker/cdasim-data-analysis/build-image.sh
+./src/cdasim_data_analysis_scripts/docker/build-image.sh
 ```

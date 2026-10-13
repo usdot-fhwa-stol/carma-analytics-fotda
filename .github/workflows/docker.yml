@@ -13,5 +13,5 @@ jobs:
     uses: usdot-fhwa-stol/actions/.github/workflows/docker.yml@main
     with:
       runner: ubuntu-latest-8-cores
-      file: docker/cdasim-data-analysis/Dockerfile
+      file: src/cdasim_data_analysis_scripts/docker/Dockerfile
       tag_name_suffix: humble

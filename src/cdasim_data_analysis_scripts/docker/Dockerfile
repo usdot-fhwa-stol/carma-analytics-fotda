@@ -23,7 +23,7 @@ WORKDIR /home/carma
 
 # Install dependencies before copying analysis sources so source-only changes
 # can reuse the expensive ROS message workspace layer.
-COPY --chown=carma:carma docker/cdasim-data-analysis/install.sh ./docker/install.sh
+COPY --chown=carma:carma src/cdasim_data_analysis_scripts/docker/install.sh ./docker/install.sh
 RUN /home/carma/docker/install.sh
 
 # The image is built from this repository checkout. Do not clone a moving
@@ -31,7 +31,8 @@ RUN /home/carma/docker/install.sh
 COPY --chown=carma:carma src/cdasim_data_analysis_scripts ./cdasim_data_analysis_scripts
 COPY --chown=carma:carma src/carma-platform ./carma-platform-scripts
 
-RUN test -f /home/carma/cdasim_data_analysis_scripts/cdasim_log_analyzer.py && \
+RUN rm -rf /home/carma/cdasim_data_analysis_scripts/docker && \
+    test -f /home/carma/cdasim_data_analysis_scripts/cdasim_log_analyzer.py && \
     test -f /home/carma/cdasim_data_analysis_scripts/cdasim_mcap_analyzer.py && \
     test -f /home/carma/carma-platform-scripts/run_all_control_analysis.py && \
     test -f /home/carma/carma-platform-scripts/run_all_regression_analysis.py
