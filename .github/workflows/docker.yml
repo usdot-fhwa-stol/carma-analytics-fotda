@@ -1,0 +1,17 @@
+name: Docker build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  cdasim-data-analysis:
+    uses: usdot-fhwa-stol/actions/.github/workflows/docker.yml@main
+    with:
+      runner: ubuntu-latest-8-cores
+      file: docker/cdasim-data-analysis/Dockerfile
+      tag_name_suffix: humble
