@@ -21,7 +21,6 @@ jobs:
       run: |
         apt-get update
         apt-get install -y ca-certificates curl git sudo unzip
-    steps:
     - name: Checkout repository
       uses: actions/checkout@v7.0.1
       with:
