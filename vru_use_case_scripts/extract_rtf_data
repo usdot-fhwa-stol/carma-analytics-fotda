@@ -1,7 +1,9 @@
 #!/bin/sh
 
-echo "sim_time_ns,rtf"
+echo "system_time_dt,sim_time_ns,rtf"
 
 sed -e "s/\r/\n/g" \
-    | grep -Po "(?<=Simulating: ).*(?=ns)|(?<=RTF:).*(?=, ETC)" \
-    | paste -s -d',\n'
+    | grep -P "(?<=Simulating: ).*(?=ns)|(?<=RTF:).*(?=, ETC)" \
+    | grep -Po '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}|(?<=Simulating: ).*(?=ns)|(?<=RTF:)\d+(\.\d+)?' \
+    | sed 's/,/./g' \
+    | paste -s -d',,\n'

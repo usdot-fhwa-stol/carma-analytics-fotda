@@ -1,0 +1,8 @@
+#!/bin/sh
+
+echo "sim_time_s"
+sed -e "s/\r/\n/g" \
+    | grep "SRM" \
+    | grep -Po '(?<=\[)\d+\.\d+(?=\])' \
+    | paste -s -d'\n'
+

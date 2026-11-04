@@ -32,6 +32,12 @@ class KafkaLogMessage:
     created_time: int
     json_message: dict
     msg_type: KafkaLogMessageType
+# Epoch-ms value of a "CreateTime:<ms>" record header, anchored so it stops at
+# whichever delimiter follows (tab, pipe or space) regardless of which
+# kafka-console-consumer print options produced the dump.
+CREATE_TIME_PATTERN = re.compile(r'CreateTime:\s*(\d{10,13})')
+
+
 def get_create_time(line: str) -> int:
     """Read CreateTime from line in Kafka Log file.
 
@@ -39,9 +45,15 @@ def get_create_time(line: str) -> int:
         line (str): line in Kafka log file
 
     Returns:
-        int: timestamp
+        int: epoch millisecond timestamp
+
+    Raises:
+        ValueError: if the line carries no parseable CreateTime header
     """
-    return re.sub('[^0-9]', '', line.split(':')[1])
+    match = CREATE_TIME_PATTERN.search(line)
+    if match is None:
+        raise ValueError(f'No CreateTime timestamp in Kafka log line: {line[:80]}')
+    return int(match.group(1))
 
 def parse_kafka_logs_as_type(input_file_path: Path, message_type: KafkaLogMessageType)-> list:
     """Parse Kafka Topic Logs into a list of KafkaLogMessages of the type provided.
@@ -76,6 +88,12 @@ def parse_kafka_logs_as_type(input_file_path: Path, message_type: KafkaLogMessag
                     kafka_message += line[json_beg_index:]
                 else:
                     kafka_message += line
+            if kafka_message:
+                try:
+                    msgs.append(KafkaLogMessage(create_time, json.loads(kafka_message), message_type))
+                except json.JSONDecodeError as e:
+                    print(f'Error {e.msg} extracting json info for message: {kafka_message}. Skipping message.')
+                    skipped_messages += 1
 
             if skipped_messages > 0 :
                 print(f'WARNING: Skipped {skipped_messages} due to JSON decoding errors. Please inspect logs.')
@@ -312,6 +330,9 @@ def parse_kafka_log_dir(kafka_log_dir:str, csv_dir:str, simulation:bool=False):
             print(f'WARNING: {csv_dir} already exists. Contents will be overwritten.')
         csv_dir_path.mkdir(exist_ok=True)
         for kafka_topic_log in kafka_log_dir_path.glob('*.log'):
+            if kafka_topic_log.stat().st_size == 0:
+                print(f'WARNING: Found file {kafka_topic_log} is empty. Skipping file ...')
+                continue
             if KafkaLogMessageType.TimeSync.value in kafka_topic_log.name :
                 print(f'Found TimeSync Kafka topic log {kafka_topic_log}. Parsing log to csv ...')
                 parse_timesync_to_csv(kafka_topic_log, csv_dir_path/f'{KafkaLogMessageType.TimeSync.value}.csv')

@@ -1,0 +1,84 @@
+#!/usr/bin/python3
+
+from argparse import ArgumentParser
+from pathlib import Path
+import sys
+
+from matplotlib import pyplot as plt
+import pandas as pd
+
+parser = ArgumentParser(
+    prog="plot_rtf",
+    description="Plot SRM end-to-end simulation latency from a comma-separate values (CSV) file",
+)
+
+parser.add_argument(
+    "--max-acceptable",
+    type=float,
+    help="Maximum acceptable latency. This will add a line in the generated plot",
+)
+
+parser.add_argument(
+    "--plots-dir",
+    type=Path,
+    help="Directory to store the generated plot",
+    default=Path("./plots"),
+)
+parser.add_argument(
+    "--mrp-data-file",
+    type=Path,
+    help="csv file containing MRP data",
+    required=True,
+)
+parser.add_argument(
+    "--vsp-data-file",
+    type=Path,
+    help="csv file containing vsp data",
+    required=True,
+)
+
+
+cli_args = parser.parse_args()
+
+
+try:
+    df_vsp = pd.read_csv(
+        cli_args.vsp_data_file,
+        dtype={ "sim_time_s": float},
+    )
+    df_mrp = pd.read_csv(
+        cli_args.mrp_data_file,
+        dtype={ "sim_time_s": float},
+    )
+except ValueError as e:
+    print(f"plot_rtf_data: malformed csv data {e}")
+    sys.exit(1)
+
+if list(df_vsp.columns) != ["sim_time_s"]:
+    print("missing or incorrect csv header")
+    sys.exit(1)
+
+_, ax = plt.subplots()
+print(f"Plot SRM end to end latency: {df_vsp['sim_time_s'].values}")
+latency =  df_mrp['sim_time_s'].values - df_vsp['sim_time_s'].values
+ax.plot(df_vsp["sim_time_s"] , latency, label="SRM Latency")
+ax.axhline(y=latency.mean(), linestyle="dotted", color="k", label="Mean")
+
+if cli_args.max_acceptable is not None:
+    ax.axhline(
+        y=cli_args.max_acceptable,
+        linestyle="dashed",
+        color="tab:red",
+        label="Max Acceptable Latency (s)",
+    )
+
+ax.set_title("SRM Latency")
+ax.set_ylabel("Simulation Latency [s]")
+ax.set_xlabel("Simulation Time [s]")
+ax.legend(loc="lower right")
+
+if cli_args.plots_dir is None:
+    plt.show()
+else:
+    cli_args.plots_dir.mkdir(exist_ok=True, parents=True)
+    plt.savefig(cli_args.plots_dir / "srm_latency.png")
